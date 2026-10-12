@@ -1,0 +1,63 @@
+name: CI
+
+# Приложение работает только на macOS (Apple Silicon), но тесты используют заглушки
+# вместо Whisper, Ollama и реальных моделей, поэтому идут на Linux.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  MEMORY_DESK_FAKE_EMBED: "1"
+
+jobs:
+  scripts:
+    name: Синтаксис shell-скриптов
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+      - run: |
+          for f in install.command start.command meeting-assistant meetings-process ./*.command; do
+            echo "zsh -n $f"
+            zsh -n "$f"
+          done
+
+  hygiene:
+    name: Нет данных, моделей и личных путей
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bad=$(git ls-files | grep -E '\.(mp3|wav|m4a|aac|flac|ogg|mp4|db|sqlite3?|gguf|safetensors|bin)$' || true)
+          if [ -n "$bad" ]; then echo "Найдены данные или модели:"; echo "$bad"; exit 1; fi
+          paths=$(git grep -nE '/Users/[A-Za-z0-9._-]+/' -- . ':!.github' ':!.gitlab-ci.yml' || true)
+          if [ -n "$paths" ]; then echo "Найдены абсолютные пути разработчика:"; echo "$paths"; exit 1; fi
+
+  tests:
+    name: Тесты сервера и установщика
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: pip install -r requirements-ci.txt
+      - run: python -m pytest -q tests
+
+  frontend:
+    name: Сборка интерфейса
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - working-directory: frontend
+        run: |
+          npm ci || npm install
+          npm run build

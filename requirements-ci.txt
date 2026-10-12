@@ -1,0 +1,11 @@
+# Зависимости для тестов и CI (Linux). Полный набор для работы приложения — requirements.txt.
+# mlx-whisper (только Apple Silicon) и sentence-transformers (тяжёлая модель) в тестах подменяются заглушками.
+fastapi>=0.115,<1
+uvicorn>=0.32,<1
+qdrant-client>=1.15,<2
+numpy>=1.26
+icalendar>=6,<8
+recurring-ical-events>=3,<4
+pytest>=8
+httpx>=0.27
+scipy>=1.11

@@ -1,0 +1,31 @@
+#!/bin/zsh
+set -euo pipefail
+setopt NO_BG_NICE
+SCRIPT_DIR="${0:A:h}"
+export PLAUD_OLLAMA_URL="http://127.0.0.1:11435"
+export HF_HOME="$SCRIPT_DIR/huggingface-cache"
+
+# Очистка архива не использует модели и должна работать даже при выключенной Ollama.
+for arg in "$@"; do
+  if [[ "$arg" == "--cleanup-only" ]]; then
+    exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/meetings_process.py" "$@"
+  fi
+done
+
+if ! /usr/bin/curl -fsS "$PLAUD_OLLAMA_URL/api/tags" >/dev/null 2>&1; then
+  mkdir -p "$SCRIPT_DIR/logs"
+  OLLAMA_HOST="127.0.0.1:11435" \
+  OLLAMA_MODELS="$SCRIPT_DIR/ollama-models" \
+    /opt/homebrew/bin/ollama serve >>"$SCRIPT_DIR/logs/ollama.log" 2>&1 &
+  for _ in {1..30}; do
+    /usr/bin/curl -fsS "$PLAUD_OLLAMA_URL/api/tags" >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
+
+if ! /usr/bin/curl -fsS "$PLAUD_OLLAMA_URL/api/tags" >/dev/null 2>&1; then
+  print -u2 "Не удалось запустить локальную модель. См. logs/ollama.log"
+  exit 1
+fi
+
+exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/meetings_process.py" "$@"

@@ -1,0 +1,52 @@
+# --- система и редакторы
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Python
+.venv/
+.venv-*/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+report.xml
+*.egg-info/
+
+# --- Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# --- пользовательские данные: записи, стенограммы, базы, индекс
+webui/data/
+data/
+work/
+inbox/
+archive/
+runtime/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+*.ogg
+*.mp4
+
+# --- модели и кэши
+huggingface-cache/
+ollama-models/
+*.gguf
+*.safetensors
+
+# --- локальные настройки и секреты
+.env
+.env.*
+*.local.json
+config.json

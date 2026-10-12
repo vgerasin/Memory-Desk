@@ -1,0 +1,55 @@
+#!/bin/zsh
+set -euo pipefail
+setopt NO_BG_NICE
+SCRIPT_DIR="${0:A:h}"
+PID_FILE="$SCRIPT_DIR/logs/webui.pid"
+PORT="${MEETING_WEBUI_PORT:-8502}"
+PY="$SCRIPT_DIR/.venv/bin/python"
+
+export MEMORY_DESK_PORT="$PORT"
+export HF_HOME="$SCRIPT_DIR/huggingface-cache"
+export TOKENIZERS_PARALLELISM=false
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+
+mkdir -p "$SCRIPT_DIR/logs" "$SCRIPT_DIR/runtime"
+
+# Новый интерфейс на FastAPI: докачиваем недостающие пакеты один раз (нужен интернет).
+if ! "$PY" -c "import fastapi, uvicorn, icalendar, recurring_ical_events" >/dev/null 2>&1; then
+  echo "Memory Desk: устанавливаю недостающие компоненты…"
+  if ! "$PY" -m pip --version >/dev/null 2>&1; then
+    "$PY" -m ensurepip --upgrade || true
+  fi
+  if "$PY" -m pip --version >/dev/null 2>&1; then
+    "$PY" -m pip install -r "$SCRIPT_DIR/requirements.txt"
+  elif command -v uv >/dev/null 2>&1; then
+    uv pip install --python "$PY" -r "$SCRIPT_DIR/requirements.txt"
+  else
+    echo "ОШИБКА: в окружении .venv нет pip. Запустите install.command или выполните: $PY -m ensurepip"
+    exit 1
+  fi
+fi
+
+# Доступ к Календарю и Напоминаниям macOS (EventKit). Необязательно: при неудаче кабинет работает без этих функций.
+if [[ "$(uname)" == "Darwin" && ! -f "$SCRIPT_DIR/runtime/eventkit-failed" ]] && ! "$PY" -c "import EventKit" >/dev/null 2>&1; then
+  echo "Memory Desk: ставлю доступ к Календарю и Напоминаниям…"
+  if "$PY" -m pip --version >/dev/null 2>&1; then
+    "$PY" -m pip install -q "pyobjc-framework-EventKit>=10" || { echo "Не удалось поставить pyobjc-framework-EventKit: Календарь и Напоминания будут недоступны (повтор: удалите runtime/eventkit-failed)"; touch "$SCRIPT_DIR/runtime/eventkit-failed"; }
+  elif command -v uv >/dev/null 2>&1; then
+    uv pip install --python "$PY" "pyobjc-framework-EventKit>=10" || { echo "Не удалось поставить pyobjc-framework-EventKit: Календарь и Напоминания будут недоступны (повтор: удалите runtime/eventkit-failed)"; touch "$SCRIPT_DIR/runtime/eventkit-failed"; }
+  fi
+fi
+
+if ! /usr/bin/curl -fsS http://127.0.0.1:11435/api/tags >/dev/null 2>&1; then
+  OLLAMA_HOST="127.0.0.1:11435" \
+  OLLAMA_MODELS="$SCRIPT_DIR/ollama-models" \
+    /opt/homebrew/bin/ollama serve >>"$SCRIPT_DIR/logs/ollama-webui.log" 2>&1 &
+  for _ in {1..30}; do
+    /usr/bin/curl -fsS http://127.0.0.1:11435/api/tags >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
+
+echo $$ > "$PID_FILE"
+cd "$SCRIPT_DIR"
+exec "$PY" -m memory_desk
