@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, errorText } from '../api'
+import { api, ApiError, errorText } from '../api'
 import { navigate, useRoute } from '../router'
 import { useApp } from '../store'
 import type { ReindexStatus, SystemStatus } from '../types'
@@ -47,8 +47,8 @@ function SystemPopover({ status }: { status: SystemStatus | null }) {
       setReindex(await api.get<ReindexStatus>('/api/system/reindex'))
     } catch (e) {
       // 404 здесь значит, что запущен сервер старой версии: интерфейс уже обновлён, а сервер нет
-      showToast(String(errorText(e)).includes('404') || String(errorText(e)).toLowerCase().includes('not found')
-        ? 'Сервер запущен со старой версией кода. Перезапустите start.command' : errorText(e))
+      showToast(e instanceof ApiError && e.status === 404
+        ? 'Сервер запущен со старой версией кода. Закройте его и запустите start.command заново' : errorText(e))
     }
   }
   const pct = reindex && reindex.total > 0 ? Math.min(100, Math.round(reindex.done / reindex.total * 100)) : 0
