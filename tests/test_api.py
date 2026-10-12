@@ -650,6 +650,35 @@ def test_voice_diarize_learn_and_recognize(client, tone_audio):
     assert client.delete(f"/api/people/{person['id']}/voice").status_code == 404
 
 
+def test_overlap_marking_is_conservative(client, items):
+    """Наложение речи: помечаются только реплики, почти одинаково похожие на двух говорящих; метка не меняется."""
+    import numpy as np
+    from memory_desk import voice
+    a, b = np.array([1.0, 0.0, 0.0], dtype=np.float32), np.array([0.0, 1.0, 0.0], dtype=np.float32)
+    mix = (a + b) / np.sqrt(2)                      # поровну двое
+    mostly_a = (a * 0.9 + b * 0.3) / np.linalg.norm(a * 0.9 + b * 0.3)   # явно первый
+    cents = {0: (a, 10.0), 1: (b, 10.0)}
+    embeddings = [a, b, mix, mostly_a, None] + [a] * 15
+    groups = [0, 1, 0, 0, 0] + [0] * 15
+    assert voice.find_overlaps(embeddings, groups, cents) == [2]
+    assert voice.find_overlaps(embeddings, groups, {0: (a, 10.0)}) == []        # один говорящий — наложения не бывает
+    assert voice.find_overlaps([a, b, a, b], [0, 1, 0, 1], cents) == []          # чистые реплики не помечаются
+    many = [mix] * 20                                                            # не больше десятой части реплик
+    assert len(voice.find_overlaps(many, [0] * 20, cents)) == 2
+
+    mid = by_title(items, "Архитектурный комитет КХД")["id"]
+    d = client.get(f"/api/meetings/{mid}").json()
+    assert not any(seg.get("overlap") for seg in d["transcript"])
+    first = d["transcript"][0]
+    voice.save_meeting_overlaps(mid, [first["sec"]])
+    try:
+        d = client.get(f"/api/meetings/{mid}").json()
+        assert d["transcript"][0].get("overlap") is True and d["transcript"][0]["speaker"] == first["speaker"]
+        assert sum(1 for seg in d["transcript"] if seg.get("overlap")) == 1
+    finally:
+        voice.save_meeting_overlaps(mid, [])
+
+
 def test_voice_unavailable_and_text_fallback(client, items, monkeypatch):
     from memory_desk import voice
     voice.use_encoder(None)
@@ -908,11 +937,13 @@ def test_item_edits_are_written_back_to_note(client, items):
     r = client.patch(f"/api/tasks/{task['id']}", json={"text": "Новая формулировка  задачи", "owner": "Пётр; Иванов", "deadline": "2026-12-01"})
     assert r.status_code == 200 and r.json()["noteSynced"] is True
     text = note.read_text(encoding="utf-8")
-    line = next(l for l in text.splitlines() if "Новая формулировка задачи" in l)
+    line = next(l for l in text.splitlines() if l.startswith("- [ ] ") and "Новая формулировка задачи" in l)
     assert line.startswith("- [ ] ") and "**ответственный:** Пётр, Иванов" in line and "**срок:** 2026-12-01" in line
     # всё остальное в заметке не тронуто
     a, b = original.splitlines(), text.splitlines()
-    assert len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1, "изменена должна быть ровно одна строка заметки"
+    changed = [y for x, y in zip(a, b) if x != y]
+    assert len(a) == len(b) and 1 <= len(changed) <= 3, "меняются строка задачи и её подписи в схемах, больше ничего"
+    assert all("Новая формулировка" in y for y in changed)
 
     # выполнено → галочка, отклонено → зачёркнуто, возврат → обычная строка
     assert client.patch(f"/api/tasks/{task['id']}", json={"status": "done"}).json()["noteSynced"] is True

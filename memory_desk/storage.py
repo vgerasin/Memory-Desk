@@ -97,6 +97,10 @@ def initialize() -> None:
                 matched INTEGER NOT NULL DEFAULT 0, score REAL,
                 PRIMARY KEY(meeting_id, label)
             );
+            CREATE TABLE IF NOT EXISTS meeting_overlaps (
+                meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+                sec REAL NOT NULL, PRIMARY KEY(meeting_id, sec)
+            );
             """)
             columns = {row[1] for row in db.execute("PRAGMA table_info(meetings)")}
             if "archived" not in columns:

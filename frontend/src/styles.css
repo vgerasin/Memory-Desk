@@ -376,6 +376,7 @@ ul { padding: 0; list-style: none; }
 .who-edit { position: absolute; top: 8px; right: 10px; height: 22px; padding: 0 9px; border-radius: 999px; background: var(--fill); color: var(--text2); font-size: 11px; font-weight: 500; opacity: 0; transition: opacity .12s; }
 .line:hover .who-edit, .who-edit:focus-visible { opacity: 1; }
 .who-edit:hover { background: var(--fill2); color: var(--text); }
+.overlap { display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: 999px; background: color-mix(in srgb, #FF9F0A 16%, transparent); color: var(--warn-text); font-size: 11px; font-weight: 600; line-height: 18px; vertical-align: 1px; white-space: nowrap; }
 .spk-panel { margin-top: 20px; max-width: 740px; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--fill); }
 .spk-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .spk-spacer { flex: 1; }

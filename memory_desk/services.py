@@ -160,6 +160,9 @@ def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
 
     audio = knowledge.meeting_audio(m)
     transcript = knowledge.transcript_segments(m)
+    overlaps = voice.meeting_overlaps(m.id)
+    if overlaps:
+        transcript = [{**seg, "overlap": True} if float(seg["sec"]) in overlaps else seg for seg in transcript]
     known = {r["name"].casefold(): r["id"] for r in storage.rows("SELECT id,name FROM people")}
     prints = voice.meeting_voices(m.id)
     speaker_list = [{**sp, "personId": known.get(sp["label"].casefold()),

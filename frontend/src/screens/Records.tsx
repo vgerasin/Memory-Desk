@@ -185,6 +185,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
                         onClick={e => { e.stopPropagation(); setPicker(openPicker(e.currentTarget, l.speaker, l.i, 'all')) }}>{l.speaker}</button>
                     )}
                     <span className="tx">{l.text}</span>
+                    {l.overlap && <span className="overlap" title="Похоже, здесь говорят двое сразу. Метка говорящего оставлена прежней, проверьте на слух">наложение голосов?</span>}
                   </span>
                   {!turnStart && (hasSpeakers || l.speaker) && (
                     <button className="who-edit" title="Сменить говорящего у этой реплики"
