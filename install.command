@@ -154,7 +154,7 @@ else
 fi
 
 if [ -x "$PY" ]; then
-  if "$PY" -c "import fastapi, uvicorn, qdrant_client, sentence_transformers, mlx_whisper, icalendar, recurring_ical_events" >/dev/null 2>&1; then
+  if "$PY" -c "import fastapi, uvicorn, qdrant_client, sentence_transformers, mlx_whisper, icalendar, recurring_ical_events, pptx" >/dev/null 2>&1; then
     ok "Python-пакеты на месте"
   elif [ "$MODE" = check ]; then
     bad "Не хватает Python-пакетов: запустите ./install.command"

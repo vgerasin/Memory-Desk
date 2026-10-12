@@ -91,9 +91,12 @@ export function Today() {
 
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div className="eyebrow">{longDate()}</div>
-        <h1 className="h1">Сегодня</h1>
+      <div className="page-head" style={{ alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="eyebrow">{longDate()}</div>
+          <h1 className="h1">Сегодня</h1>
+        </div>
+        <button className="btn s34" onClick={() => navigate('/calendar')}>Календарь</button>
       </div>
 
       {run && (

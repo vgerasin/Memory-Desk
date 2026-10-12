@@ -6,7 +6,7 @@ import os
 import sqlite3
 import time
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, apple, config, housekeeping, integrations, jobs, knowledge, services, speakers, storage, voice, waveform
+from . import __version__, apple, config, housekeeping, integrations, jobs, knowledge, materials, services, speakers, storage, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -412,6 +412,98 @@ def create_app() -> FastAPI:
         core.data_version += 1
         return {"ok": True}
 
+    # ------------------------------------------------------------------ материалы по запросу
+    class MaterialScope(BaseModel):
+        meetingId: str | None = None
+        projectId: str | None = None
+        personId: str | None = None
+        days: int | None = Field(None, ge=1, le=3650)
+        since: str | None = Field(None, max_length=10)
+        until: str | None = Field(None, max_length=10)
+        save: bool = False
+
+    def material_errors(call):
+        try:
+            return call()
+        except KeyError as exc:
+            raise HTTPException(404, str(exc.args[0])) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except ImportError as exc:
+            raise HTTPException(500, "Не установлен модуль python-pptx: запустите install.command или start.command") from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить файл: {exc}") from exc
+
+    @app.post("/api/meetings/{meeting_id}/protocol")
+    def meeting_protocol(meeting_id: str, save: bool = False):
+        get_meeting(meeting_id)
+
+        def run():
+            result = materials.protocol(core, meeting_id, services.meeting_date)
+            if save:
+                path = materials.save_protocol(result)
+                result["savedAs"] = knowledge.note_relative_path(path)
+                result["obsidianUrl"] = knowledge.obsidian_url(path)
+            return result
+        return material_errors(run)
+
+    @app.post("/api/materials/mindmap")
+    def material_mindmap(body: MaterialScope):
+        def run():
+            result = materials.mindmap(core, body.model_dump(), services.meeting_date)
+            if body.save:
+                path = materials.save_text("map", "Карта — " + result["title"], materials.mindmap_note(result))
+                result["savedAs"] = knowledge.note_relative_path(path)
+                result["obsidianUrl"] = knowledge.obsidian_url(path)
+            return result
+        return material_errors(run)
+
+    class MaterialSave(BaseModel):
+        kind: str
+        name: str = Field(..., min_length=1, max_length=200)
+        content: str = Field(..., max_length=500_000)
+
+    @app.post("/api/materials/save")
+    def material_save(body: MaterialSave):
+        """Сохранение показанного в окне текста (с правками пользователя) в Obsidian: Протоколы/ или Карты/."""
+        def run():
+            path = materials.save_text(body.kind, body.name, body.content)
+            return {"savedAs": knowledge.note_relative_path(path), "obsidianUrl": knowledge.obsidian_url(path)}
+        return material_errors(run)
+
+    @app.post("/api/materials/deck")
+    def material_deck(body: MaterialScope):
+        result = material_errors(lambda: materials.build_deck(core, body.model_dump(), services.meeting_date))
+        return result
+
+    @app.get("/api/materials/decks")
+    def material_decks():
+        return {"items": [{**d, "url": materials.deck_url(d["name"])} for d in materials.list_decks()]}
+
+    @app.get("/api/materials/deck/{name}")
+    def material_deck_file(name: str):
+        try:
+            path = materials.deck_path(name)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Презентация не найдена") from exc
+        return FileResponse(path, filename=path.name,
+                            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+
+    @app.get("/api/calendar")
+    def calendar_range(start: str = Query("", alias="from", max_length=10), to: str = Query("", max_length=10)):
+        today = date.today()
+        try:
+            first = date.fromisoformat(start) if start else today - timedelta(days=today.weekday())
+            last = date.fromisoformat(to) if to else first + timedelta(days=6)
+        except ValueError:
+            raise HTTPException(400, "Даты должны быть в формате ГГГГ-ММ-ДД") from None
+        try:
+            return integrations.calendar_range(core, first, last)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     class CalendarAction(BaseModel):
         action: str
         useTitle: bool = False
@@ -524,9 +616,20 @@ def create_app() -> FastAPI:
         except KeyError as exc:
             raise HTTPException(404, str(exc.args[0])) from exc
 
+    @app.get("/api/prep/headline")
+    def prep_headline(project: str | None = None, meeting: str | None = None):
+        try:
+            return services.prep_headline(core, project, meeting)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc.args[0])) from exc
+
     @app.get("/api/analytics")
     def analytics(days: int = Query(90, ge=0, le=3650)):
         return services.analytics(core, days)
+
+    @app.get("/api/decisions/tree")
+    def decisions_tree(project: str = Query("", max_length=80), days: int = Query(0, ge=0, le=3650)):
+        return services.decision_tree(core, project, days)
 
     @app.get("/api/projects")
     def projects():
@@ -610,9 +713,36 @@ def create_app() -> FastAPI:
         text: str | None = None
         owner: str | None = None
         deadline: str | None = None
+        replaced_by: str | None = None   # только решения: id действующего решения; "" снимает отметку «заменено»
+
+    def check_replacement(item_id: str, target_id: str) -> str | None:
+        """Решение можно заменить другим из того же проекта; цепочка не должна замыкаться."""
+        if not target_id:
+            return None
+        if target_id == item_id:
+            raise HTTPException(400, "Решение нельзя заменить самим собой")
+        pair = storage.rows("SELECT d.id, d.replaced_by, d.status, m.project_id FROM decisions d JOIN meetings m ON m.id=d.meeting_id WHERE d.id IN (?,?)", (item_id, target_id))
+        info = {r["id"]: r for r in pair}
+        if target_id not in info:
+            raise HTTPException(400, "Решение, которым заменяем, не найдено")
+        if (info[item_id]["project_id"] or "") != (info[target_id]["project_id"] or ""):
+            raise HTTPException(400, "Заменить можно только решением из того же проекта")
+        if info[target_id]["status"] == "rejected":
+            raise HTTPException(400, "Отклонённое решение не может заменять другое")
+        seen, cursor = {target_id}, info[target_id]["replaced_by"]
+        while cursor:
+            if cursor == item_id:
+                raise HTTPException(400, "Так цепочка замкнётся: это решение уже заменяет выбранное")
+            if cursor in seen:
+                break
+            seen.add(cursor)
+            row = storage.one("SELECT replaced_by FROM decisions WHERE id=?", (cursor,))
+            cursor = row["replaced_by"] if row else None
+        return target_id
 
     def patch_item(table: str, item_id: str, body: ItemPatch, allowed_status: set[str], quiet: bool = False):
-        fields = {k: v for k, v in body.model_dump().items() if v is not None and (table == "tasks" or k != "deadline")}
+        fields = {k: v for k, v in body.model_dump().items()
+                  if v is not None and (table == "tasks" or k != "deadline") and (table == "decisions" or k != "replaced_by")}
         if "status" in fields and fields["status"] not in allowed_status:
             raise HTTPException(400, "Недопустимый статус")
         if "text" in fields and not fields["text"].strip():
@@ -639,6 +769,8 @@ def create_app() -> FastAPI:
         before = storage.one(f"SELECT * FROM {table} WHERE id=?", (item_id,))
         if not before:
             raise HTTPException(404, "Элемент не найден")
+        if "replaced_by" in fields:
+            fields["replaced_by"] = check_replacement(item_id, fields["replaced_by"].strip())
         try:
             found = storage.update_item(table, item_id, **fields)
         except sqlite3.IntegrityError as exc:

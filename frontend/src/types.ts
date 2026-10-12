@@ -18,7 +18,7 @@ export interface TaskDto {
 }
 export interface DecisionDto {
   id: string; text: string; owner: string; t: string; tSec: number | null
-  status: 'draft' | 'confirmed' | 'rejected'; draft: boolean
+  status: 'draft' | 'confirmed' | 'rejected'; draft: boolean; replacedBy?: string | null
   meetingId: string; meetingTitle: string; meetingDate: string
 }
 export interface Fact { text: string; t: string; tSec: number | null }
@@ -110,9 +110,10 @@ export interface ChatDigest {
   title: string; records: number; shown: number; model: boolean
   stats: { records: number; decisions: number; decisionsDraft: number; tasksDone: number; tasksOpen: number; tasksOverdue: number; risks: number }
 }
-export interface ChatReply { answer: string; sources: ChatSource[]; mode: string; confirmed: boolean; digest?: ChatDigest }
+export interface ChatMaterial { kind: MaterialKind; result: MaterialResult }
+export interface ChatReply { answer: string; sources: ChatSource[]; mode: string; confirmed: boolean; digest?: ChatDigest; material?: ChatMaterial }
 export interface ChatMessage {
-  id: number; role: 'user' | 'bot'; text: string; sources?: ChatSource[]; digest?: ChatDigest; pending?: boolean; error?: boolean
+  id: number; role: 'user' | 'bot'; text: string; sources?: ChatSource[]; digest?: ChatDigest; material?: ChatMaterial; pending?: boolean; error?: boolean
 }
 export type ChatScope =
   | { kind: 'all' }
@@ -140,12 +141,24 @@ export interface StorageUsage {
 }
 
 export interface PrepTarget { projectId?: string; meetingId?: string; title?: string }
+
+export type MaterialKind = 'protocol' | 'map' | 'deck'
+/** Материал по запросу: протокол записи, карта или презентация по записи, проекту или человеку */
+export interface MaterialTarget { kind: MaterialKind; meetingId?: string; projectId?: string; personId?: string; title: string; result?: MaterialResult }
+export interface MapNode { text: string; children: MapNode[] }
+export interface MaterialResult {
+  title: string; mode?: 'model' | 'structured'; savedAs?: string; obsidianUrl?: string
+  markdown?: string; fileName?: string
+  tree?: MapNode; mermaid?: string
+  name?: string; url?: string; slides?: number; records?: number
+}
 export interface PrepItem {
   text: string; meetingId: string; meetingTitle: string; date: string; tSec: number | null; view: string | null
   owner?: string; due?: string | null; dueText?: string; draft?: boolean; overdue?: boolean
 }
 export interface PrepSection { key: 'changes' | 'decisions' | 'tasks' | 'questions' | 'risks'; title: string; empty: string; items: PrepItem[] }
-export interface PrepBrief { title: string; projectId: string | null; meetingId: string | null; records: number; sections: PrepSection[] }
+export interface PrepHeadline { text: string; mode: 'model' | 'structured' }
+export interface PrepBrief { title: string; projectId: string | null; meetingId: string | null; records: number; sections: PrepSection[]; headline: PrepHeadline }
 
 export interface AnalyticsData {
   days: number; today: string
@@ -165,4 +178,22 @@ export interface AnalyticsData {
 export interface ReindexStatus {
   state: 'idle' | 'running' | 'done' | 'error'; done: number; total: number; records: number; message: string
   startedAt: number; finishedAt: number; seconds: number
+}
+
+export interface DecisionNode {
+  id: string; text: string; owner: string; status: 'draft' | 'confirmed'; draft: boolean
+  date: string; meetingId: string; meetingTitle: string; tSec: number | null
+  projectId: string; project: string; replacedBy: string | null; replaces: DecisionNode[]
+}
+export interface DecisionGroup { id: string; title: string; color: string; total: number; active: number; replaced: number; current: DecisionNode[] }
+export interface DecisionTreeData { today: string; days: number; projects: DecisionGroup[] }
+
+export interface CalendarEvent {
+  id: string; title: string; start: string; end: string; allDay: boolean; calendar: string; location: string; people: string[]
+  records: { id: string; title: string; linked: boolean }[]
+}
+export interface CalendarDay { date: string; events: CalendarEvent[]; records: { id: string; title: string; time: string }[] }
+export interface CalendarRange {
+  from: string; to: string; source: 'apple' | 'ics' | 'none'; error: string; configured: boolean
+  days: CalendarDay[]; totals: { events: number; withRecord: number; recordsWithoutEvent: number }
 }

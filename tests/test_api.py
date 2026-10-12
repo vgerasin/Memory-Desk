@@ -995,3 +995,256 @@ def test_bulk_items_and_meetings(client, items):
     assert client.post("/api/meetings/bulk", json={"ids": [target], "action": "project", "value": ""}).json()["updated"] == 1
     r = client.post("/api/meetings/bulk", json={"ids": [target], "action": "publish"})
     assert r.json()["updated"] == 0 and r.json()["failedCount"] == 1
+
+
+def test_protocol_mindmap_and_deck(client, items):
+    import os
+    from pathlib import Path
+    detail = next(d for d in (client.get(f"/api/meetings/{m['id']}").json() for m in items.values()) if d["tasks"] and d["decisions"])
+    mid = detail["id"]
+    # протокол: без модели собирается из фактов
+    r = client.post(f"/api/meetings/{mid}/protocol")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mode"] == "structured" and body["markdown"].startswith("# Протокол:")
+    for part in ("## Решения", "## Поручения", "| № | Поручение |", detail["decisions"][0]["text"][:25], detail["tasks"][0]["text"][:25]):
+        assert part in body["markdown"], part
+    saved = client.post(f"/api/meetings/{mid}/protocol", params={"save": True}).json()
+    root = Path(os.environ["MEMORY_DESK_CONFIG"]).parent / "Claude" / "Протоколы"
+    assert (root / saved["fileName"]).read_text(encoding="utf-8").startswith("# Протокол:") and saved["savedAs"]
+    assert client.post("/api/meetings/нет/protocol").status_code == 404
+
+    # карта: запись и проект
+    m = client.post("/api/materials/mindmap", json={"meetingId": mid}).json()
+    assert m["mermaid"].startswith("mindmap\n  root((") and m["tree"]["children"] and "Решения" in {c["text"] for c in m["tree"]["children"]}
+    assert all("(" not in line.split("[", 1)[-1] for line in m["mermaid"].splitlines()[2:])
+    project = next(p for p in client.get("/api/projects").json()["items"] if p["counts"]["records"] >= 2)
+    pm = client.post("/api/materials/mindmap", json={"projectId": project["id"], "days": 3650}).json()
+    assert pm["records"] >= 2 and pm["tree"]["children"]
+    assert client.post("/api/materials/mindmap", json={"projectId": "нет"}).status_code == 404
+    assert client.post("/api/materials/mindmap", json={"projectId": project["id"], "days": 0}).status_code == 422
+
+    # презентация: файл открывается, слайды содержат факты
+    d = client.post("/api/materials/deck", json={"projectId": project["id"], "days": 3650})
+    assert d.status_code == 200
+    info = d.json()
+    assert info["slides"] >= 4 and info["records"] >= 2 and info["name"].endswith(".pptx")
+    file = client.get(info["url"])
+    assert file.status_code == 200 and file.content[:2] == b"PK"
+    from io import BytesIO
+    from pptx import Presentation
+    prs = Presentation(BytesIO(file.content))
+    texts = [sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame]
+    assert any(project["title"] in t for t in texts) and any(t.startswith("Решения") for t in texts)
+    assert any(x["name"] == info["name"] for x in client.get("/api/materials/decks").json()["items"])
+    assert client.get("/api/materials/deck/..%2Fx.pptx").status_code in (400, 404)
+    assert client.get("/api/materials/deck/нет.pptx").status_code == 404
+    assert client.post("/api/materials/deck", json={"projectId": project["id"], "days": 1, "personId": "нет"}).status_code == 404
+
+
+def test_materials_use_model_when_available(client, items, monkeypatch):
+    from memory_desk import digest
+    prompts = []
+
+    def fake(prompt, num_predict=700):
+        prompts.append(prompt)
+        return "- Первый итог по проекту\n- Второй итог\n" if "ГЛАВНОЕ" in prompt else "Обсудили архитектуру и договорились о сроках."
+
+    monkeypatch.setattr(digest, "generate", fake)
+    detail = next(d for d in (client.get(f"/api/meetings/{m['id']}").json() for m in items.values()) if d["tasks"] and d["summary"])
+    body = client.post(f"/api/meetings/{detail['id']}/protocol").json()
+    assert body["mode"] == "model" and "Обсудили архитектуру и договорились о сроках." in body["markdown"]
+    project = next(p for p in client.get("/api/projects").json()["items"] if p["counts"]["records"] >= 2)
+    info = client.post("/api/materials/deck", json={"projectId": project["id"], "days": 3650}).json()
+    assert info["mode"] == "model"
+    from io import BytesIO
+    from pptx import Presentation
+    prs = Presentation(BytesIO(client.get(info["url"]).content))
+    texts = " ".join(sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
+    assert "Первый итог по проекту" in texts
+    # модель недоступна → материал всё равно собирается
+    monkeypatch.setattr(digest, "generate", lambda *a, **k: (_ for _ in ()).throw(OSError("нет связи")))
+    assert client.post(f"/api/meetings/{detail['id']}/protocol").json()["mode"] == "structured"
+    assert client.post("/api/materials/deck", json={"projectId": project["id"], "days": 3650}).json()["mode"] == "structured"
+
+
+def test_materials_from_chat_and_save(client, items):
+    import os
+    from pathlib import Path
+    project = next(p for p in client.get("/api/projects").json()["items"] if p["counts"]["records"] >= 2)
+    ask = lambda q, scope=None: client.post("/api/chat", json={"question": q, "scope": scope or {"kind": "all"}}).json()
+
+    deck = ask(f"сделай презентацию по проекту {project['title']}")
+    assert deck["material"]["kind"] == "deck" and deck["material"]["result"]["url"].endswith(".pptx")
+    assert client.get(deck["material"]["result"]["url"]).content[:2] == b"PK"
+    assert "Презентация готова" in deck["answer"]
+
+    detail = next(d for d in (client.get(f"/api/meetings/{m['id']}").json() for m in items.values()) if d["tasks"] and d["decisions"])
+    proto = ask("составь протокол", {"kind": "record", "id": detail["id"]})
+    assert proto["material"]["kind"] == "protocol" and "**Решения**" in proto["answer"] and "|" not in proto["answer"]
+    assert proto["material"]["result"]["markdown"].startswith("# Протокол:")
+    tree = ask("построй карту", {"kind": "record", "id": detail["id"]})
+    assert tree["material"]["kind"] == "map" and tree["material"]["result"]["tree"]["children"]
+
+    # без записи в области берётся последняя подходящая; пустая выборка — понятный ответ, а не ошибка
+    assert "последнюю подходящую запись" in ask(f"подготовь протокол по проекту {project['title']}")["answer"]
+    used = {int(m["date"][5:7]) for m in items.values() if m.get("date")} if isinstance(items, dict) else set()
+    used |= {int(m["date"][5:7]) for m in client.get("/api/meetings", params={"limit": 1000}).json()["items"] if m["date"]}
+    word = dict(zip(range(1, 13), ["январе", "феврале", "марте", "апреле", "мае", "июне", "июле", "августе", "сентябре", "октябре", "ноябре", "декабре"]))
+    free = next(n for n in range(1, 13) if n not in used)
+    empty = ask(f"сделай презентацию в {word[free]} по проекту " + project["title"])
+    assert "material" not in empty and "записей нет" in empty["answer"]
+
+    # обычный вопрос про слово «карта» без просьбы — обычный поиск, не материал
+    assert "material" not in ask("какая карта у проекта?")
+
+    # сохранение показанного текста в Obsidian
+    r = client.post("/api/materials/save", json={"kind": "protocol", "name": "Тест: протокол/1.md", "content": "# Протокол\n"})
+    assert r.status_code == 200
+    root = Path(os.environ["MEMORY_DESK_CONFIG"]).parent / "Claude" / "Протоколы"
+    assert (root / "Тест- протокол-1.md").read_text(encoding="utf-8") == "# Протокол\n"
+    assert client.post("/api/materials/save", json={"kind": "boom", "name": "x", "content": "y"}).status_code == 400
+    assert client.post("/api/materials/save", json={"kind": "map", "name": "", "content": "y"}).status_code == 422
+
+    # произвольный диапазон дат
+    ranged = client.post("/api/materials/mindmap", json={"projectId": project["id"], "since": "2000-01-01", "until": "2100-01-01"})
+    assert ranged.status_code == 200 and ranged.json()["records"] >= 2
+    assert client.post("/api/materials/mindmap", json={"since": "вчера", "until": "завтра"}).status_code == 400
+
+
+def test_decision_tree_and_replacement(client, items):
+    tree = client.get("/api/decisions/tree").json()
+    group = next(g for g in tree["projects"] if g["id"] and g["total"] >= 2)
+    flat = []
+
+    def walk(nodes):
+        for n in nodes:
+            flat.append(n)
+            walk(n["replaces"])
+    walk(group["current"])
+    assert len(flat) == group["total"] and group["active"] == group["total"] and group["replaced"] == 0
+    old, new = flat[-1], flat[0]
+    assert old["id"] != new["id"]
+
+    # заменяем: старое решение уходит под действующее; в «Сегодня» и подготовке остаётся только актуальное
+    r = client.patch(f"/api/decisions/{old['id']}", json={"replaced_by": new["id"]})
+    assert r.status_code == 200 and r.json()["replacedBy"] == new["id"]
+    after = next(g for g in client.get("/api/decisions/tree").json()["projects"] if g["id"] == group["id"])
+    assert after["replaced"] == 1 and after["active"] == group["total"] - 1
+    top = next(n for n in after["current"] if n["id"] == new["id"])
+    assert [c["id"] for c in top["replaces"]] == [old["id"]]
+    prep_texts = " ".join(i["text"] for s in client.get("/api/prep", params={"project": group["id"]}).json()["sections"] if s["key"] == "decisions" for i in s["items"])
+    assert old["text"][:30] not in prep_texts or old["text"][:30] in new["text"]
+
+    # материалы учитывают замену: в протоколе отметка, в презентации заменённого решения нет
+    assert "_(позднее заменено)_" in client.post(f"/api/meetings/{old['meetingId']}/protocol").json()["markdown"]
+    from io import BytesIO
+    from pptx import Presentation
+    deck = client.post("/api/materials/deck", json={"projectId": group["id"], "days": 3650}).json()
+    prs = Presentation(BytesIO(client.get(deck["url"]).content))
+    slides = {sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame}
+    assert any(new["text"][:30] in t for t in slides) and not any(old["text"][:30] in t for t in slides if t.startswith(old["text"][:30]))
+
+    # проверки: сам на себя, замкнутая цепочка, чужой проект, неизвестный id
+    assert client.patch(f"/api/decisions/{new['id']}", json={"replaced_by": new['id']}).status_code == 400
+    assert client.patch(f"/api/decisions/{new['id']}", json={"replaced_by": old['id']}).status_code == 400
+    assert client.patch(f"/api/decisions/{new['id']}", json={"replaced_by": "нет-такого"}).status_code == 400
+    other = next((g for g in client.get("/api/decisions/tree").json()["projects"] if g["id"] != group["id"] and g["current"]), None)
+    if other:
+        assert client.patch(f"/api/decisions/{new['id']}", json={"replaced_by": other["current"][0]["id"]}).status_code == 400
+    # задачи поле не принимают
+    task = client.get("/api/tasks").json()["items"][0]
+    assert client.patch(f"/api/tasks/{task['id']}", json={"replaced_by": new["id"]}).status_code == 400
+
+    # снять отметку
+    assert client.patch(f"/api/decisions/{old['id']}", json={"replaced_by": ""}).json()["replacedBy"] is None
+    restored = next(g for g in client.get("/api/decisions/tree").json()["projects"] if g["id"] == group["id"])
+    assert restored["replaced"] == 0
+    assert client.get("/api/decisions/tree", params={"project": group["id"], "days": 3650}).json()["projects"][0]["id"] == group["id"]
+
+
+def test_calendar_range_apple_and_ics(client, items, fake_apple, tmp_path):
+    from datetime import datetime, timedelta
+    from memory_desk import storage
+    fake, configure = fake_apple
+    m = next(v for t, v in items.items() if "архитектур" in t.lower())   # название могли изменить соседние тесты
+    detail = client.get(f"/api/meetings/{m['id']}").json()
+    storage.update_item("meetings", m["id"], calendar_event_id="")
+    start = datetime.fromisoformat(f"{detail['date']}T{detail['time']}")
+    fake.add_event("Архитектурный комитет КХД", start - timedelta(minutes=5), start + timedelta(minutes=50), ["Я", "Соколова Анна"])
+    fake.add_event("Пустая встреча", start + timedelta(days=2, hours=1), start + timedelta(days=2, hours=2), ["Кто-то"])
+    fake.add_event("Отпуск", start.replace(hour=0, minute=0) + timedelta(days=1), start.replace(hour=23, minute=59) + timedelta(days=1), allDay=True)
+    first, last = (start - timedelta(days=3)).date().isoformat(), (start + timedelta(days=5)).date().isoformat()
+
+    assert client.get("/api/calendar", params={"from": first, "to": last}).json()["configured"] is False
+    configure(apple_calendar=True)
+    cal = client.get("/api/calendar", params={"from": first, "to": last}).json()
+    assert cal["source"] == "apple" and cal["totals"]["events"] == 3 and cal["error"] == ""
+    events = {e["title"]: e for d in cal["days"] for e in d["events"]}
+    assert [r["id"] for r in events["Архитектурный комитет КХД"]["records"]] == [m["id"]]
+    assert events["Пустая встреча"]["records"] == [] and events["Отпуск"]["allDay"] is True
+    assert cal["totals"]["withRecord"] == 1
+    # записи без события попадают в свой день и не дублируются у события
+    rec_ids = [r["id"] for d in cal["days"] for r in d["records"]]
+    assert m["id"] not in rec_ids
+
+    # привязка по идентификатору побеждает совпадение по времени
+    storage.update_item("meetings", m["id"], calendar_event_id=next(e["id"] for e in fake.event_list if e["title"] == "Архитектурный комитет КХД"),
+                        calendar_event_title="Архитектурный комитет КХД")
+    again = client.get("/api/calendar", params={"from": first, "to": last}).json()
+    linked = next(e for d in again["days"] for e in d["events"] if e["title"] == "Архитектурный комитет КХД")
+    assert linked["records"][0]["linked"] is True
+
+    # границы и ошибки
+    assert client.get("/api/calendar", params={"from": "вчера"}).status_code == 400
+    assert client.get("/api/calendar", params={"from": "2020-01-01", "to": "2022-01-01"}).status_code == 400
+    swapped = client.get("/api/calendar", params={"from": last, "to": first}).json()
+    assert swapped["from"] == first and swapped["to"] == last
+    assert client.get("/api/calendar").status_code == 200   # без параметров — текущая неделя
+
+    # Календарь выключен, но есть ICS-файл: события читаются оттуда, в т.ч. повторяющиеся
+    configure(apple_calendar=False)
+    ics = tmp_path / "work.ics"
+    day = start.strftime("%Y%m%d")
+    ics.write_text("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//\nBEGIN:VEVENT\nUID:a1\nDTSTART:" + day + "T090000\nDTEND:" + day + "T100000\n"
+                   "SUMMARY:Еженедельная планёрка\nRRULE:FREQ=DAILY;COUNT=3\nEND:VEVENT\nEND:VCALENDAR\n", encoding="utf-8")
+    configure(calendar_source=str(ics))
+    cal = client.get("/api/calendar", params={"from": first, "to": last}).json()
+    assert cal["source"] == "ics" and cal["totals"]["events"] == 3
+    configure(calendar_source=str(tmp_path / "нет.ics"))
+    broken = client.get("/api/calendar", params={"from": first, "to": last}).json()
+    assert broken["source"] == "none" and "Не удалось" in broken["error"]
+    configure(calendar_source="")
+    storage.update_item("meetings", m["id"], calendar_event_id="", calendar_event_title="")
+
+
+def test_prep_headline(client, items, monkeypatch):
+    from memory_desk import digest
+    project = next(p for p in client.get("/api/projects").json()["items"] if p["counts"]["records"] >= 2)
+    brief = client.get("/api/prep", params={"project": project["id"]}).json()
+    assert brief["headline"]["mode"] == "structured" and "." in brief["headline"]["text"]
+
+    # модель недоступна → строка из цифр, а не ошибка
+    monkeypatch.setattr(digest, "generate", lambda *a, **k: (_ for _ in ()).throw(OSError("нет связи")))
+    off = client.get("/api/prep/headline", params={"project": project["id"]}).json()
+    assert off["mode"] == "structured" and off["text"] == brief["headline"]["text"]
+
+    # модель отвечает → её текст очищается от разметки; повтор берётся из кэша
+    calls = []
+
+    def fake(prompt, num_predict=700):
+        calls.append(prompt)
+        return "**Главное:** закрыть просроченные задачи и решить вопрос по срокам."
+
+    monkeypatch.setattr(digest, "generate", fake)
+    meeting = next(iter(items.values()))
+    on = client.get("/api/prep/headline", params={"meeting": meeting["id"]}).json()
+    assert on["mode"] == "model" and "**" not in on["text"] and "закрыть просроченные задачи" in on["text"]
+    assert "ГЛАВНОЕ" in calls[0] and "[Что менялось]" in calls[0]
+    assert client.get("/api/prep/headline", params={"meeting": meeting["id"]}).json() == on and len(calls) == 1
+    assert client.get("/api/prep/headline", params={"meeting": "нет"}).status_code == 404
+    # слишком короткий ответ модели не принимается
+    monkeypatch.setattr(digest, "generate", lambda *a, **k: "ок")
+    short = client.get("/api/prep/headline", params={"project": project["id"]}).json()
+    assert short["mode"] == "structured"
+    assert client.get("/api/prep/headline", params={"project": project["id"]}).json()["mode"] == "structured"

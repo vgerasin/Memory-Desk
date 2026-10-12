@@ -49,6 +49,84 @@ def next_meeting(cfg: dict, now: datetime | None = None) -> dict | None:
     return calendar_source.upcoming(cfg.get("calendar_source", ""), now)
 
 
+MAX_RANGE_DAYS = 366
+
+
+def calendar_range(core, first: date, last: date) -> dict:
+    """События за произвольный диапазон дат (Календарь macOS или ICS) и записи, которые к ним относятся.
+    Возвращает дни с событиями и записями без события; ошибка источника не превращается в 500."""
+    if last < first:
+        first, last = last, first
+    if (last - first).days >= MAX_RANGE_DAYS:
+        raise ValueError(f"Диапазон слишком большой: не больше {MAX_RANGE_DAYS} дней")
+    cfg = core.cfg
+    start, stop = datetime.combine(first, datetime.min.time()), datetime.combine(last + timedelta(days=1), datetime.min.time())
+    source, error, events = "none", "", []
+    if cfg.get("apple_calendar") and apple_ready(cfg):
+        try:
+            for ev in apple.backend().events(start, stop):
+                if ev["canceled"]:
+                    continue
+                events.append({"id": ev["id"], "title": ev["title"], "start": ev["start"][:16], "end": ev["end"][:16], "allDay": ev["allDay"],
+                               "calendar": ev["calendar"], "location": ev["location"], "people": _attendee_names(ev)[:12]})
+            source = "apple"
+        except apple.AppleError as exc:
+            error = str(exc)
+    if source == "none" and cfg.get("calendar_source", "").strip():
+        try:
+            events = calendar_source.between(cfg["calendar_source"], start, stop)
+            source = "ics"
+        except Exception as exc:  # noqa: BLE001 — недоступный файл или ссылка не должны ломать экран
+            error = f"Не удалось прочитать календарь: {exc}"
+    elif source == "none" and cfg.get("apple_calendar") and not error:
+        error = "Нет доступа к Календарю macOS: разрешите его в настройках"
+
+    linked = {r["calendar_event_id"]: r["id"] for r in storage.rows("SELECT id, calendar_event_id FROM meetings WHERE calendar_event_id!='' AND calendar_event_id IS NOT NULL")}
+    records = []
+    for m in core.live_meetings():
+        spans = _intervals(m)
+        if spans and start - timedelta(hours=3) <= spans[0][0] <= stop + timedelta(hours=3):
+            records.append((m, spans))
+    by_id = {m.id: m for m, _ in records}
+    used: set[str] = set()
+    for ev in events:
+        span = (datetime.fromisoformat(ev["start"]), datetime.fromisoformat(ev["end"]))
+        matched = []
+        for m, spans in records:
+            if linked.get(ev["id"]) == m.id:
+                matched.append(m)
+                continue
+            if ev["allDay"] or m.id in linked.values():
+                continue
+            length = max(60.0, (span[1] - span[0]).total_seconds())
+            for interval in spans:
+                shortest = max(60.0, min(length, (interval[1] - interval[0]).total_seconds() or length))
+                near = abs((interval[0] - span[0]).total_seconds()) <= 15 * 60
+                if _overlap(interval, span) / shortest >= 0.3 or near:
+                    matched.append(m)
+                    break
+        ev["records"] = [{"id": m.id, "title": m.title, "linked": linked.get(ev["id"]) == m.id} for m in matched]
+        used.update(m.id for m in matched)
+
+    days: dict[str, dict] = {}
+    cursor = first
+    while cursor <= last:
+        days[cursor.isoformat()] = {"date": cursor.isoformat(), "events": [], "records": []}
+        cursor += timedelta(days=1)
+    for ev in events:
+        day = max(ev["start"][:10], first.isoformat())  # событие, начавшееся до диапазона, показываем в его первый день
+        if day in days:
+            days[day]["events"].append(ev)
+    for m, _spans in records:
+        day = (m.recorded_at or "")[:10] or m.date
+        if m.id not in used and day in days:
+            days[day]["records"].append({"id": m.id, "title": m.title, "time": m.time})
+    shown = [d for d in days.values() if d["events"] or d["records"]]
+    return {"from": first.isoformat(), "to": last.isoformat(), "source": source, "error": error, "days": shown,
+            "totals": {"events": len(events), "withRecord": sum(1 for e in events if e["records"]), "recordsWithoutEvent": sum(len(d["records"]) for d in shown)},
+            "configured": bool(cfg.get("apple_calendar") or cfg.get("calendar_source", "").strip())}
+
+
 def _parse_dt(value: str) -> datetime | None:
     try:
         return datetime.fromisoformat(value) if value else None

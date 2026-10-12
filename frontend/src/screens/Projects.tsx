@@ -9,7 +9,7 @@ import { AvatarStack, ErrorBox, Loading } from '../components/ui'
 
 export function Projects() {
   const { data, error } = useApi<{ items: ProjectOverview[] }>('/api/projects')
-  const { setPrep, showToast, invalidate } = useApp()
+  const { setPrep, setMaterial, showToast, invalidate } = useApp()
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
 
@@ -59,9 +59,11 @@ export function Projects() {
             </div>
             <div className="card-foot">
               <AvatarStack people={p.people} size={28} />
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn s34" onClick={() => navigate('/records?project=' + encodeURIComponent(p.title))}>Записи</button>
-                <button className="btn accent s34" onClick={() => setPrep({ projectId: p.id, title: p.title })}>Подготовиться к встрече</button>
+                <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', projectId: p.id, title: p.title })}>Презентация</button>
+                <button className="btn s34" onClick={() => setMaterial({ kind: 'map', projectId: p.id, title: p.title })}>Карта</button>
+                <button className="btn accent s34" onClick={() => setPrep({ projectId: p.id, title: p.title })}>Подготовка к встрече</button>
               </div>
             </div>
           </div>

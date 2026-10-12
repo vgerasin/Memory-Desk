@@ -44,7 +44,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   const { data: raw, error } = useApi<MeetingDetail>(`/api/meetings/${id}`)
   // сервер прежней версии не присылает говорящих: показываем стенограмму без них, а не пустой экран
   const m = useMemo(() => (raw ? { ...raw, speakers: raw.speakers ?? [], diarization: raw.diarization ?? null } : raw), [raw])
-  const { chat, showToast, setCurrentRecord, invalidate, meta, version } = useApp()
+  const { chat, setMaterial, showToast, setCurrentRecord, invalidate, meta, version } = useApp()
   const actions = useActions()
   const player = useRef<PlayerHandle>(null)
   const [pos, setPos] = useState(0)
@@ -122,6 +122,8 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
         <div className="when">{when}</div>
         <div className="detail-actions">
           <button className="tbtn" onClick={() => chat.openChat({ kind: 'record', id, label: 'Текущая запись' })}>Спросить о записи</button>
+          <button className="tbtn" onClick={() => setMaterial({ kind: 'protocol', meetingId: id, title: m.title })}>Протокол</button>
+          <button className="tbtn" onClick={() => setMaterial({ kind: 'map', meetingId: id, title: m.title })}>Карта</button>
           {meta?.calendarWrite && (
             <button className="tbtn" onClick={() => setEventDraft({ title: 'Продолжение: ' + m.title, date: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), meetingId: id })}>В Календарь</button>
           )}

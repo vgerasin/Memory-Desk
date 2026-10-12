@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api, ApiError, errorText } from './api'
-import type { AppState, ChatMessage, ChatReply, ChatScope, Meta, PrepTarget } from './types'
+import type { AppState, ChatMessage, ChatReply, ChatScope, MaterialTarget, Meta, PrepTarget } from './types'
 
 type Theme = 'light' | 'dark'
 interface Toast { id: number; text: string; undo?: () => void }
@@ -36,6 +36,9 @@ interface Ctx {
   /** окно «Подготовка к встрече»: по проекту или по одной записи */
   prep: PrepTarget | null
   setPrep: (v: PrepTarget | null) => void
+  /** окно «Материалы»: протокол, карта, презентация */
+  material: MaterialTarget | null
+  setMaterial: (v: MaterialTarget | null) => void
 }
 
 const EMPTY_STATE: AppState = { queue: [], running: null, inboxCount: 0, dataVersion: 0, jobsVersion: 0, indexState: 'loading' }
@@ -74,6 +77,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [storageOpen, setStorageOpen] = useState(false)
   const [prep, setPrep] = useState<PrepTarget | null>(null)
+  const [material, setMaterial] = useState<MaterialTarget | null>(null)
   const toastTimer = useRef<number>()
   const messagesRef = useRef(messages)
   messagesRef.current = messages
@@ -158,7 +162,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       : { kind: 'days', days: current.days }
     try {
       const reply = await api.post<ChatReply>('/api/chat', { question: text, scope: payload, previous })
-      setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: reply.answer, sources: reply.sources, digest: reply.digest, pending: false } : x))
+      setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: reply.answer, sources: reply.sources, digest: reply.digest, material: reply.material, pending: false } : x))
     } catch (error) {
       const message = error instanceof ApiError && error.status === 503 ? error.message : 'Не удалось получить ответ. ' + errorText(error)
       setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: message, pending: false, error: true } : x))
@@ -202,9 +206,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       open: chatOpen, scope, messages, busy, openChat, closeChat: () => setChatOpen(false),
       setScope, send, clear: () => setMessages([]),
     },
-    currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, prep, setPrep,
+    currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, prep, setPrep, material, setMaterial,
   }), [state, live, meta, version, invalidate, theme, toggleTheme, wide, toast, showToast, hideToast, openMenu,
-    chatOpen, scope, messages, busy, openChat, send, currentRecord, settingsOpen, storageOpen, prep])
+    chatOpen, scope, messages, busy, openChat, send, currentRecord, settingsOpen, storageOpen, prep, material])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

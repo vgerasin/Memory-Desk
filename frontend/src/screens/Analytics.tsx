@@ -3,10 +3,11 @@ import { api, errorText } from '../api'
 import { useApi } from '../useApi'
 import { navigate, recordLink } from '../router'
 import { dayLabel, plural } from '../format'
-import type { AnalyticsData, MeetingDetail, MeetingsResponse } from '../types'
+import type { AnalyticsData, DecisionTreeData, MeetingDetail, MeetingsResponse } from '../types'
 import { ErrorBox, Loading, Segmented } from '../components/ui'
 import { DecisionTimeline, Gantt, LinkGraph, OwnerBars, WeeklyChart } from '../components/charts'
 import { ChartCard, hoursText, shortDate } from '../components/viz'
+import { DecisionTree } from '../components/DecisionTree'
 
 type Period = '30' | '90' | '365' | '0'
 
@@ -97,6 +98,7 @@ function Compare() {
 export function Analytics() {
   const [period, setPeriod] = useState<Period>('90')
   const { data, error } = useApi<AnalyticsData>(`/api/analytics?days=${period}`)
+  const tree = useApi<DecisionTreeData>(`/api/decisions/tree?days=${period}`)
   return (
     <>
       <div className="page-head">
@@ -136,6 +138,7 @@ export function Analytics() {
             table={{ head: ['Человек', 'Проект', 'Встреч'], rows: data.graph.links.map(l => [l.person, l.project, l.meetings]) }}>
             <LinkGraph graph={data.graph} />
           </ChartCard>
+          {tree.data && <DecisionTree data={tree.data} onChange={tree.reload} />}
           <Compare />
         </div>
       )}

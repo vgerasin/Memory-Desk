@@ -124,16 +124,9 @@ def match_person(question: str, people: list[dict]) -> dict | None:
     return hits[0] if len(hits) == 1 else None
 
 
-def detect(core, question: str, scope: dict, today: date | None = None) -> Intent | None:
-    """Обзорный ли это вопрос. Вопросы про одну запись и точечные вопросы остаются на обычном поиске."""
-    scope = scope or {"kind": "all"}
-    kind = scope.get("kind", "all")
-    if kind == "record":
-        return None
-    today = today or date.today()
-    period = parse_period(question, today)
-    if period is None and not SUMMARY_WORDS.search(question):
-        return None
+def subject(core, question: str, scope: dict) -> tuple[dict | None, dict | None]:
+    """Проект и человек, о которых вопрос: из выбранной области чата или из текста вопроса."""
+    kind = (scope or {}).get("kind", "all")
     projects = core.projects()
     project = person = None
     if kind == "project":
@@ -147,6 +140,20 @@ def detect(core, question: str, scope: dict, today: date | None = None) -> Inten
         project = match_project(question, projects)
     if person is None and kind != "project":
         person = match_person(question, storage.rows("SELECT id,name FROM people"))
+    return project, person
+
+
+def detect(core, question: str, scope: dict, today: date | None = None) -> Intent | None:
+    """Обзорный ли это вопрос. Вопросы про одну запись и точечные вопросы остаются на обычном поиске."""
+    scope = scope or {"kind": "all"}
+    kind = scope.get("kind", "all")
+    if kind == "record":
+        return None
+    today = today or date.today()
+    period = parse_period(question, today)
+    if period is None and not SUMMARY_WORDS.search(question):
+        return None
+    project, person = subject(core, question, scope)
     if kind == "days" and period is None:
         try:
             days = min(max(int(scope.get("days") or 7), 1), 3650)
@@ -217,7 +224,8 @@ def gather(meetings: list, date_of: Callable, today: date | None = None) -> list
     for m in meetings:
         f = MeetingFacts(m.id, m.title, date_of(m), m.project or "")
         f.summary = [_clean(s) for s in knowledge.summary_bullets(m, 3)]
-        f.decisions = [{"text": _clean(r["text"]), "draft": r["status"] == "draft"} for r in decisions.get(m.id, [])]
+        f.decisions = [{"text": _clean(r["text"]), "draft": r["status"] == "draft", "replaced": bool(r.get("replaced_by"))}
+                       for r in decisions.get(m.id, [])]
         for r in tasks.get(m.id, []):
             owner = (r["owner"] or "").strip()
             owner = "" if owner.casefold() in {"не указано", "не указан"} else owner

@@ -7,3 +7,4 @@ numpy>=1.26
 icalendar>=6,<8
 recurring-ical-events>=3,<4
 scipy>=1.11
+python-pptx>=1.0
