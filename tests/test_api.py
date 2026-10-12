@@ -176,6 +176,27 @@ def test_chat_with_sources_and_scopes(client, items):
     assert client.post("/api/chat", json={"question": "  "}).status_code == 400
 
 
+def test_chat_overview_phrasings(client):
+    """«синтез по проекту КХД», «по проекту КХД» и просто «КХД» — просьбы обзора; точечные вопросы остаются поиском."""
+    for question in ("синтез по проекту кхд", "выжимка по проекту КХД", "по проекту КХД", "КХД", "общая картина по КХД"):
+        r = client.post("/api/chat", json={"question": question, "scope": {"kind": "all"}}).json()
+        assert r.get("digest") and r["digest"]["records"] >= 3 and r["confirmed"], question
+    for question in ("Кто отвечает за миграцию справочников?", "Когда решили перейти на дельту по КХД?", "Что решили по инкрементальной загрузке витрин?"):
+        r = client.post("/api/chat", json={"question": question, "scope": {"kind": "all"}}).json()
+        assert not r.get("digest"), question
+
+
+def test_chat_overview_widens_to_all_time(client, monkeypatch):
+    """Период не назван, а за 30 дней записей нет — берётся всё время, а не ответ «ничего нет»."""
+    from datetime import date
+    from memory_desk import digest
+    real = digest.select_meetings
+    monkeypatch.setattr(digest, "select_meetings",
+                        lambda core, intent, date_of: [] if intent.label.startswith("последние 30") else real(core, intent, date_of))
+    r = client.post("/api/chat", json={"question": "синтез по проекту КХД", "scope": {"kind": "all"}}).json()
+    assert r["digest"]["records"] >= 3 and "всё время" in r["digest"]["title"].casefold() or "всё время" in r["answer"].casefold()
+
+
 def test_chat_gives_honest_answer_without_evidence(client):
     r = client.post("/api/chat", json={"question": "квантовая хромодинамика бозон", "scope": {"kind": "all"}}).json()
     assert r["confirmed"] is False and "нет фрагментов" in r["answer"]

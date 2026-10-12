@@ -22,7 +22,10 @@ MONTH_NAMES = ["", "январь", "февраль", "март", "апрель",
 NUMBER_WORDS = {"два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7, "десять": 10}
 SUMMARY_WORDS = re.compile(
     r"что сделан|что сделал|сделано|что делал|итог|сводк|саммари|резюме|обзор|что было|что происходило|чем занима|"
-    r"что нового|прогресс|как продвига|что изменилось|статус|что по проекту|расскажи про проект", re.IGNORECASE)
+    r"что нового|прогресс|как продвига|что изменилось|статус|что по проекту|расскажи про проект|"
+    r"синтез|свод|выжимк|сжат|общая картина|в целом|главное|анализ проекта|картина по|что там по|что у нас по", re.IGNORECASE)
+QUESTION_WORDS = {"кто", "кого", "кому", "когда", "почему", "зачем", "сколько", "где", "куда", "какой", "какая", "какие", "каком",
+                  "ли", "можно", "нужно", "есть", "был", "была", "было", "были", "будет", "как"}
 BUDGET = 8500          # знаков фактов в одном запросе к модели
 MAX_SOURCES = 10
 RU_SHORT = ["", "янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
@@ -151,9 +154,13 @@ def detect(core, question: str, scope: dict, today: date | None = None) -> Inten
         return None
     today = today or date.today()
     period = parse_period(question, today)
-    if period is None and not SUMMARY_WORDS.search(question):
-        return None
     project, person = subject(core, question, scope)
+    words = re.findall(r"\w+", question.casefold())
+    # короткое «по проекту КХД» / «КХД» без вопросительных слов — тоже просьба обзора
+    bare = (project is not None or person is not None) and len(words) <= 6 and not (QUESTION_WORDS & set(words)) \
+        and "?" not in question
+    if period is None and not SUMMARY_WORDS.search(question) and not bare:
+        return None
     if kind == "days" and period is None:
         try:
             days = min(max(int(scope.get("days") or 7), 1), 3650)
@@ -448,6 +455,12 @@ def build(core, question: str, scope: dict, date_of: Callable, today: date | Non
     if intent is None:
         return None
     meetings = select_meetings(core, intent, date_of)
+    if not meetings and not intent.explicit_period:
+        # период не назван, а за 30 дней записей нет: берём всё время, а не отвечаем «ничего нет»
+        intent = Intent(date(2000, 1, 1), intent.until, "всё время", False, intent.project, intent.person)
+        meetings = select_meetings(core, intent, date_of)
+        if meetings:
+            intent.since = min(date.fromisoformat(date_of(m)) for m in meetings)
     span = f"{short(intent.since.isoformat())} – {short(intent.until.isoformat())}"
     if not meetings:
         who = (" по проекту «" + intent.project["title"] + "»") if intent.project else (" с участием " + intent.person["name"]) if intent.person else ""
