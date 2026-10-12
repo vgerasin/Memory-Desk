@@ -53,7 +53,7 @@ function VoiceLine({ person }: { person: PersonOverview }) {
 
 export function People() {
   const { data, error } = useApi<{ items: PersonOverview[] }>('/api/people')
-  const { chat } = useApp()
+  const { chat, setMaterial } = useApp()
   return (
     <>
       <h1 className="h1">Люди</h1>
@@ -82,10 +82,14 @@ export function People() {
                 </span>
               </div>
               <VoiceLine person={p} />
-              <button className="btn s32" style={{ alignSelf: 'flex-start', color: 'var(--accent)' }}
-                onClick={() => chat.openChat({ kind: 'person', id: p.id, label: 'Человек: ' + first }, `Какие задачи и обещания у ${p.name}?`)}>
-                Что обещал(а)?
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn s32" style={{ color: 'var(--accent)' }}
+                  onClick={() => chat.openChat({ kind: 'person', id: p.id, label: 'Человек: ' + first }, `Какие задачи и обещания у ${p.name}?`)}>
+                  Что обещал(а)?
+                </button>
+                <button className="btn s32" onClick={() => setMaterial({ kind: 'deck', personId: p.id, title: p.name })}>Презентация</button>
+                <button className="btn s32" onClick={() => setMaterial({ kind: 'map', personId: p.id, title: p.name })}>Карта</button>
+              </div>
             </div>
           )
         })}

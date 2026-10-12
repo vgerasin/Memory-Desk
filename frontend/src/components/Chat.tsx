@@ -30,7 +30,7 @@ export function RichText({ text }: { text: string }) {
 }
 
 export function Chat() {
-  const { chat, meta, currentRecord } = useApp()
+  const { chat, meta, currentRecord, setMaterial } = useApp()
   const [input, setInput] = useState('')
   const scroll = useRef<HTMLDivElement>(null)
   const field = useRef<HTMLInputElement>(null)
@@ -80,9 +80,17 @@ export function Chat() {
             <div key={m.id} className="bubble-user">{m.text}</div>
           ) : (
             <div key={m.id} className="bot">
-              <div className={'bot-text' + (m.pending ? ' pending' : '') + (m.error ? ' error' : '') + (m.digest ? ' rich' : '')}>
-                {m.digest ? <RichText text={m.text} /> : m.text}
+              <div className={'bot-text' + (m.pending ? ' pending' : '') + (m.error ? ' error' : '') + (m.digest || m.material ? ' rich' : '')}>
+                {m.digest || m.material ? <RichText text={m.text} /> : m.text}
               </div>
+              {m.material && m.material.kind === 'deck' && m.material.result.url && (
+                <a className="btn accent s34 chat-file" href={m.material.result.url} download>Скачать презентацию (.pptx)</a>
+              )}
+              {m.material && m.material.kind !== 'deck' && (
+                <button className="btn s34 chat-file" onClick={() => setMaterial({ kind: m.material!.kind, title: m.material!.result.title, result: m.material!.result })}>
+                  Открыть окно: править, скачать, в Obsidian
+                </button>
+              )}
               {m.digest && m.sources && m.sources.length > 0 && (
                 <div className="digest-note">Записи за период: {m.digest.shown < m.digest.records ? `последние ${m.digest.shown} из ${m.digest.records}` : m.digest.records}</div>
               )}

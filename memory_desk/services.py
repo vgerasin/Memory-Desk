@@ -8,7 +8,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import config, digest, integrations, jobs, knowledge, speakers as speakers_mod, storage, voice
+from . import config, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -94,6 +94,7 @@ def _decision_dto(row: dict, meeting_title: str = "", meeting_date_value: str = 
         "id": row["id"], "text": row["text"], "owner": (row.get("owner") or "").strip(), "t": t,
         "tSec": clock_seconds(t), "status": row["status"], "draft": row["status"] == "draft",
         "meetingId": row["meeting_id"], "meetingTitle": meeting_title, "meetingDate": meeting_date_value,
+        "replacedBy": row.get("replaced_by") or None,
     }
 
 
@@ -269,7 +270,7 @@ def _hero_columns(core: Core, project_id: str | None, project_title: str | None,
 
     decisions = [_decision_dto(r, meta[r["meeting_id"]]["title"], meta[r["meeting_id"]]["meeting_date"]) for r in storage.rows(
         "SELECT d.* FROM decisions d JOIN meetings m ON m.id=d.meeting_id WHERE d.status!='rejected' AND m.archived=0 "
-        "ORDER BY m.recorded_at DESC, d.rowid") if in_scope(r["meeting_id"])][:3]
+        "AND d.replaced_by IS NULL ORDER BY m.recorded_at DESC, d.rowid") if in_scope(r["meeting_id"])][:3]
     tasks = [_task_dto(r, meta[r["meeting_id"]]["title"], meta[r["meeting_id"]]["meeting_date"]) for r in storage.rows(
         "SELECT t.* FROM tasks t JOIN meetings m ON m.id=t.meeting_id WHERE t.status IN ('draft','open') AND m.archived=0 "
         "ORDER BY m.recorded_at DESC, t.rowid") if in_scope(r["meeting_id"])][:3]
@@ -322,7 +323,7 @@ def prep_brief(core: Core, project_id: str | None = None, meeting_id: str | None
 
     decisions = [{"text": _thesis(r["text"]), "draft": r["status"] == "draft", **link(by_id[r["meeting_id"]], clock_seconds(r["evidence_time"] or ""))}
                  for r in storage.rows("SELECT d.* FROM decisions d JOIN meetings m ON m.id=d.meeting_id WHERE d.status!='rejected' "
-                                       "AND m.archived=0 ORDER BY m.recorded_at DESC, d.rowid") if r["meeting_id"] in ids][:6]
+                                       "AND m.archived=0 AND d.replaced_by IS NULL ORDER BY m.recorded_at DESC, d.rowid") if r["meeting_id"] in ids][:6]
 
     today_iso = date.today().isoformat()
     raw_tasks = [r for r in storage.rows("SELECT t.* FROM tasks t JOIN meetings m ON m.id=t.meeting_id WHERE t.status IN ('draft','open') "
@@ -349,10 +350,111 @@ def prep_brief(core: Core, project_id: str | None = None, meeting_id: str | None
         {"key": "questions", "title": "Открытые вопросы", "empty": "Открытых вопросов нет", "items": questions[:6]},
         {"key": "risks", "title": "Риски", "empty": "Рисков не отмечено", "items": risks[:4]},
     ]
-    return {"title": title, "projectId": project_id, "meetingId": meeting_id, "records": len(scope), "sections": sections}
+    brief = {"title": title, "projectId": project_id, "meetingId": meeting_id, "records": len(scope), "sections": sections}
+    brief["headline"] = {"text": _structured_headline(brief), "mode": "structured"}
+    return brief
+
+
+def _structured_headline(brief: dict) -> str:
+    """«Главное к встрече» без модели: просрочка, открытые задачи и вопросы, последнее решение."""
+    if not brief["records"]:
+        return "Записей пока нет — подготовиться не к чему."
+    by_key = {s["key"]: s["items"] for s in brief["sections"]}
+    tasks = by_key.get("tasks", [])
+    overdue = sum(1 for t in tasks if t.get("overdue"))
+    parts = []
+    if tasks:
+        parts.append((f"Просрочено {overdue} из {len(tasks)} открытых задач" if overdue else f"Открытых задач: {len(tasks)}"))
+    if by_key.get("questions"):
+        parts.append(f"без ответа вопросов: {len(by_key['questions'])}")
+    if by_key.get("risks"):
+        parts.append(f"отмеченных рисков: {len(by_key['risks'])}")
+    line = ", ".join(parts)
+    line = (line[0].upper() + line[1:] + ".") if line else "Открытых задач, вопросов и рисков нет."
+    if by_key.get("decisions"):
+        line += f" Последнее решение: {by_key['decisions'][0]['text']}"
+    return line
+
+
+_headline_cache: dict[tuple, dict] = {}
+
+
+def prep_headline(core: Core, project_id: str | None = None, meeting_id: str | None = None) -> dict:
+    """Одно-два предложения «Главное к встрече»: пишет локальная модель по тезисам подготовки; без модели — строка из цифр.
+    Результат кэшируется до следующего изменения данных."""
+    key = (project_id or "", meeting_id or "", core.data_version)
+    if key in _headline_cache:
+        return _headline_cache[key]
+    brief = prep_brief(core, project_id, meeting_id)
+    result = dict(brief["headline"])
+    if brief["records"]:
+        lines = []
+        for section in brief["sections"]:
+            for item in section["items"][:5]:
+                extra = ""
+                if section["key"] == "tasks":
+                    extra = f" ({item.get('owner') or 'без ответственного'}; срок: {item.get('due') or item.get('dueText') or 'не указан'}{'; ПРОСРОЧЕНО' if item.get('overdue') else ''})"
+                lines.append(f"[{section['title']}] {item['text']}{extra}")
+        prompt = ("Ты помощник по архиву рабочих встреч. Перед встречей человеку нужны две фразы «Главное к встрече»: что важнее всего "
+                  "помнить — просроченное, нерешённые вопросы, недавние решения. Пиши только по фактам ниже, ничего не выдумывай, "
+                  "не используй списки, заголовки и вступления, не больше двух предложений, по-русски.\n\nФакты:\n"
+                  + "\n".join(lines) + "\n\nГЛАВНОЕ:\n")
+        try:
+            text = digest.generate(prompt, 180).strip()
+        except OSError:
+            text = ""
+        text = " ".join(re.sub(r"[*#>`]", "", text).split())
+        if len(text) >= 20:
+            result = {"text": text[:420].rsplit(" ", 1)[0] + "…" if len(text) > 420 else text, "mode": "model"}
+    if result["mode"] == "model":  # без модели не кэшируем: после запуска Ollama следующее открытие уже получит текст модели
+        if len(_headline_cache) > 50:
+            _headline_cache.clear()
+        _headline_cache[key] = result
+    return result
 
 
 # --------------------------------------------------------------------------- аналитика
+
+def decision_tree(core: Core, project: str = "", days: int = 0) -> dict:
+    """Дерево решений: по проектам; корень — действующее решение, ветви — то, что оно заменило (по цепочке «заменено»)."""
+    today = date.today()
+    cut = (today - timedelta(days=days)).isoformat() if days else ""
+    by_id = {m.id: m for m in core.live_meetings()}
+    rows = [r for r in storage.rows(
+        "SELECT d.*, m.project_id mp, m.project_title mpt FROM decisions d JOIN meetings m ON m.id=d.meeting_id "
+        "WHERE d.status!='rejected' AND m.archived=0 ORDER BY m.recorded_at, d.rowid") if r["meeting_id"] in by_id]
+    nodes: dict[str, dict] = {}
+    known = {r["id"] for r in rows}
+    for r in rows:
+        m = by_id[r["meeting_id"]]
+        nodes[r["id"]] = {"id": r["id"], "text": r["text"], "owner": (r["owner"] or "").strip(), "status": r["status"], "draft": r["status"] == "draft",
+                          "date": meeting_date(m), "meetingId": m.id, "meetingTitle": m.title, "tSec": clock_seconds(r["evidence_time"] or ""),
+                          "projectId": r["mp"] or "", "project": r["mpt"] if r["mpt"] and r["mpt"] != NO_PROJECT else "",
+                          "replacedBy": r["replaced_by"] if r["replaced_by"] in known else None, "replaces": []}
+    for node in nodes.values():
+        target = nodes.get(node["replacedBy"] or "")
+        if target is not None:
+            target["replaces"].append(node)
+    groups: dict[str, dict] = {}
+    for node in nodes.values():
+        if cut and node["date"] < cut:
+            continue
+        if project and node["projectId"] != project:
+            continue
+        g = groups.setdefault(node["projectId"], {"id": node["projectId"], "title": node["project"] or "Без проекта", "current": [], "total": 0, "replaced": 0})
+        g["total"] += 1
+        if node["replacedBy"]:
+            g["replaced"] += 1
+        else:
+            g["current"].append(node)
+    for g in groups.values():
+        g["current"].sort(key=lambda n: n["date"], reverse=True)
+        g["active"] = g["total"] - g["replaced"]
+    out = sorted(groups.values(), key=lambda g: (g["id"] == "", -g["total"], g["title"]))
+    for g in out:
+        g["color"] = color_for("project:" + g["title"]) if g["id"] else "#8E8E93"
+    return {"today": today.isoformat(), "days": days, "projects": out}
+
 
 def analytics(core: Core, days: int = 90) -> dict:
     """Данные для экрана «Аналитика»: активность по неделям, задачи, сроки, решения, связи людей и проектов."""
@@ -539,6 +641,9 @@ def chat(core: Core, question: str, scope: dict, previous: list[str]) -> dict:
     question = question.strip()
     if not question:
         raise ValueError("Вопрос не может быть пустым")
+    made = materials.from_chat(core, question, scope, meeting_date)
+    if made is not None:
+        return made
     summary = digest.build(core, question, scope, meeting_date)
     if summary is not None:
         return summary

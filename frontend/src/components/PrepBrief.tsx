@@ -3,7 +3,7 @@ import { api, errorText } from '../api'
 import { useApp } from '../store'
 import { navigate, recordLink } from '../router'
 import { dayLabel, due, ownerLabel, plural, tc } from '../format'
-import type { PrepBrief as Brief, PrepItem } from '../types'
+import type { PrepBrief as Brief, PrepHeadline, PrepItem } from '../types'
 
 function SourceLink({ item, onGo }: { item: PrepItem; onGo: () => void }) {
   const label = [dayLabel(item.date).toLowerCase(), item.tSec != null ? tc(item.tSec) : ''].filter(Boolean).join(' · ')
@@ -17,12 +17,24 @@ export function PrepModal() {
   const { prep, setPrep, chat } = useApp()
   const [brief, setBrief] = useState<Brief | null>(null)
   const [error, setError] = useState('')
+  const [headline, setHeadline] = useState<PrepHeadline | null>(null)
+  const [refining, setRefining] = useState(false)
 
   useEffect(() => {
     if (!prep) return
-    setBrief(null); setError('')
+    let alive = true
+    setBrief(null); setError(''); setHeadline(null); setRefining(false)
     const query = prep.projectId ? `project=${encodeURIComponent(prep.projectId)}` : prep.meetingId ? `meeting=${encodeURIComponent(prep.meetingId)}` : ''
-    api.get<Brief>('/api/prep' + (query ? '?' + query : '')).then(setBrief).catch(e => setError(errorText(e)))
+    api.get<Brief>('/api/prep' + (query ? '?' + query : '')).then(b => {
+      if (!alive) return
+      setBrief(b); setHeadline(b.headline)
+      if (!b.records) return
+      // тезисы показываются сразу; «главное» уточняет локальная модель — это может занять время
+      setRefining(true)
+      api.get<PrepHeadline>('/api/prep/headline' + (query ? '?' + query : ''))
+        .then(h => { if (alive) setHeadline(h) }).catch(() => undefined).finally(() => { if (alive) setRefining(false) })
+    }).catch(e => { if (alive) setError(errorText(e)) })
+    return () => { alive = false }
   }, [prep])
 
   useEffect(() => {
@@ -54,6 +66,15 @@ export function PrepModal() {
         </div>
         {error && <div className="error-box" style={{ marginTop: 0 }}>{error}</div>}
         {!brief && !error && <div className="muted-text">Собираю…</div>}
+        {brief && headline && (
+          <div className="prep-headline">
+            <span className="label-caps">Главное к встрече</span>
+            <div className="prep-headline-text">{headline.text}</div>
+            <div className="muted-text" style={{ fontSize: 12 }}>
+              {refining ? 'Уточняю локальной моделью…' : headline.mode === 'model' ? 'Написано локальной моделью по тезисам ниже' : 'Собрано из цифр; модель недоступна'}
+            </div>
+          </div>
+        )}
         {brief && brief.sections.map(section => (
           <section className="prep-sec" key={section.key}>
             <div className="label-caps">{section.title}{section.items.length > 0 && <span className="n">{section.items.length}</span>}</div>

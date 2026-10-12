@@ -4,11 +4,13 @@ import { Header } from './components/Header'
 import { SettingsModal } from './components/Settings'
 import { StorageModal } from './components/Storage'
 import { PrepModal } from './components/PrepBrief'
+import { MaterialModal } from './components/Material'
 import { Toast } from './components/Toast'
 import { useRoute } from './router'
 import { useApp } from './store'
 import { Analytics } from './screens/Analytics'
 import { Archive } from './screens/Archive'
+import { Calendar } from './screens/Calendar'
 import { Inbox } from './screens/Inbox'
 import { People } from './screens/People'
 import { Projects } from './screens/Projects'
@@ -25,6 +27,7 @@ function Screen() {
     case 'projects': return <Projects />
     case 'people': return <People />
     case 'tasks': return <Tasks />
+    case 'calendar': return <Calendar />
     case 'analytics': return <Analytics />
     default: return <Today />
   }
@@ -55,6 +58,7 @@ export default function App() {
       <SettingsModal />
       <StorageModal />
       <PrepModal />
+      <MaterialModal />
       <Toast />
     </div>
   )

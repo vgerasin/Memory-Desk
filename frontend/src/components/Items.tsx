@@ -202,6 +202,7 @@ export function DecisionRow({ decision, first, source, onConfirm, onReject, onOp
         <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
           <div className="text">{decision.text}</div>
           {decision.draft && <span className="draft-badge">Черновик</span>}
+          {decision.replacedBy && <span className="draft-badge">Заменено</span>}
         </div>
         <div className="meta">
           <span className="src" onClick={onOpen}>{source}</span>

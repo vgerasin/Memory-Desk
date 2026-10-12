@@ -39,6 +39,39 @@ def _as_datetime(value) -> datetime | None:
     return None  # события на весь день пропускаем
 
 
+def between(source: str, start: datetime, end: datetime) -> list[dict]:
+    """События ICS в диапазоне [start, end), включая события на весь день; повторяющиеся разворачиваются."""
+    import icalendar
+    import recurring_ical_events
+    calendar = icalendar.Calendar.from_ical(_load(source.strip()))
+    out = []
+    for event in recurring_ical_events.of(calendar).between(start, end):
+        raw = event.get("DTSTART")
+        if raw is None:
+            continue
+        all_day = isinstance(raw.dt, date) and not isinstance(raw.dt, datetime)
+        first = datetime.combine(raw.dt, datetime.min.time()) if all_day else _as_datetime(raw.dt)
+        stop_raw = event.get("DTEND")
+        if all_day:
+            last = datetime.combine(stop_raw.dt, datetime.min.time()) if stop_raw is not None and not isinstance(stop_raw.dt, datetime) else first + timedelta(days=1)
+        else:
+            last = _as_datetime(stop_raw.dt) if stop_raw is not None else None
+            last = last or first + timedelta(hours=1)
+        if first is None or str(event.get("STATUS", "")).upper() == "CANCELLED":
+            continue
+        attendees = event.get("ATTENDEE") or []
+        attendees = attendees if isinstance(attendees, list) else [attendees]
+        names = list(dict.fromkeys(_name(a) for a in attendees))
+        organizer = event.get("ORGANIZER")
+        if organizer is not None and _name(organizer) not in names:
+            names.insert(0, _name(organizer))
+        out.append({"id": f"{event.get('UID', '')}@{int(first.timestamp())}", "title": str(event.get("SUMMARY") or "Встреча"),
+                    "start": first.isoformat(timespec="minutes"), "end": last.isoformat(timespec="minutes"), "allDay": all_day,
+                    "calendar": "", "location": str(event.get("LOCATION") or ""), "people": names[:12]})
+    out.sort(key=lambda e: e["start"])
+    return out
+
+
 def upcoming(source: str, now: datetime | None = None) -> dict | None:
     """Идущая сейчас или ближайшая сегодняшняя встреча. None — если календарь не настроен/пуст/недоступен."""
     if not source.strip():
