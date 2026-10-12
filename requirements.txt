@@ -1,0 +1,9 @@
+fastapi>=0.115,<1
+uvicorn>=0.32,<1
+qdrant-client>=1.15,<2
+sentence-transformers>=5,<7
+mlx-whisper>=0.4,<1
+numpy>=1.26
+icalendar>=6,<8
+recurring-ical-events>=3,<4
+scipy>=1.11

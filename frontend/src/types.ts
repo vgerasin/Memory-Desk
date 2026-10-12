@@ -1,0 +1,168 @@
+export interface PersonDto { id: string; name: string; role: string; initials: string; color: string }
+export interface ProjectRef { id: string | null; title: string; color: string }
+export interface TypeRef { id: string; title: string }
+
+export type MeetingStatus = 'needs_review' | 'completed'
+
+export interface MeetingItem {
+  id: string; title: string; date: string; time: string
+  duration: string; durationSec: number | null
+  project: ProjectRef | null; type: TypeRef; people: PersonDto[]
+  status: MeetingStatus; excerpt: string; important: boolean; archived: boolean
+}
+
+export interface TaskDto {
+  id: string; text: string; owner: string; due: string | null; dueText: string
+  t: string; tSec: number | null; status: 'draft' | 'open' | 'done' | 'rejected'
+  draft: boolean; done: boolean; meetingId: string; meetingTitle: string; meetingDate: string
+}
+export interface DecisionDto {
+  id: string; text: string; owner: string; t: string; tSec: number | null
+  status: 'draft' | 'confirmed' | 'rejected'; draft: boolean
+  meetingId: string; meetingTitle: string; meetingDate: string
+}
+export interface Fact { text: string; t: string; tSec: number | null }
+export interface Segment { i: number; t: string; sec: number; speaker: string; text: string }
+export interface SpeakerInfo {
+  label: string; count: number; generic: boolean; personId: string | null
+  /** есть голосовой отпечаток; matched — человек узнан по голосу автоматически */
+  voice: { matched: boolean; score: number | null } | null
+}
+export interface DiarizationStatus { state: 'idle' | 'running' | 'done' | 'error'; mode?: 'text' | 'voice'; done?: number; total?: number; message?: string }
+export interface VoiceState {
+  enabled: boolean; available: boolean; reason: string; dependencies: boolean; dependenciesReason: string
+  modelReady: boolean; profiles: number
+  download: { state: 'idle' | 'running' | 'done' | 'error'; phase: '' | 'install' | 'model'; done: number; total: number; message: string }
+}
+export interface BackupItem { name: string; size: number; createdAt: string }
+
+export interface MeetingDetail extends MeetingItem {
+  summary: string[]; topics: string[]; decisions: DecisionDto[]; tasks: TaskDto[]
+  risks: Fact[]; questions: Fact[]; nextSteps: Fact[]; transcript: Segment[]
+  speakers: SpeakerInfo[]; diarization: DiarizationStatus | null
+  obsidianUrl: string | null; notePath: string; hasAudio: boolean; audioUrl: string | null
+}
+
+export interface MeetingsResponse { items: MeetingItem[]; total: number; counts: { total: number; needsReview: number; noProject: number } }
+
+export interface HeroQuestion { text: string; t: string; tSec: number | null; meetingId: string; meetingTitle: string; meetingDate: string }
+export interface HeroColumns { decisions: DecisionDto[]; tasks: TaskDto[]; questions: HeroQuestion[] }
+export interface HeroPerson { name: string; initials: string; color: string }
+export interface Hero {
+  kind: 'next_meeting' | 'last_record'
+  title: string; people: (PersonDto | HeroPerson)[]; project: { id: string | null; title: string; color?: string } | null
+  columns: HeroColumns
+  start?: string; end?: string; ongoing?: boolean
+  meetingId?: string; date?: string; time?: string
+}
+export interface TodayPayload {
+  hero: Hero | null; newRecords: MeetingItem[]; tasks: TaskDto[]; drafts: number
+  decisions: DecisionDto[]; noProject: number; reviewCount: number
+}
+
+export interface ProjectOverview {
+  id: string; title: string; color: string; goal: string
+  counts: { records: number; openTasks: number; questions: number }
+  people: PersonDto[]
+  lastChange: { text: string; kind: 'decision' | 'summary'; meetingId: string; date: string } | null
+}
+export interface PersonOverview extends PersonDto {
+  meetings: number; projects: string[]; obligations: number; lastAgreement: TaskDto | null
+  voice: { samples: number; seconds: number } | null
+}
+
+export interface Meta {
+  projects: { id: string; title: string; color: string }[]
+  types: { id: string; title: string }[]
+  people: PersonDto[]
+  calendarConfigured: boolean
+  calendarWrite: boolean
+}
+
+export interface JobError { title: string; stage: string; action: string; detail: string }
+export interface Job {
+  id: string; file: string; duration: number | null
+  state: 'queued' | 'running' | 'failed'
+  stage: string; stage_index: number; stage_label: string; percent: number
+  started_at: string | null; eta: number | null; last_message: string; runner: string
+  error: JobError | null
+}
+export interface AppState {
+  queue: Job[]; running: Job | null; inboxCount: number
+  dataVersion: number; jobsVersion: number; indexState: string
+}
+
+export interface SystemRow { key: string; name: string; value: string; state: 'ok' | 'warn' | 'bad' }
+export interface SystemStatus { rows: SystemRow[]; overall: 'ok' | 'warn' | 'bad'; indexState: string; indexError: string }
+
+export interface Settings {
+  recordings_dir: string; obsidian_dir: string; archive_dir: string
+  retention_days: number; auto_process: boolean; diarize: boolean; voice_enabled: boolean; calendar_source: string
+  apple_calendar: boolean; reminders_enabled: boolean; reminders_list: string; reminders_scope: 'mine' | 'all'; my_name: string
+  exists?: Record<string, boolean>
+}
+
+export interface ChatSource {
+  meetingId: string; title: string; date: string; time: string; section: string
+  t: string; tSec: number | null; excerpt: string
+}
+export interface ChatDigest {
+  title: string; records: number; shown: number; model: boolean
+  stats: { records: number; decisions: number; decisionsDraft: number; tasksDone: number; tasksOpen: number; tasksOverdue: number; risks: number }
+}
+export interface ChatReply { answer: string; sources: ChatSource[]; mode: string; confirmed: boolean; digest?: ChatDigest }
+export interface ChatMessage {
+  id: number; role: 'user' | 'bot'; text: string; sources?: ChatSource[]; digest?: ChatDigest; pending?: boolean; error?: boolean
+}
+export type ChatScope =
+  | { kind: 'all' }
+  | { kind: 'record'; id: string; label: string }
+  | { kind: 'project'; id: string; title: string; label: string }
+  | { kind: 'person'; id: string; label: string }
+  | { kind: 'days'; days: number; label: string }
+
+export interface AppleStatus {
+  available: boolean; reason: string; events: string; reminders: string
+  calendarEnabled: boolean; remindersEnabled: boolean
+  lastSync: { at: number | null; summary: Record<string, number | string> | null; error: string }
+}
+export interface CalendarSuggestion {
+  linked: boolean; title?: string
+  event?: { id: string; title: string; start: string; end: string; calendar: string }
+  people?: string[]; project?: { id: string; title: string } | null; titleDiffers?: boolean
+}
+
+export interface StorageCategory {
+  key: string; title: string; bytes: number; count: number; hint: string; clean: string; days: boolean; danger: boolean
+}
+export interface StorageUsage {
+  categories: StorageCategory[]; info: { key: string; title: string; bytes: number; count: number | null }[]; total: number
+}
+
+export interface PrepTarget { projectId?: string; meetingId?: string; title?: string }
+export interface PrepItem {
+  text: string; meetingId: string; meetingTitle: string; date: string; tSec: number | null; view: string | null
+  owner?: string; due?: string | null; dueText?: string; draft?: boolean; overdue?: boolean
+}
+export interface PrepSection { key: 'changes' | 'decisions' | 'tasks' | 'questions' | 'risks'; title: string; empty: string; items: PrepItem[] }
+export interface PrepBrief { title: string; projectId: string | null; meetingId: string | null; records: number; sections: PrepSection[] }
+
+export interface AnalyticsData {
+  days: number; today: string
+  totals: { records: number; minutes: number; openTasks: number; overdue: number; doneTasks: number; decisions: number }
+  weeks: { start: string; meetings: number; minutes: number }[]
+  byOwner: { owner: string; open: number; overdue: number; done: number }[]
+  gantt: { id: string; text: string; owner: string; draft: boolean; project: string; start: string; due: string; overdue: boolean; meetingId: string; tSec: number | null }[]
+  ganttTotal: number
+  decisions: { id: string; text: string; draft: boolean; project: string; date: string; meetingId: string; tSec: number | null }[]
+  graph: {
+    people: { name: string; meetings: number; initials: string; color: string }[]
+    projects: { name: string; meetings: number; color: string }[]
+    links: { person: string; project: string; meetings: number }[]
+  }
+}
+
+export interface ReindexStatus {
+  state: 'idle' | 'running' | 'done' | 'error'; done: number; total: number; records: number; message: string
+  startedAt: number; finishedAt: number; seconds: number
+}

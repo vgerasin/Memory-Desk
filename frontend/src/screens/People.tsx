@@ -1,0 +1,95 @@
+import { useState } from 'react'
+import { api, errorText } from '../api'
+import { useApi } from '../useApi'
+import { useApp } from '../store'
+import { due, plural } from '../format'
+import type { PersonOverview } from '../types'
+import { Avatar, ErrorBox, Loading } from '../components/ui'
+
+function RoleEdit({ person }: { person: PersonOverview }) {
+  const { showToast, invalidate } = useApp()
+  const [editing, setEditing] = useState(false)
+  const [role, setRole] = useState(person.role)
+  const save = async () => {
+    try { await api.patch(`/api/people/${person.id}`, { role: role.trim() }); setEditing(false); invalidate() }
+    catch (e) { showToast(errorText(e)) }
+  }
+  if (editing) {
+    return <input autoFocus value={role} onChange={e => setRole(e.target.value)} onBlur={save} aria-label="Роль"
+      onKeyDown={e => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') setEditing(false) }}
+      style={{ height: 24, border: 'none', background: 'var(--fill)', borderRadius: 6, padding: '0 8px', fontSize: 13, width: '100%', outline: 'none' }} />
+  }
+  return (
+    <button className="person-role" style={{ textAlign: 'left', color: person.role ? 'var(--text2)' : 'var(--text3)' }} onClick={() => setEditing(true)}>
+      {person.role || 'Указать роль'}
+    </button>
+  )
+}
+
+function VoiceLine({ person }: { person: PersonOverview }) {
+  const { showToast, invalidate } = useApp()
+  const [confirm, setConfirm] = useState(false)
+  if (!person.voice) {
+    return <div className="person-voice"><span className="none">Голос не запомнен — добавьте его из записи, панель «Говорящие»</span></div>
+  }
+  const minutes = Math.max(1, Math.round(person.voice.seconds / 60))
+  const remove = async () => {
+    try { await api.del(`/api/people/${person.id}/voice`); showToast('Голосовой отпечаток удалён'); invalidate() }
+    catch (e) { showToast(errorText(e)) }
+    setConfirm(false)
+  }
+  return (
+    <div className="person-voice">
+      <span>Голос запомнен · {plural(person.voice.samples, 'запись', 'записи', 'записей')}, ~{minutes} мин речи</span>
+      {confirm
+        ? <span style={{ display: 'flex', gap: 6 }}>
+            <button className="btn s28 muted" onClick={() => setConfirm(false)}>Нет</button>
+            <button className="btn s28 danger" onClick={() => void remove()}>Удалить</button>
+          </span>
+        : <button className="btn s28" onClick={() => setConfirm(true)}>Удалить голос</button>}
+    </div>
+  )
+}
+
+export function People() {
+  const { data, error } = useApi<{ items: PersonOverview[] }>('/api/people')
+  const { chat } = useApp()
+  return (
+    <>
+      <h1 className="h1">Люди</h1>
+      {error && !data && <ErrorBox text={error} />}
+      {!data && !error && <Loading />}
+      {data && data.items.length === 0 && <div className="empty" style={{ marginTop: 36 }}>Участники появятся здесь, когда вы добавите их к записям.</div>}
+      <div className="cards people">
+        {data?.items.map(p => {
+          const stats = [plural(p.meetings, 'встреча', 'встречи', 'встреч'), p.projects.join(', ') || 'без проекта',
+            plural(p.obligations, 'обязательство', 'обязательства', 'обязательств')].join(' · ')
+          const first = p.name.split(' ')[0]
+          return (
+            <div className="card person-card" key={p.id}>
+              <div className="person-top">
+                <Avatar initials={p.initials} color={p.color} size={48} solo />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <span className="person-name">{p.name}</span>
+                  <RoleEdit person={p} />
+                </div>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>{stats}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span className="label-caps">Последняя договорённость</span>
+                <span style={{ fontSize: 15, lineHeight: 1.45 }}>
+                  {p.lastAgreement ? `${p.lastAgreement.text} — ${due(p.lastAgreement.due, p.lastAgreement.dueText).label}` : 'Открытых договорённостей нет'}
+                </span>
+              </div>
+              <VoiceLine person={p} />
+              <button className="btn s32" style={{ alignSelf: 'flex-start', color: 'var(--accent)' }}
+                onClick={() => chat.openChat({ kind: 'person', id: p.id, label: 'Человек: ' + first }, `Какие задачи и обещания у ${p.name}?`)}>
+                Что обещал(а)?
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}

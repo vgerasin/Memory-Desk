@@ -1,0 +1,80 @@
+# CI для Memory Desk. Приложение работает только на macOS (Apple Silicon), но тесты не требуют
+# ни Whisper, ни Ollama, ни реальных моделей: они используют заглушки, поэтому идут на Linux.
+
+stages:
+  - check
+  - test
+  - build
+
+default:
+  interruptible: true
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  MEMORY_DESK_FAKE_EMBED: "1"
+
+# Синтаксис shell-скриптов: .command выполняются в zsh, обёртки — тоже.
+scripts:syntax:
+  stage: check
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq zsh >/dev/null
+  script:
+    - |
+      for f in install.command start.command meeting-assistant meetings-process ./*.command; do
+        echo "zsh -n $f"
+        zsh -n "$f"
+      done
+  rules:
+    - changes: ["*.command", "meeting-assistant", "meetings-process"]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Репозиторий не должен содержать пользовательских данных, моделей и личных путей.
+repo:hygiene:
+  stage: check
+  image: alpine:3.20
+  script:
+    - |
+      bad=$(git ls-files | grep -E '\.(mp3|wav|m4a|aac|flac|ogg|mp4|db|sqlite3?|gguf|safetensors|bin)$' || true)
+      if [ -n "$bad" ]; then echo "В репозитории найдены данные или модели:"; echo "$bad"; exit 1; fi
+      paths=$(git grep -nE '/Users/[A-Za-z0-9._-]+/' -- . ':!.gitlab-ci.yml' || true)
+      if [ -n "$paths" ]; then echo "Найдены абсолютные пути разработчика:"; echo "$paths"; exit 1; fi
+      echo "OK"
+  before_script:
+    - apk add --no-cache git >/dev/null
+
+tests:
+  stage: test
+  image: python:3.12-slim-bookworm
+  cache:
+    key: pip-$CI_COMMIT_REF_SLUG
+    paths: [.cache/pip]
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq ffmpeg >/dev/null
+    - pip install -r requirements-ci.txt
+  script:
+    - python -m pytest -q tests --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+frontend:build:
+  stage: build
+  image: node:20-bookworm-slim
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths: [frontend/node_modules/]
+  script:
+    - cd frontend
+    - npm ci || npm install
+    - npm run build
+  rules:
+    - changes: ["frontend/**/*"]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  artifacts:
+    paths: [memory_desk/web/]
+    expire_in: 1 week
