@@ -49,16 +49,20 @@ def _run_voice(core, meeting: knowledge.Meeting, segments: list[dict]) -> None:
                                     progress=lambda done, total: _update(meeting.id, done=done, total=total))
     labels = result["labels"]
     if not labels:
+        voice.save_meeting_overlaps(meeting.id, [])
         _update(meeting.id, state="done", message="По голосу в записи слышен один человек: разметка не добавлена")
         return
     knowledge.rewrite_speakers(meeting, lambda _parsed: labels)
     voice.save_meeting_voices(meeting.id, result["speakers"])
+    voice.save_meeting_overlaps(meeting.id, [segments[i]["sec"] for i in result.get("overlaps", []) if i < len(segments)])
     link_people(meeting.id, labels)
     core.reload(force=True)
     known = [l for l, info in result["speakers"].items() if info["matched"]]
     text = f"Найдено говорящих: {len(set(labels))}"
     if known:
         text += f", узнано по голосу: {', '.join(known)}"
+    if result.get("overlaps"):
+        text += f"; возможное наложение голосов отмечено в {len(result['overlaps'])} репл."
     _update(meeting.id, state="done", message=text)
 
 

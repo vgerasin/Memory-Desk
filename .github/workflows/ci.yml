@@ -32,7 +32,7 @@ jobs:
       - run: |
           bad=$(git ls-files | grep -E '\.(mp3|wav|m4a|aac|flac|ogg|mp4|db|sqlite3?|gguf|safetensors|bin)$' || true)
           if [ -n "$bad" ]; then echo "Найдены данные или модели:"; echo "$bad"; exit 1; fi
-          paths=$(git grep -nE '/Users/[A-Za-z0-9._-]+/' -- . ':!.github' ':!.gitlab-ci.yml' || true)
+          paths=$(git grep -nE '/Users/[A-Za-z0-9._-]+/' -- . ':!.github' || true)
           if [ -n "$paths" ]; then echo "Найдены абсолютные пути разработчика:"; echo "$paths"; exit 1; fi
 
   tests:

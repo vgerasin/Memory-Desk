@@ -22,7 +22,7 @@ export interface DecisionDto {
   meetingId: string; meetingTitle: string; meetingDate: string
 }
 export interface Fact { text: string; t: string; tSec: number | null }
-export interface Segment { i: number; t: string; sec: number; speaker: string; text: string }
+export interface Segment { i: number; t: string; sec: number; speaker: string; text: string; overlap?: boolean }
 export interface SpeakerInfo {
   label: string; count: number; generic: boolean; personId: string | null
   /** есть голосовой отпечаток; matched — человек узнан по голосу автоматически */

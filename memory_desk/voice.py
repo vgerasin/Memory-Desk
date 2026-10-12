@@ -34,6 +34,9 @@ MIN_CLUSTER_SEC = 6.0    # «говорящие» короче этого — ш
 MAX_SPEAKERS = 8
 MATCH_THRESHOLD = 0.55   # сходство с профилем, при котором голос считается узнанным
 MATCH_MARGIN = 0.05      # и должно быть заметно выше, чем у второго кандидата
+OVERLAP_MIN = 0.35       # реплика заметно похожа на двух говорящих сразу (сходство с обоими не ниже)
+OVERLAP_GAP = 0.06       # и разница между первым и вторым не больше этого
+OVERLAP_SHARE = 0.10     # помечаем не больше десятой части реплик — самые неоднозначные
 
 
 def model_dir() -> Path:
@@ -471,6 +474,27 @@ def match_profiles(centroids: dict[str, np.ndarray], profiles: list[dict]) -> di
     return result
 
 
+def find_overlaps(embeddings: list[np.ndarray | None], groups: list[int],
+                  cents: dict[int, tuple[np.ndarray, float]]) -> list[int]:
+    """Номера реплик, в которых, возможно, говорят двое сразу.
+
+    Осторожно: реплика помечается, только если её отпечаток почти одинаково похож на двух разных говорящих. Метка говорящего
+    остаётся прежней — разделять речь по голосам мы не умеем, только предупреждаем. Помечается не больше OVERLAP_SHARE реплик."""
+    if len(cents) < 2:
+        return []
+    keys = sorted(cents)
+    found: list[tuple[float, int]] = []
+    for i, vector in enumerate(embeddings):
+        if vector is None:
+            continue
+        ranked = sorted((float(vector @ cents[g][0]) for g in keys), reverse=True)
+        if ranked[1] >= OVERLAP_MIN and ranked[0] - ranked[1] <= OVERLAP_GAP:
+            found.append((ranked[0] - ranked[1], i))
+    found.sort()
+    limit = max(1, int(len(embeddings) * OVERLAP_SHARE)) if found else 0
+    return sorted(i for _gap, i in found[:limit])
+
+
 def diarize_by_voice(audio_path: str | Path, segments: list[dict], *, encoder=None, profiles: list[dict] | None = None,
                      progress=None) -> dict:
     """Метки говорящих по голосу. Узнанные люди получают имя, остальные — «Спикер N».
@@ -499,8 +523,8 @@ def diarize_by_voice(audio_path: str | Path, segments: list[dict], *, encoder=No
                               "score": names[str(g)]["score"] if str(g) in names else None}
                 for g, (vec, w) in cents.items()}
     if len(set(groups)) < 2 and not any(s["matched"] for s in speakers.values()):
-        return {"labels": [], "speakers": {}}
-    return {"labels": [label_of[g] for g in groups], "speakers": speakers}
+        return {"labels": [], "speakers": {}, "overlaps": []}
+    return {"labels": [label_of[g] for g in groups], "speakers": speakers, "overlaps": find_overlaps(embeddings, groups, cents)}
 
 
 # --------------------------------------------------------------------------- хранение
@@ -518,6 +542,17 @@ def save_meeting_voices(meeting_id: str, speakers: dict) -> None:
 def meeting_voices(meeting_id: str) -> dict[str, dict]:
     return {r["label"]: {"seconds": r["seconds"], "matched": bool(r["matched"]), "score": r["score"]}
             for r in storage.rows("SELECT label,seconds,matched,score FROM meeting_voices WHERE meeting_id=?", (meeting_id,))}
+
+
+def save_meeting_overlaps(meeting_id: str, seconds: list[float]) -> None:
+    storage.initialize()
+    with storage.connect() as db:
+        db.execute("DELETE FROM meeting_overlaps WHERE meeting_id=?", (meeting_id,))
+        db.executemany("INSERT OR IGNORE INTO meeting_overlaps (meeting_id,sec) VALUES (?,?)", [(meeting_id, float(s)) for s in seconds])
+
+
+def meeting_overlaps(meeting_id: str) -> set[float]:
+    return {float(r["sec"]) for r in storage.rows("SELECT sec FROM meeting_overlaps WHERE meeting_id=?", (meeting_id,))}
 
 
 def rename_label(meeting_id: str, old: str, new: str) -> None:

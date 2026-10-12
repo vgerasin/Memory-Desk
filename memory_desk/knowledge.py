@@ -340,6 +340,38 @@ def render_item_line(table: str, item: dict) -> str:
     return f"- {text}{source}"
 
 
+def _mermaid_label(value: str) -> str:
+    """Так же, как meetings_process.mermaid_text: подпись узла схемы без служебных символов, до 100 знаков."""
+    text = re.sub(r"[\[\](){}\"']", "", str(value)).replace("\n", " ").strip()
+    return text[:100] or "Не указано"
+
+
+def _refresh_schemes(text: str, table: str, old: dict, new: dict) -> str:
+    """Обновляет подписи в схемах Mermaid заметки (карта встречи, схема решений, план задач) после правки текста или срока.
+    Блоки находятся по старой подписи; не найденное остаётся как есть."""
+    old_label, new_label = _mermaid_label(old.get("text", "")), _mermaid_label(new.get("text", ""))
+    old_due, new_due = (old.get("deadline") or "").strip(), (new.get("deadline") or "").strip()
+    if old_label == new_label and (table != "tasks" or old_due == new_due):
+        return text
+
+    def fix_block(match: re.Match) -> str:
+        out = []
+        for line in match.group(0).split("\n"):
+            if f"[{old_label}]" in line:
+                line = line.replace(f"[{old_label}]", f"[{new_label}]", 1)
+            elif table == "tasks" and line.startswith(f"  {old_label} :milestone,"):
+                rest = line[len(f"  {old_label} :milestone,"):]
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_due):
+                    rest = re.sub(r"\d{4}-\d{2}-\d{2}", new_due, rest, count=1)
+                    line = f"  {new_label} :milestone,{rest}"
+                else:
+                    continue  # срока больше нет — вехи на плане быть не может
+            out.append(line)
+        return "\n".join(out)
+
+    return re.sub(r"(?ms)^```mermaid\n.*?^```", fix_block, text)
+
+
 def update_item_line(note: Path, table: str, old: dict, new: dict) -> str:
     """Переносит правку задачи или решения в строку заметки.
 
@@ -363,7 +395,7 @@ def update_item_line(note: Path, table: str, old: dict, new: dict) -> str:
         if rendered == line:
             return "unchanged"
         lines[index] = rendered
-        updated = text[: section.start(1)] + "\n".join(lines) + text[section.end(1):]
+        updated = _refresh_schemes(text[: section.start(1)] + "\n".join(lines) + text[section.end(1):], table, old, new)
         temp = Path(note).with_name(f".{Path(note).name}.tmp")
         temp.write_text(updated, encoding="utf-8")
         os.replace(temp, note)
