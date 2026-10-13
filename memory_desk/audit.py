@@ -107,6 +107,9 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("PUT", "/api/lock/timeout"): ("lock.timeout_set", "Изменено время блокировки", "system", ""),
     ("POST", "/api/lock/unlock"): ("lock.unlock", "Вход по PIN", "system", ""),
     ("POST", "/api/lock/lock"): ("lock.lock", "Блокировка", "system", ""),
+    ("PUT", "/api/remote"): ("remote.settings", "Доступ с телефона: настройки", "system", ""),
+    ("DELETE", "/api/remote/devices/{device_id}"): ("remote.revoke", "Устройство отключено от доступа с телефона", "device", "device_id"),
+    ("POST", "/api/remote/revoke-all"): ("remote.revoke_all", "Все устройства отключены", "system", ""),
 }
 
 # Запросы, которые данные не меняют: строят текст, ответ или файл для скачивания.
@@ -247,7 +250,10 @@ def labels() -> dict[str, str]:
     result.update({"record.processed": "Запись обработана", "backup.auto": "Автоматическая копия базы",
                    "lock.blocked": "Запрос отклонён: приложение заблокировано",
                    "suggestion.scan": "Поиск договорённостей в записи", "lock.timeout": "Блокировка по бездействию", "lock.reset": "PIN сброшен с компьютера",
-                   "dossier.refresh": "Досье пересчитано"})
+                   "dossier.refresh": "Досье пересчитано",
+                   "remote.login": "Вход с телефона", "remote.login_failed": "Неверный PIN при входе с телефона",
+                   "remote.logout": "Выход с телефона", "remote.view": "Запись открыта с телефона",
+                   "remote.blocked": "Запрос к шлюзу телефона отклонён", "remote.lockout": "Доступ с телефона выключен из-за неверных PIN"})
     return result
 
 

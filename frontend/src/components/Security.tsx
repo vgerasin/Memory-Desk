@@ -89,7 +89,7 @@ export function SecurityBlock() {
 
 const KINDS: [string, string][] = [
   ['', tr('Все действия')], ['record.', tr('Записи')], ['task.', tr('Задачи')], ['decision.', tr('Решения')], ['attachment.', tr('Вложения')],
-  ['person.', tr('Люди')], ['project.', tr('Проекты')], ['voice.', tr('Голоса')], ['settings', tr('Настройки')], ['lock.', tr('Блокировка')],
+  ['person.', tr('Люди')], ['project.', tr('Проекты')], ['voice.', tr('Голоса')], ['settings', tr('Настройки')], ['lock.', tr('Блокировка')], ['remote.', tr('Телефон')],
   ['backup.', tr('Копии базы')], ['storage.', tr('Хранилище')], ['job.', tr('Обработка')],
 ]
 const PAGE = 100

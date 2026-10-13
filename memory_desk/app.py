@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, remote, series, services, speakers, storage, suggest, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -167,6 +167,8 @@ def create_app() -> FastAPI:
     async def lifespan(_app: FastAPI):
         await asyncio.to_thread(core.boot)
         await asyncio.to_thread(watcher.tick)
+        if app.state.remote.enabled:
+            await asyncio.to_thread(app.state.remote.start)
 
         async def loop():
             while True:
@@ -180,12 +182,14 @@ def create_app() -> FastAPI:
             yield
         finally:
             task.cancel()
+            await asyncio.to_thread(app.state.remote.stop)
             core.shutdown()
 
     app = FastAPI(title="Memory Desk", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.core = core
     app.state.watcher = watcher
     app.state.lock = lock.Lock(core)
+    app.state.remote = remote.Remote(core)
 
     # --- безопасность: приложение слушает только 127.0.0.1, но браузер любого сайта может обратиться к нему.
     allowed_hosts = {f"127.0.0.1:{config.PORT}", f"localhost:{config.PORT}", "127.0.0.1", "localhost"}
@@ -280,6 +284,7 @@ def create_app() -> FastAPI:
             where = app.state.lock.set_pin(body.pin, body.current)
         except lock.LockError as exc:
             return lock_fail(exc)
+        app.state.remote.forget_pin()         # устройства телефона, вошедшие по прежнему PIN, перестают подходить
         audit.detail(request, "хранится в Связке ключей" if where == "keychain" else "хранится в файле lock.json")
         token = app.state.lock.open_session()      # тот, кто задал PIN, остаётся внутри
         payload = app.state.lock.status(token)
@@ -292,6 +297,8 @@ def create_app() -> FastAPI:
             app.state.lock.remove_pin(body.current or body.pin)
         except lock.LockError as exc:
             return lock_fail(exc)
+        app.state.remote.forget_pin()
+        app.state.remote.configure(enabled=False)       # без PIN доступ с телефона невозможен и сам не включится позже
         response = JSONResponse({**app.state.lock.status(None), "message": "PIN снят"})
         response.delete_cookie(lock.COOKIE, path="/")
         return response
@@ -306,6 +313,41 @@ def create_app() -> FastAPI:
         core.cfg = config.save_config({**core.cfg, "lock_timeout_min": body.minutes})
         audit.detail(request, f"{body.minutes} мин")
         return app.state.lock.status(request.cookies.get(lock.COOKIE))
+
+    # ------------------------------------------------------------------ доступ с телефона (управление — только из кабинета)
+    class RemoteBody(BaseModel):
+        enabled: bool | None = None
+        days: int | None = None
+        transcript: bool | None = None
+        hosts: list[str] | None = None
+        port: int | None = None
+        pin: str = ""
+
+    @app.get("/api/remote")
+    def remote_status():
+        return app.state.remote.status()
+
+    @app.put("/api/remote")
+    def remote_configure(body: RemoteBody, request: Request):
+        try:
+            changed = app.state.remote.configure(enabled=body.enabled, days=body.days, transcript=body.transcript,
+                                                 hosts=body.hosts, port=body.port, pin=body.pin)
+        except remote.RemoteError as exc:
+            headers = {"Retry-After": str(exc.retry)} if exc.retry else {}
+            return JSONResponse({"detail": str(exc), "retryAfter": exc.retry}, status_code=exc.status, headers=headers)
+        audit.detail(request, "изменены: " + ", ".join(changed) if changed else "без изменений")
+        return {**app.state.remote.status(), "message": "Сохранено"}
+
+    @app.delete("/api/remote/devices/{device_id}")
+    def remote_revoke(device_id: str):
+        if not app.state.remote.revoke(device_id):
+            raise HTTPException(404, "Такого устройства нет")
+        return app.state.remote.status()
+
+    @app.post("/api/remote/revoke-all")
+    def remote_revoke_all(request: Request):
+        audit.detail(request, f"устройств: {app.state.remote.revoke_all()}")
+        return app.state.remote.status()
 
     @app.get("/api/state")
     def state():
@@ -1214,6 +1256,8 @@ def create_app() -> FastAPI:
             elif kind == "person":
                 found = storage.one("SELECT name FROM people WHERE id=?", (ident,))
                 titles[ident] = found["name"] if found else "человек"
+            elif kind == "device":
+                titles[ident] = "устройство"
         return titles
 
     @app.get("/api/audit")

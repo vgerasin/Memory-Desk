@@ -8,6 +8,7 @@ import { DictionarySettings } from './DictionarySettings'
 import { TemplateSettings } from './TemplateSettings'
 import { VoiceSettings } from './VoiceSettings'
 import { SecurityBlock } from './Security'
+import { RemoteBlock } from './Remote'
 import { currentLang, LANGS, localeTag, setLang, tr } from '../i18n'
 import type { Lang } from '../i18n'
 
@@ -309,6 +310,7 @@ export function SettingsModal() {
               {pending && <span className="hint">{tr('Текущее состояние базы будет сохранено в новую копию до восстановления. Заметки Obsidian не меняются.')}</span>}
             </div>
             <SecurityBlock />
+            <RemoteBlock />
           </>
         )}
         {error && <div className="error-box" style={{ marginTop: 0 }}>{error}</div>}
