@@ -34,6 +34,8 @@ interface Ctx {
     clear: () => void
     /** сохраняет ответ с источниками в Obsidian (заметка в «Ответах», повтор дублей не создаёт) */
     saveAnswer: (id: number) => Promise<void>
+    /** вопрос, ответ, источники и область ответа — то, что нужно серверу для сохранения и экспорта */
+    answerPayload: (id: number) => Record<string, unknown>
   }
   currentRecord: string | null
   setCurrentRecord: (id: string | null) => void
@@ -219,6 +221,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [showToast])
 
+  const answerPayload = useCallback((id: number) => {
+    const list = messagesRef.current
+    const index = list.findIndex(m => m.id === id)
+    const user = [...list.slice(0, Math.max(0, index))].reverse().find(m => m.role === 'user')
+    const current = scopeRef.current
+    return { question: user?.text ?? '', answer: list[index]?.text ?? '', sources: list[index]?.sources ?? [], scope: 'label' in current ? current.label : 'Весь архив' }
+  }, [])
+
   const openChat = useCallback((nextScope?: ChatScope, question?: string) => {
     if (nextScope) { setScope(nextScope); scopeRef.current = nextScope }
     setChatOpen(true)
@@ -251,11 +261,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     state, live, meta, version, invalidate, theme, toggleTheme, appearance, setAppearance, palette, setPalette: setPaletteId, wide, toast, showToast, hideToast, openMenu, setOpenMenu,
     chat: {
       open: chatOpen, scope, messages, busy, openChat, closeChat: () => setChatOpen(false),
-      setScope, send, clear: () => setMessages([]), saveAnswer,
+      setScope, send, clear: () => setMessages([]), saveAnswer, answerPayload,
     },
     currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, prep, setPrep, material, setMaterial,
   }), [state, live, meta, version, invalidate, theme, toggleTheme, appearance, palette, wide, toast, showToast, hideToast, openMenu,
-    chatOpen, scope, messages, busy, openChat, send, saveAnswer, currentRecord, settingsOpen, storageOpen, prep, material])
+    chatOpen, scope, messages, busy, openChat, send, saveAnswer, answerPayload, currentRecord, settingsOpen, storageOpen, prep, material])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

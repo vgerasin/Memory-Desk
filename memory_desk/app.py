@@ -10,11 +10,11 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, bookmarks, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, bookmarks, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -1271,6 +1271,36 @@ def create_app() -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         except OSError as exc:
             raise HTTPException(500, f"Не удалось сохранить заметку: {exc}") from exc
+
+    # ------------------------------------------------------------------ экспорт документов
+    class ExportBody(BaseModel):
+        format: str
+        title: str = Field("", max_length=300)
+        markdown: str = Field(..., max_length=export.MAX_CHARS)
+        name: str | None = Field(None, max_length=200)
+
+    def file_response(call):
+        try:
+            data, filename, mime = call()
+        except export.ExportError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return Response(content=data, media_type=mime, headers={"Content-Disposition": export.content_disposition(filename)})
+
+    @app.post("/api/export")
+    def export_document(body: ExportBody):
+        """Документ из окна материалов (с правками пользователя) в Markdown, HTML, PDF или DOCX."""
+        return file_response(lambda: export.export(body.format, body.title, body.markdown, body.name))
+
+    class ChatExportBody(ChatSaveBody):
+        format: str
+
+    @app.post("/api/chat/export")
+    def chat_export(body: ChatExportBody):
+        """Ответ чата с источниками в Markdown, HTML, PDF или DOCX."""
+        when = datetime.now()
+        text = answers.render(core, body.question.strip(), body.answer, body.sources, body.scope, when)
+        title = " ".join(body.question.split())[:200]
+        return file_response(lambda: export.export(body.format, title, text, f"{when:%Y-%m-%d} — {title[:60]}", when))
 
     # ------------------------------------------------------------------ фронтенд
     index_file = config.WEB_DIR / "index.html"

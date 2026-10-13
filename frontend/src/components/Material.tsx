@@ -4,17 +4,10 @@ import { useApp } from '../store'
 import { plural } from '../format'
 import type { MapNode, MaterialKind, MaterialResult, MaterialTarget } from '../types'
 import { IconOut, Segmented } from './ui'
+import { ExportMenu } from './ExportMenu'
 
 const TITLES: Record<MaterialKind, string> = { protocol: 'Протокол встречи', map: 'Карта', deck: 'Презентация' }
 const PERIODS = [{ key: '30', label: '30 дней' }, { key: '90', label: '90 дней' }, { key: '365', label: 'Год' }, { key: '3650', label: 'Всё время' }]
-
-function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url; link.download = name
-  document.body.appendChild(link); link.click(); link.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 
 function Tree({ node, depth = 0 }: { node: MapNode; depth?: number }) {
   return (
@@ -189,7 +182,7 @@ export function MaterialModal() {
           {result && kind !== 'deck' && (
             <>
               <button className="btn s34" onClick={() => void copy()}>{kind === 'map' ? 'Копировать код' : 'Копировать'}</button>
-              <button className="btn s34" onClick={() => download(fileName, text)}>Скачать .md</button>
+              <ExportMenu endpoint="/api/export" up body={() => ({ title: result.title, markdown: text, name: fileName.replace(/\.md$/i, '') })} />
               <button className="btn s34" onClick={() => void save()}>В Obsidian</button>
             </>
           )}

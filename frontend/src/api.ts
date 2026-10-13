@@ -23,6 +23,30 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return (response.status === 204 ? undefined : await response.json()) as T
 }
 
+/** Скачивание файла, который собирает сервер (экспорт документов): имя берётся из заголовка ответа. */
+export async function downloadFile(path: string, body: unknown): Promise<string> {
+  let response: Response
+  try {
+    response = await fetch(path, { method: 'POST', headers: { 'X-Memory-Desk': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  } catch {
+    throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
+  }
+  if (!response.ok) {
+    let detail = response.statusText
+    try { const data = await response.json(); detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail) } catch { /* без JSON */ }
+    throw new ApiError(response.status, detail)
+  }
+  const header = response.headers.get('Content-Disposition') ?? ''
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1]
+  const name = encoded ? decodeURIComponent(encoded) : (/filename="([^"]+)"/i.exec(header)?.[1] ?? 'document')
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url; link.download = name
+  document.body.appendChild(link); link.click(); link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500)
+  return name
+}
+
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),

@@ -4,6 +4,7 @@ import { useApp } from '../store'
 import type { ChatScope } from '../types'
 import { dayLabel, tc } from '../format'
 import { IconClose, IconPlay, IconSend } from './ui'
+import { ExportMenu } from './ExportMenu'
 
 const SUGGESTIONS = ['Что сделано за последнюю неделю?', 'Итоги за месяц по каждому проекту', 'Какие задачи сейчас открыты?', 'О чём были последние записи?']
 
@@ -103,6 +104,8 @@ export function Chat() {
                       {m.saving ? 'Сохраняю…' : 'Сохранить в Obsidian'}
                     </button>
                   )}
+                  <ExportMenu endpoint="/api/chat/export" className="btn s28" up
+                    body={() => chat.answerPayload(m.id)} />
                   {m.saveError && <span className="save-error" role="alert">{m.saveError}</span>}
                 </div>
               )}
