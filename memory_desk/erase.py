@@ -114,6 +114,8 @@ def _db_counts(meeting_id: str) -> dict[str, int]:
         "voices": count("SELECT COUNT(*) n FROM meeting_voices WHERE meeting_id=?"),
         "overlaps": count("SELECT COUNT(*) n FROM meeting_overlaps WHERE meeting_id=?"),
         "events": count("SELECT COUNT(*) n FROM processing_events WHERE meeting_id=?"),
+        "suggestions": count("SELECT COUNT(*) n FROM suggestions WHERE meeting_id=?"),
+        "made": count("SELECT COUNT(*) n FROM suggestions WHERE meeting_id=? AND status='created'"),
         "reminders": count("SELECT COUNT(*) n FROM reminder_links r JOIN tasks t ON t.id=r.task_id WHERE t.meeting_id=? AND r.state='active'"),
     }
 
@@ -151,7 +153,7 @@ def plan(core, meeting_id: str) -> dict:
         {"key": "attachments", "label": "Вложения (фото и тексты)", "count": len(attached), "names": [p.name for p in attached]},
         {"key": "work", "label": "Рабочие файлы обработки", "count": len(_work_folders(meeting))},
         {"key": "registry", "label": "Записи в базе кабинета",
-         "count": 1 + sum(counts[k] for k in ("tasks", "decisions", "people", "voices", "overlaps", "events")),
+         "count": 1 + sum(counts[k] for k in ("tasks", "decisions", "people", "voices", "overlaps", "events", "suggestions")),
          "detail": f"задач {counts['tasks']}, решений {counts['decisions']}, участников {counts['people']}, отпечатков голосов {counts['voices']}"},
         {"key": "index", "label": "Фрагменты в поисковом индексе", "count": len(knowledge.sections(meeting))},
         {"key": "waveform", "label": "Волна для плеера", "count": 1 if (config.DATA_DIR / "waveforms" / f"{meeting_id}.json").exists() else 0},
@@ -165,6 +167,9 @@ def plan(core, meeting_id: str) -> dict:
     ]
     if counts["reminders"]:
         warnings.append(f"В «Напоминаниях» останутся напоминания по задачам этой записи: {counts['reminders']}.")
+    if counts["made"]:
+        warnings.append(f"События Календаря, напоминания и черновики писем, созданные из предложений этой записи ({counts['made']}), "
+                        "останутся там, где созданы: их приложение не удаляет.")
     if counts["voices"]:
         warnings.append("Если вы запоминали голос человека по этой записи, он остаётся в его профиле голоса "
                         "(профиль усреднён по нескольким записям). Удалить его можно в карточке человека.")
@@ -206,7 +211,7 @@ def _scrub_registry(meeting_id: str, audio_names: set[str]) -> int:
     with storage.connect() as db:
         db.execute("PRAGMA secure_delete = ON")
         decision_ids = [r[0] for r in db.execute("SELECT id FROM decisions WHERE meeting_id=?", (meeting_id,))]
-        for table in ("tasks", "decisions", "meeting_people", "meeting_voices", "meeting_overlaps"):
+        for table in ("tasks", "decisions", "meeting_people", "meeting_voices", "meeting_overlaps", "suggestions"):
             removed += db.execute(f"DELETE FROM {table} WHERE meeting_id=?", (meeting_id,)).rowcount
         removed += db.execute("DELETE FROM processing_events WHERE meeting_id=?", (meeting_id,)).rowcount
         removed += db.execute("DELETE FROM meetings WHERE id=?", (meeting_id,)).rowcount
@@ -238,7 +243,7 @@ def _scrub_backup(path: Path, meeting_id: str) -> bool:
             db.execute("PRAGMA foreign_keys = ON")
             db.execute("PRAGMA secure_delete = ON")
             db.execute("PRAGMA journal_mode = DELETE")
-            for table in ("tasks", "decisions", "meeting_people", "meeting_voices", "meeting_overlaps", "processing_events"):
+            for table in ("tasks", "decisions", "meeting_people", "meeting_voices", "meeting_overlaps", "processing_events", "suggestions"):
                 try:
                     db.execute(f"DELETE FROM {table} WHERE meeting_id=?", (meeting_id,))
                 except sqlite3.Error:

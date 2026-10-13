@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -55,6 +55,8 @@ class Watcher:
             core.reload(force=True)  # задание завершилось — подхватываем новые заметки сразу
             for fresh_id in sorted({m.id for m in core.meetings} - before):
                 audit.record("system", "record.processed", target="meeting", target_id=fresh_id)
+                if core.cfg.get("suggestions_auto", True):
+                    suggest.scan_async(core, fresh_id)
             self._notify_done(before)
         self._was_active = queue["active"]
         if self._tick % 3 == 0:
@@ -414,6 +416,63 @@ def create_app() -> FastAPI:
             raise HTTPException(409, str(exc)) from exc
         return {"id": event_id, "message": "Событие добавлено в Календарь"}
 
+    # ------------------------------------------------------------------ предложения действий (этап 7)
+    class SuggestionBody(BaseModel):
+        title: str | None = Field(None, max_length=300)
+        day: str | None = Field(None, max_length=10)
+        clock: str | None = Field(None, max_length=8)
+        allDay: bool | None = None
+        who: str | None = Field(None, max_length=300)
+        notes: str | None = Field(None, max_length=2000)
+
+    def suggestion_call(action):
+        try:
+            return action()
+        except suggest.SuggestError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+
+    @app.get("/api/suggestions")
+    def suggestions_pending():
+        return suggest.pending(core)
+
+    @app.get("/api/meetings/{meeting_id}/suggestions")
+    def meeting_suggestions(meeting_id: str):
+        if meeting_id not in core.by_id:
+            raise HTTPException(404, "Запись не найдена")
+        return suggest.for_meeting(meeting_id)
+
+    @app.post("/api/meetings/{meeting_id}/suggestions/scan")
+    def meeting_suggestions_scan(meeting_id: str):
+        if meeting_id not in core.by_id:
+            raise HTTPException(404, "Запись не найдена")
+        started = suggest.scan_async(core, meeting_id, actor="cabinet")
+        return {"started": started, **suggest.for_meeting(meeting_id)}
+
+    @app.patch("/api/suggestions/{sid}")
+    def suggestion_edit(sid: str, body: SuggestionBody):
+        fields = {k: v for k, v in body.model_dump().items() if v is not None}
+        core.data_version += 1
+        return suggestion_call(lambda: suggest.edit(sid, fields))
+
+    @app.post("/api/suggestions/{sid}/create")
+    def suggestion_create(sid: str, request: Request):
+        found = suggest.get(sid)
+        if found:
+            audit.detail(request, suggest.KINDS.get(found["kind"], found["kind"]))
+        result = suggestion_call(lambda: suggest.create(core, sid))
+        core.data_version += 1
+        return result
+
+    @app.post("/api/suggestions/{sid}/dismiss")
+    def suggestion_dismiss(sid: str):
+        core.data_version += 1
+        return suggestion_call(lambda: suggest.set_status(sid, "dismissed"))
+
+    @app.post("/api/suggestions/{sid}/restore")
+    def suggestion_restore(sid: str):
+        core.data_version += 1
+        return suggestion_call(lambda: suggest.set_status(sid, "new"))
+
     @app.get("/api/storage")
     def storage_usage():
         return housekeeping.usage(core.cfg)
@@ -478,6 +537,7 @@ def create_app() -> FastAPI:
         mirror_enabled: bool = True
         default_template: str = "meeting"
         lock_timeout_min: int | None = None
+        suggestions_auto: bool | None = None
 
     @app.get("/api/settings")
     def get_settings():
@@ -500,6 +560,8 @@ def create_app() -> FastAPI:
             values = body.model_dump()
             if values.get("lock_timeout_min") is None:     # время блокировки меняется отдельным запросом
                 values["lock_timeout_min"] = core.cfg.get("lock_timeout_min", lock.DEFAULT_TIMEOUT)
+            if values.get("suggestions_auto") is None:
+                values["suggestions_auto"] = core.cfg.get("suggestions_auto", True)
             saved = core.apply_settings(values)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -1129,6 +1191,9 @@ def create_app() -> FastAPI:
             elif kind in ("task", "decision"):
                 found = storage.one(f"SELECT m.title FROM {kind}s t JOIN meetings m ON m.id=t.meeting_id WHERE t.id=?", (ident,))
                 titles[ident] = ("задача" if kind == "task" else "решение") + (f" из «{found['title']}»" if found else " (запись стёрта)")
+            elif kind == "suggestion":
+                found = storage.one("SELECT title FROM suggestions WHERE id=?", (ident,))
+                titles[ident] = f"предложение «{found['title']}»" if found else "предложение"
             elif kind == "project":
                 found = next((pr for pr in core.projects() if pr["id"] == ident), None)
                 titles[ident] = f"проект «{found['title']}»" if found else "проект"

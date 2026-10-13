@@ -57,6 +57,7 @@ def defaults() -> dict:
         "mirror_enabled": True,
         "default_template": "meeting",
         "lock_timeout_min": 15,
+        "suggestions_auto": True,
     }
 
 
@@ -94,6 +95,7 @@ def save_config(values: dict) -> dict:
     normalized["note_writeback"] = bool(normalized["note_writeback"])
     normalized["mirror_enabled"] = bool(normalized["mirror_enabled"])
     normalized["morning_brief"] = bool(normalized["morning_brief"])
+    normalized["suggestions_auto"] = bool(normalized["suggestions_auto"])
     try:
         normalized["morning_hour"] = min(23, max(0, int(normalized["morning_hour"])))
     except (TypeError, ValueError):

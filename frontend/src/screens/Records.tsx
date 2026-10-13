@@ -21,6 +21,7 @@ import { EventDialog, type EventDraft } from '../components/EventDialog'
 import { Player, type PlayerHandle } from '../components/Player'
 import { SpeakerPanel, SpeakerPicker, openPicker, speakerColor, type PickerTarget } from '../components/Speakers'
 import { DocMenu } from '../components/DocMenu'
+import { SuggestionsPanel } from '../components/Suggestions'
 
 type View = 'overview' | 'transcript' | 'actions' | 'questions' | 'views' | 'files'
 const FILTER_KEYS = ['project', 'person', 'type', 'status', 'period'] as const
@@ -210,6 +211,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
               ))}
             </div>
           ))}
+          {!editing && <SuggestionsPanel meetingId={id} onJump={sec => jump(sec)} />}
           {!editing && <SeriesPanel meetingId={id} />}
           {!editing && !m.archived && <RebuildPanel meeting={m} />}
           <div className="note-path mono">{m.status === 'completed' ? 'Опубликовано · ' : 'Ещё не опубликовано · '}{m.notePath}</div>

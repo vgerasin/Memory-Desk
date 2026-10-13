@@ -9,6 +9,7 @@ interface HeroItem { key: string; text: string; meta: string; go: () => void; ta
 import { AvatarStack, ErrorBox, Loading } from '../components/ui'
 import { DueButton, TaskRow } from '../components/Items'
 import { MorningCard } from '../components/MorningCard'
+import { PendingSuggestions } from '../components/Suggestions'
 
 const stageLine = (label: string, index: number) => `${label} · этап ${index} из 12`
 
@@ -112,6 +113,7 @@ export function Today() {
       )}
 
       <MorningCard />
+      <PendingSuggestions />
 
       {data.hero
         ? <HeroCard hero={data.hero} />

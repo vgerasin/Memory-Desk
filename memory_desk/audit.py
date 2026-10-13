@@ -89,6 +89,10 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("POST", "/api/jobs/retry"): ("job.retry", "Повтор обработки файла", "system", ""),
     ("POST", "/api/jobs/dismiss"): ("job.dismiss", "Файл убран из очереди", "system", ""),
     ("POST", "/api/chat/save"): ("document.save", "Ответ чата сохранён в Obsidian", "system", ""),
+    ("PATCH", "/api/suggestions/{sid}"): ("suggestion.update", "Правка предложения", "suggestion", "sid"),
+    ("POST", "/api/suggestions/{sid}/create"): ("suggestion.create", "Предложение выполнено", "suggestion", "sid"),
+    ("POST", "/api/suggestions/{sid}/dismiss"): ("suggestion.dismiss", "Предложение отклонено", "suggestion", "sid"),
+    ("POST", "/api/suggestions/{sid}/restore"): ("suggestion.restore", "Предложение возвращено", "suggestion", "sid"),
     ("POST", "/api/lock/pin"): ("lock.pin", "PIN: установка или смена", "system", ""),
     ("POST", "/api/lock/remove"): ("lock.pin_remove", "PIN снят", "system", ""),
     ("PUT", "/api/lock/timeout"): ("lock.timeout_set", "Изменено время блокировки", "system", ""),
@@ -103,6 +107,7 @@ READ_ONLY: set[tuple[str, str]] = {
     ("POST", "/api/materials/digest/deck"), ("POST", "/api/materials/deck"), ("POST", "/api/decisions/conflicts/check"),
     ("POST", "/api/templates/draft"), ("POST", "/api/chat"), ("POST", "/api/chat/export"),
     ("POST", "/api/export"), ("POST", "/api/export/map"), ("POST", "/api/lock/ping"),
+    ("POST", "/api/meetings/{meeting_id}/suggestions/scan"),   # запись в журнал делает сам поиск (suggestion.scan)
 }
 
 
@@ -232,7 +237,7 @@ def labels() -> dict[str, str]:
     result = {code: label for code, label, _t, _p in ACTIONS.values()}
     result.update({"record.processed": "Запись обработана", "backup.auto": "Автоматическая копия базы",
                    "lock.blocked": "Запрос отклонён: приложение заблокировано",
-                   "lock.timeout": "Блокировка по бездействию", "lock.reset": "PIN сброшен с компьютера"})
+                   "suggestion.scan": "Поиск договорённостей в записи", "lock.timeout": "Блокировка по бездействию", "lock.reset": "PIN сброшен с компьютера"})
     return result
 
 

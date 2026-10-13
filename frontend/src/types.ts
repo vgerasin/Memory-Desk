@@ -106,6 +106,7 @@ export interface Settings {
   backup_on_change: boolean; note_writeback: boolean; mirror_enabled: boolean
   default_template: string
   lock_timeout_min?: number
+  suggestions_auto?: boolean
   exists?: Record<string, boolean>
 }
 
@@ -318,3 +319,14 @@ export interface EraseResult {
   ok: boolean; interrupted?: boolean; problems: string[]
   audio?: number; attachments?: number; registry?: number; backups?: number; documents?: number
 }
+
+// --- этап 7: предложения действий после встречи
+export interface SuggestionDto {
+  id: string; meetingId: string; kind: 'event' | 'mail' | 'reminder'; kindLabel: string; status: 'new' | 'created' | 'dismissed'
+  title: string; day: string; dayLabel: string; clock: string; allDay: boolean; who: string; notes: string
+  quote: string; t: string; sec: number; confidence: number; engine: string; deadline: boolean; ambiguous: boolean; edited: boolean
+  needs: ('day' | 'time')[]; past: boolean; canCreate: boolean; createdRef: string
+  meetingTitle?: string; meetingDate?: string; message?: string
+}
+export interface SuggestionsDto { items: SuggestionDto[]; scan: { state: 'idle' | 'running' | 'done' | 'error'; message: string }; started?: boolean }
+export interface PendingSuggestionsDto { total: number; items: SuggestionDto[] }

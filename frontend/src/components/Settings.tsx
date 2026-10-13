@@ -43,7 +43,7 @@ export function SettingsModal() {
         reminders_list: form.reminders_list, reminders_scope: form.reminders_scope, my_name: form.my_name,
         notify: form.notify, morning_brief: form.morning_brief, morning_hour: Number(form.morning_hour) || 0, backup_auto: form.backup_auto,
         backup_interval_hours: Number(form.backup_interval_hours) || 24, backup_keep: Number(form.backup_keep) || 7,
-        backup_on_change: form.backup_on_change, note_writeback: form.note_writeback, mirror_enabled: form.mirror_enabled,
+        backup_on_change: form.backup_on_change, note_writeback: form.note_writeback, mirror_enabled: form.mirror_enabled, suggestions_auto: form.suggestions_auto,
       })
       showToast('Настройки сохранены')
       invalidate()
@@ -131,6 +131,14 @@ export function SettingsModal() {
               </div>
               <button className={'switch' + (form.notify ? ' on' : '')} role="switch" aria-checked={form.notify}
                 onClick={() => set('notify', !form.notify)}><i /></button>
+            </div>
+            <div className="switch-row">
+              <div className="field" style={{ gap: 2 }}>
+                <label>Предложения после встречи</label>
+                <span className="hint">После обработки записи искать договорённости: созвон, письмо, напоминание. Показываются карточками, ничего не создаётся без вашего нажатия</span>
+              </div>
+              <button className={'switch' + (form.suggestions_auto !== false ? ' on' : '')} role="switch" aria-checked={form.suggestions_auto !== false}
+                onClick={() => set('suggestions_auto', form.suggestions_auto === false)}><i /></button>
             </div>
             <div className="switch-row">
               <div className="field" style={{ gap: 2 }}>

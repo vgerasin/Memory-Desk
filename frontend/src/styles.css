@@ -1015,3 +1015,28 @@ ul { padding: 0; list-style: none; }
 .erase-docs { display: flex; flex-direction: column; gap: 6px; }
 .erase-warn { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text2); line-height: 1.5; }
 .modal.erase .btn.danger:not(:disabled) { background: var(--danger); color: #fff; }
+
+/* --- этап 7: предложения действий */
+.sg-panel { margin: 18px 0; display: flex; flex-direction: column; gap: 10px; }
+.sg-panel-head { display: flex; justify-content: space-between; align-items: baseline; }
+.sg { padding: 14px 16px; border-radius: 14px; background: var(--fill); display: flex; flex-direction: column; gap: 6px; }
+.sg.done { background: color-mix(in srgb, #34C759 10%, var(--fill)); }
+.sg.dismissed { flex-direction: row; align-items: baseline; gap: 10px; padding: 8px 14px; color: var(--text3); font-size: 13px; }
+.sg.dismissed .sg-title { flex: 1; font-weight: 400; }
+.sg-head { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text2); }
+.sg-kind { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.sg-kind i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.sg-note { padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, #FF9F0A 16%, transparent); }
+.sg-ok { margin-left: auto; color: #1f9d4a; font-weight: 600; }
+.sg-title { font-size: 15px; font-weight: 600; }
+.sg-when { font-size: 13px; color: var(--text2); }
+.sg-when.warn { color: #C77700; font-weight: 600; }
+.sg-quote { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.sg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.sg-form { display: flex; flex-direction: column; gap: 8px; }
+.sg-form input[type='text'], .sg-form input:not([type]), .sg-form input[type='date'], .sg-form input[type='time'] { height: 34px; padding: 0 10px; border-radius: 9px; border: none; background: var(--bg); font-size: 13px; color: var(--text); outline: none; }
+.sg-form textarea { min-height: 52px; padding: 8px 10px; border-radius: 9px; border: none; background: var(--bg); font-size: 13px; color: var(--text); outline: none; resize: vertical; font-family: inherit; }
+.sg-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sg-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.sg-line { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; align-items: baseline; padding: 9px 0; text-align: left; border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); font-size: 13px; }
+.sg .muted-text { font-size: 12px; }

@@ -100,6 +100,17 @@ def initialize() -> None:
                 matched INTEGER NOT NULL DEFAULT 0, score REAL,
                 PRIMARY KEY(meeting_id, label)
             );
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'new', title TEXT NOT NULL,
+                day TEXT NOT NULL DEFAULT '', clock TEXT NOT NULL DEFAULT '', all_day INTEGER NOT NULL DEFAULT 0,
+                who TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', quote TEXT NOT NULL DEFAULT '',
+                evidence_time TEXT NOT NULL DEFAULT '', sec REAL NOT NULL DEFAULT 0, confidence REAL NOT NULL DEFAULT 0,
+                engine TEXT NOT NULL DEFAULT '', deadline INTEGER NOT NULL DEFAULT 0, ambiguous INTEGER NOT NULL DEFAULT 0,
+                edited INTEGER NOT NULL DEFAULT 0, created_ref TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS suggestions_meeting ON suggestions(meeting_id);
             CREATE TABLE IF NOT EXISTS meeting_overlaps (
                 meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
                 sec REAL NOT NULL, PRIMARY KEY(meeting_id, sec)
