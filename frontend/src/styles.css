@@ -857,3 +857,80 @@ ul { padding: 0; list-style: none; }
 
 /* Переключатель «Проекты | Люди» над заголовком экрана */
 .dir-tabs { align-self: flex-start; margin-bottom: 4px; }
+
+/* ---------- досье человека и проекта ---------- */
+.back-link { color: var(--text2); font-size: 14px; padding: 4px 0; margin: 0 0 12px; display: block; text-align: left; }
+.back-link:hover { color: var(--accent); }
+.person-name.link, .project-name.link { text-align: left; cursor: pointer; }
+.person-name.link:hover, .project-name.link:hover { color: var(--accent); }
+.person-org { font-size: 13px; color: var(--text3); }
+.status-chip { font-style: normal; font-size: 12px; font-weight: 600; color: var(--text2); background: var(--fill); border-radius: 999px; padding: 2px 10px; letter-spacing: 0; }
+.inline-form.wrap input { flex: 1 1 200px; }
+
+.dos-head { display: flex; align-items: center; gap: 20px; padding: 24px 28px; flex-wrap: wrap; border-radius: 24px; }
+.dos-head-main { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dos-sub { font-size: 15px; color: var(--text2); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dos-alias { font-size: 13px; color: var(--text3); }
+.dos-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dos-dot { width: 18px; height: 18px; border-radius: 50%; flex: 0 0 18px; }
+.dos-status { height: 30px; border-radius: 999px; border: none; background: var(--fill); padding: 0 12px; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; }
+.dos-notes { margin-top: 12px; padding: 16px 20px; font-size: 15px; line-height: 1.55; white-space: pre-wrap; color: var(--text2); }
+.dos-goal { margin-top: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; }
+.dos-goal-text { text-align: left; font-size: 16px; line-height: 1.5; cursor: text; }
+.dos-health { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 18px; border-radius: 16px; border: 1.5px solid; font-size: 14px; }
+.dos-health i { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
+.dos-health span { color: var(--text2); }
+
+.dos-editor { margin-top: 12px; padding: 20px 24px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); display: grid; gap: 14px; }
+.dos-editor label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text2); }
+.dos-editor input, .dos-editor textarea { border: none; background: var(--fill); border-radius: 10px; padding: 9px 14px; font: inherit; font-weight: 400; font-size: 15px; color: var(--text); outline: none; resize: vertical; }
+.dos-editor .hint { font-size: 12px; font-weight: 400; color: var(--text3); }
+.dos-editor-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.dos-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.dos-tile { padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dos-tile-value { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.dos-tile-value.bad { color: var(--danger); }
+.dos-tile-value.warn { color: var(--warn-text); }
+.dos-tile-sub { font-size: 12px; color: var(--text3); overflow-wrap: anywhere; }
+
+.dos-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; align-items: start; }
+.dos-section { padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dos-section.wide { grid-column: 1 / -1; }
+.dos-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.dos-count { font-size: 12px; font-weight: 600; color: var(--text2); background: var(--fill); border-radius: 999px; padding: 1px 8px; }
+.dos-line { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 0; border-top: 1px solid var(--sep); width: 100%; }
+.dos-section-head + .dos-line { border-top: none; }
+.dos-line:hover .dos-line-text { color: var(--accent); }
+.dos-line-text { font-size: 15px; line-height: 1.4; }
+.dos-line-meta { font-size: 12px; color: var(--text3); }
+.chip-draft { margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--text2); background: var(--fill); border-radius: 999px; padding: 1px 8px; }
+.dos-foot { font-size: 12px; color: var(--text3); margin-top: 8px; }
+.dos-group { padding-top: 6px; }
+.dos-group-head { font-size: 13px; font-weight: 700; color: var(--text2); display: flex; align-items: center; gap: 8px; }
+.dos-replaced { margin-top: 8px; font-size: 14px; }
+.dos-replaced summary { cursor: pointer; color: var(--text2); padding: 6px 0; }
+.dos-person { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--sep); width: 100%; text-align: left; font-size: 15px; }
+.dos-person:hover span:first-of-type + span, .dos-person:hover > span:nth-child(2) { color: var(--accent); }
+.dos-person .dos-bar-n { margin-left: auto; }
+.dos-role { color: var(--text3); font-size: 13px; }
+.dos-bar { display: grid; grid-template-columns: minmax(80px, 1fr) 2fr auto; gap: 12px; align-items: center; padding: 8px 0; width: 100%; text-align: left; font-size: 14px; }
+.dos-bar-label { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.dos-bar-label i { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
+.dos-bar-track { height: 8px; border-radius: 4px; background: var(--fill); overflow: hidden; display: block; }
+.dos-bar-track > span { display: block; height: 100%; border-radius: 4px; }
+.dos-bar-n { font-size: 12px; color: var(--text3); white-space: nowrap; }
+.dos-weeks { display: flex; align-items: flex-end; gap: 6px; height: 64px; }
+.dos-week { flex: 1; display: flex; align-items: flex-end; height: 100%; }
+.dos-week > span { display: block; width: 100%; border-radius: 4px 4px 2px 2px; }
+.dos-series { margin-top: 10px; }
+
+@media (max-width: 900px) {
+  .dos-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dos-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .dos-head { padding: 18px; }
+  .dos-bar { grid-template-columns: 1fr auto; }
+  .dos-bar-track { grid-column: 1 / -1; grid-row: 2; }
+}

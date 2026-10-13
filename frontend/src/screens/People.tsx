@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, errorText } from '../api'
+import { navigate } from '../router'
 import { useApi } from '../useApi'
 import { useApp } from '../store'
 import { due, plural } from '../format'
@@ -51,15 +52,47 @@ function VoiceLine({ person }: { person: PersonOverview }) {
   )
 }
 
+function AddPerson({ onClose }: { onClose: () => void }) {
+  const { showToast, invalidate } = useApp()
+  const [name, setName] = useState('')
+  const [role, setRole] = useState('')
+  const [organization, setOrganization] = useState('')
+  const [busy, setBusy] = useState(false)
+  const create = async () => {
+    if (!name.trim()) return
+    setBusy(true)
+    try {
+      const made = await api.post<{ id: string; created: boolean }>('/api/people', { name, role, organization })
+      invalidate(); showToast(made.created ? 'Карточка создана' : 'Такой человек уже есть: карточку дополнили'); onClose()
+      navigate('/people/' + encodeURIComponent(made.id))
+    } catch (e) { showToast(errorText(e)) } finally { setBusy(false) }
+  }
+  const submit = (e: { key: string }) => { if (e.key === 'Enter') void create(); if (e.key === 'Escape') onClose() }
+  return (
+    <div className="inline-form wrap">
+      <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={submit} placeholder="Имя и фамилия" aria-label="Имя" maxLength={120} />
+      <input value={role} onChange={e => setRole(e.target.value)} onKeyDown={submit} placeholder="Должность" aria-label="Должность" maxLength={200} />
+      <input value={organization} onChange={e => setOrganization(e.target.value)} onKeyDown={submit} placeholder="Организация или отдел" aria-label="Организация" maxLength={200} />
+      <button className="btn accent s34" disabled={busy || !name.trim()} onClick={() => void create()}>Создать</button>
+      <button className="btn s34" onClick={onClose}>Отмена</button>
+    </div>
+  )
+}
+
 export function People() {
   const { data, error } = useApi<{ items: PersonOverview[] }>('/api/people')
   const { chat, setMaterial } = useApp()
+  const [adding, setAdding] = useState(false)
   return (
     <>
-      <div className="page-head"><div className="titles"><DirectoryTabs current="people" /><h1 className="h1">Люди</h1></div></div>
+      <div className="page-head">
+        <div className="titles"><DirectoryTabs current="people" /><h1 className="h1">Люди</h1></div>
+        {!adding && <button className="btn s34" onClick={() => setAdding(true)}>Добавить человека</button>}
+      </div>
+      {adding && <AddPerson onClose={() => setAdding(false)} />}
       {error && !data && <ErrorBox text={error} />}
       {!data && !error && <Loading />}
-      {data && data.items.length === 0 && <div className="empty" style={{ marginTop: 36 }}>Участники появятся здесь, когда вы добавите их к записям.</div>}
+      {data && data.items.length === 0 && <div className="empty" style={{ marginTop: 36 }}>Люди появятся здесь, когда вы добавите их к записям или заведёте карточку кнопкой «Добавить человека».</div>}
       <div className="cards people">
         {data?.items.map(p => {
           const stats = [plural(p.meetings, 'встреча', 'встречи', 'встреч'), p.projects.join(', ') || 'без проекта',
@@ -70,8 +103,9 @@ export function People() {
               <div className="person-top">
                 <Avatar initials={p.initials} color={p.color} size={48} solo />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <span className="person-name">{p.name}</span>
+                  <button className="person-name link" onClick={() => navigate('/people/' + encodeURIComponent(p.id))}>{p.name}</button>
                   <RoleEdit person={p} />
+                  {p.organization && <div className="person-org">{p.organization}</div>}
                 </div>
               </div>
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>{stats}</div>
@@ -83,6 +117,7 @@ export function People() {
               </div>
               <VoiceLine person={p} />
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn accent s32" onClick={() => navigate('/people/' + encodeURIComponent(p.id))}>Досье</button>
                 <button className="btn s32" style={{ color: 'var(--accent)' }}
                   onClick={() => chat.openChat({ kind: 'person', id: p.id, label: 'Человек: ' + first }, `Какие задачи и обещания у ${p.name}?`)}>
                   Что обещал(а)?

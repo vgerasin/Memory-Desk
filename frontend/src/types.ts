@@ -1,4 +1,4 @@
-export interface PersonDto { id: string; name: string; role: string; initials: string; color: string }
+export interface PersonDto { id: string; name: string; role: string; initials: string; color: string; organization?: string; aliases?: string[]; notes?: string }
 export interface ProjectRef { id: string | null; title: string; color: string }
 export interface TypeRef { id: string; title: string }
 
@@ -64,7 +64,7 @@ export interface TodayPayload {
 }
 
 export interface ProjectOverview {
-  id: string; title: string; color: string; goal: string
+  id: string; title: string; color: string; goal: string; status?: ProjectStatus
   counts: { records: number; openTasks: number; questions: number }
   people: PersonDto[]
   lastChange: { text: string; kind: 'decision' | 'summary'; meetingId: string; date: string } | null
@@ -250,4 +250,35 @@ export interface ViewPresets { presets: ViewPreset[]; max: number }
 export interface ViewJob {
   state: 'idle' | 'running' | 'done' | 'error'; viewId?: string; title?: string; label?: string
   percent?: number; part?: number; total?: number; elapsed?: number; message?: string
+}
+
+export type ProjectStatus = 'active' | 'paused' | 'done'
+export interface MeetingBrief { id: string; title: string; date: string; time: string; project: ProjectRef | null }
+export interface FactLine { text: string; sec: number | null; meetingId: string; meetingTitle: string; date: string }
+
+export interface PersonDossier {
+  person: PersonDto & { voice: { samples: number; seconds: number } | null }
+  stats: {
+    meetings: number; meetingsLast30: number; firstContact: string | null; lastContact: string | null; daysSince: number | null
+    lastMeeting: MeetingBrief | null; talk: { seconds: number; share: number } | null
+  }
+  tasks: { open: number; overdue: number; stuck: number; done: number; drafts: number; items: TaskDto[] }
+  projects: (ProjectRef & { meetings: number; share: number })[]
+  decisions: { total: number; items: DecisionDto[] }
+  questions: FactLine[]
+  companions: (PersonDto & { meetings: number })[]
+  timeline: MeetingBrief[]
+}
+
+export interface ProjectDossier {
+  project: { id: string; title: string; color: string; status: ProjectStatus; statusLabel: string; goal: string; description: string }
+  health: { level: 'ok' | 'warn' | 'bad'; reasons: string[]; overdue: number; stuck: number; drafts: number; openTasks: number; openQuestions: number; daysSinceLast: number | null }
+  counts: { records: number; first: string | null; last: string | null }
+  people: (PersonDto & { meetings: number; openTasks: number })[]
+  tasksByPerson: { owner: string; count: number; items: TaskDto[] }[]
+  decisions: { active: DecisionDto[]; activeTotal: number; replaced: DecisionDto[]; replacedTotal: number }
+  risks: FactLine[]; questions: FactLine[]
+  weeks: { start: string; meetings: number }[]
+  series: { id: string; title: string; count: number; first: string; last: string; latestId: string; repeatedQuestions: number }[]
+  recent: MeetingBrief[]
 }

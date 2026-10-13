@@ -12,6 +12,8 @@ import { Analytics } from './screens/Analytics'
 import { Archive } from './screens/Archive'
 import { Calendar } from './screens/Calendar'
 import { People } from './screens/People'
+import { Person } from './screens/Person'
+import { Project } from './screens/Project'
 import { Projects } from './screens/Projects'
 import { Records } from './screens/Records'
 import { Tasks } from './screens/Tasks'
@@ -28,8 +30,8 @@ function Screen() {
     case 'archive': return <Archive />
     case 'inbox': return <Redirect to="/records" />   // «Входящие» теперь часть «Записей»; старые ссылки и закладки ведут туда
     case 'records': return <Records />
-    case 'projects': return <Projects />
-    case 'people': return <People />
+    case 'projects': return segments[1] ? <Project /> : <Projects />
+    case 'people': return segments[1] ? <Person /> : <People />
     case 'tasks': return <Tasks />
     case 'calendar': return <Calendar />
     case 'analytics': return <Analytics />

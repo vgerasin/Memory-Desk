@@ -41,7 +41,8 @@ export function Projects() {
         {data?.items.map(p => (
           <div className="card project-card" key={p.id}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div className="project-name"><i style={{ background: p.color }} /><span>{p.title}</span></div>
+              <button className="project-name link" onClick={() => navigate('/projects/' + encodeURIComponent(p.id))}><i style={{ background: p.color }} /><span>{p.title}</span>
+                {p.status && p.status !== 'active' && <em className="status-chip">{p.status === 'paused' ? 'на паузе' : 'завершён'}</em>}</button>
               {p.goal && <div style={{ fontSize: 15, color: 'var(--text2)', lineHeight: 1.5 }}>{p.goal}</div>}
             </div>
             <div className="stats3">
@@ -60,10 +61,11 @@ export function Projects() {
             <div className="card-foot">
               <AvatarStack people={p.people} size={28} />
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn accent s34" onClick={() => navigate('/projects/' + encodeURIComponent(p.id))}>Досье</button>
                 <button className="btn s34" onClick={() => navigate('/records?project=' + encodeURIComponent(p.title))}>Записи</button>
                 <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', projectId: p.id, title: p.title })}>Презентация</button>
                 <button className="btn s34" onClick={() => setMaterial({ kind: 'map', projectId: p.id, title: p.title })}>Карта</button>
-                <button className="btn accent s34" onClick={() => setPrep({ projectId: p.id, title: p.title })}>Подготовка к встрече</button>
+                <button className="btn s34" onClick={() => setPrep({ projectId: p.id, title: p.title })}>Подготовка к встрече</button>
               </div>
             </div>
           </div>
