@@ -934,3 +934,13 @@ ul { padding: 0; list-style: none; }
   .dos-bar { grid-template-columns: 1fr auto; }
   .dos-bar-track { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* 4.3: служебная записка, бриф, письмо */
+.export-list.wide { min-width: 300px; }
+.material-to { flex: 1 1 200px; min-width: 0; height: 34px; padding: 0 12px; border: none; border-radius: 10px; background: var(--fill); color: var(--text); font: inherit; font-size: 14px; outline: none; }
+.doc-times { font-size: 13px; color: var(--text2); }
+.doc-times summary { cursor: pointer; font-weight: 600; color: var(--text); }
+.doc-times ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
+.doc-times li { display: flex; gap: 10px; align-items: baseline; }
+.doc-times li .link-btn { flex: none; font-variant-numeric: tabular-nums; }
+.doc-times.skipped summary { color: var(--text2); }

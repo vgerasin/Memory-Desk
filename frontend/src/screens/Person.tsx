@@ -7,6 +7,7 @@ import { dayLabel, plural } from '../format'
 import type { PersonDossier } from '../types'
 import { Avatar, ErrorBox, Loading } from '../components/ui'
 import { agoLabel, BackLink, DecisionLine, Empty, FactRow, MeetingRow, Section, TaskLine, Tile } from '../components/Dossier'
+import { DocMenu } from '../components/DocMenu'
 
 function Editor({ dossier, onDone }: { dossier: PersonDossier; onDone: () => void }) {
   const { showToast, invalidate } = useApp()
@@ -68,6 +69,7 @@ export function Person() {
             onClick={() => chat.openChat({ kind: 'person', id: p.id, label: 'Человек: ' + first }, `Какие задачи и обещания у ${p.name}?`)}>Что обещал(а)?</button>
           <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', personId: p.id, title: p.name })}>Презентация</button>
           <button className="btn s34" onClick={() => setMaterial({ kind: 'map', personId: p.id, title: p.name })}>Карта</button>
+          <DocMenu scope={{ personId: p.id, title: p.name }} />
         </div>
       </div>
       {editing && <Editor dossier={data} onDone={() => setEditing(false)} />}

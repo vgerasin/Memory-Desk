@@ -19,6 +19,7 @@ import { CalendarSuggest } from '../components/CalendarSuggest'
 import { EventDialog, type EventDraft } from '../components/EventDialog'
 import { Player, type PlayerHandle } from '../components/Player'
 import { SpeakerPanel, SpeakerPicker, openPicker, speakerColor, type PickerTarget } from '../components/Speakers'
+import { DocMenu } from '../components/DocMenu'
 
 type View = 'overview' | 'transcript' | 'actions' | 'questions' | 'views'
 const FILTER_KEYS = ['project', 'person', 'type', 'status', 'period'] as const
@@ -153,6 +154,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
           <button className="tbtn" onClick={() => chat.openChat({ kind: 'record', id, label: 'Текущая запись' })}>Спросить о записи</button>
           <button className="tbtn" onClick={() => setMaterial({ kind: 'protocol', meetingId: id, title: m.title })}>Протокол</button>
           <button className="tbtn" onClick={() => setMaterial({ kind: 'map', meetingId: id, title: m.title })}>Карта</button>
+          <DocMenu scope={{ meetingId: id, title: m.title }} className="tbtn" />
           {meta?.calendarWrite && (
             <button className="tbtn" onClick={() => setEventDraft({ title: 'Продолжение: ' + m.title, date: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), meetingId: id })}>В Календарь</button>
           )}

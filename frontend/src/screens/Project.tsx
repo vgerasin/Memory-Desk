@@ -7,6 +7,7 @@ import { dayLabel, plural } from '../format'
 import type { ProjectDossier, ProjectStatus } from '../types'
 import { Avatar, ErrorBox, Loading } from '../components/ui'
 import { agoLabel, BackLink, DecisionLine, Empty, FactRow, MeetingRow, Section, TaskLine, Tile } from '../components/Dossier'
+import { DocMenu } from '../components/DocMenu'
 
 const STATUSES: { key: ProjectStatus; label: string }[] = [
   { key: 'active', label: 'В работе' }, { key: 'paused', label: 'На паузе' }, { key: 'done', label: 'Завершён' },
@@ -48,6 +49,7 @@ export function Project() {
           <button className="btn s34" onClick={() => navigate('/records?project=' + encodeURIComponent(p.title))}>Записи</button>
           <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', projectId: p.id, title: p.title })}>Презентация</button>
           <button className="btn s34" onClick={() => setMaterial({ kind: 'map', projectId: p.id, title: p.title })}>Карта</button>
+          <DocMenu scope={{ projectId: p.id, title: p.title }} />
           <button className="btn accent s34" onClick={() => setPrep({ projectId: p.id, title: p.title })}>Подготовка к встрече</button>
         </div>
       </div>

@@ -236,11 +236,11 @@ def safe_name(value: str, limit: int = 80) -> str:
     return cleaned or "Материал"
 
 
-FOLDERS = {"protocol": "Протоколы", "map": "Карты"}
+FOLDERS = {"protocol": "Протоколы", "map": "Карты", "memo": "Служебные записки", "brief": "Брифы", "followup": "Письма"}
 
 
 def save_text(kind: str, file_name: str, content: str) -> Path:
-    """Атомарно сохраняет материал в рабочую папку Obsidian: Протоколы/ или Карты/. Имя очищается от служебных символов."""
+    """Атомарно сохраняет материал в рабочую папку Obsidian: Протоколы/, Карты/, Служебные записки/, Брифы/ или Письма/. Имя очищается от служебных символов."""
     if kind not in FOLDERS:
         raise ValueError("Неизвестный вид материала")
     folder = knowledge.WORKSPACE_DIR / FOLDERS[kind]
@@ -503,6 +503,9 @@ def build_deck(core, scope: dict, date_of: Callable, today: date | None = None) 
 
 VERBS = re.compile(r"сдела|созда|постро|нарису|подготов|состав|сформир|сгенерир|собери|нужн|хочу|выгрузи|оформи|оформл|дай\b|пришли", re.IGNORECASE)
 KINDS = (("deck", re.compile(r"презентац|слайд|powerpoint|pptx|keynote", re.IGNORECASE)),
+         ("memo", re.compile(r"служебн\w*\s+записк|\bзаписк[ауие]\s+(?:руковод|начальник|директор)", re.IGNORECASE)),
+         ("brief", re.compile(r"\bбриф", re.IGNORECASE)),
+         ("followup", re.compile(r"follow[- ]?up|фолл?оу[- ]?ап|письм\w*\s+(?:участник|с\s+итог|по\s+итог)|итогов\w+\s+письм", re.IGNORECASE)),
          ("protocol", re.compile(r"протокол", re.IGNORECASE)),
          ("map", re.compile(r"\bкарт[ауыеой]\w*|mind ?map|майнд|интеллект[- ]карт", re.IGNORECASE)))
 
@@ -548,7 +551,14 @@ def from_chat(core, question: str, scope: dict, date_of: Callable, today: date |
     else:
         payload["days"] = 3650 if (project or person) else 30
     try:
-        if kind == "protocol":
+        if kind in ("memo", "brief", "followup"):
+            from . import artifacts
+            payload["meetingId"] = scope.get("id") if scope.get("kind") == "record" else None
+            if not payload["meetingId"] and not (project or person or period):
+                payload["days"] = 7
+            result = artifacts.build(core, kind, payload, date_of, today)
+            answer = chat_markdown(result["markdown"])
+        elif kind == "protocol":
             meeting_id = scope.get("id") if scope.get("kind") == "record" else None
             note = ""
             if not meeting_id:

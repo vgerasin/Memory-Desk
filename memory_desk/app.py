@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, bookmarks, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, bookmarks, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -730,6 +730,23 @@ def create_app() -> FastAPI:
         def run():
             path = materials.save_text(body.kind, body.name, body.content)
             return {"savedAs": knowledge.note_relative_path(path), "obsidianUrl": knowledge.obsidian_url(path)}
+        return material_errors(run)
+
+    class ArtifactBody(MaterialScope):
+        kind: str = Field(..., max_length=20)
+        addressee: str = Field("", max_length=200)
+
+    @app.post("/api/materials/artifact")
+    def material_artifact(body: ArtifactBody):
+        """Служебная записка, бриф или черновик письма участникам: пункты только с таймкодами записи."""
+        def run():
+            scope = body.model_dump(exclude={"kind", "addressee", "save"})
+            result = artifacts.build(core, body.kind, scope, services.meeting_date, addressee=body.addressee)
+            if body.save:
+                path = materials.save_text(body.kind, result["fileName"], result["markdown"])
+                result["savedAs"] = knowledge.note_relative_path(path)
+                result["obsidianUrl"] = knowledge.obsidian_url(path)
+            return result
         return material_errors(run)
 
     @app.post("/api/materials/deck")

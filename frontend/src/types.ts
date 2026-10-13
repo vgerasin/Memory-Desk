@@ -149,7 +149,8 @@ export interface StorageUsage {
 
 export interface PrepTarget { projectId?: string; meetingId?: string; title?: string }
 
-export type MaterialKind = 'protocol' | 'map' | 'deck'
+export type ArtifactKind = 'memo' | 'brief' | 'followup'
+export type MaterialKind = 'protocol' | 'map' | 'deck' | ArtifactKind
 /** Материал по запросу: протокол записи, карта или презентация по записи, проекту или человеку */
 export interface MaterialTarget { kind: MaterialKind; meetingId?: string; projectId?: string; personId?: string; title: string; result?: MaterialResult }
 export interface MapNode { text: string; children: MapNode[] }
@@ -158,6 +159,9 @@ export interface MaterialResult {
   markdown?: string; fileName?: string
   tree?: MapNode; mermaid?: string
   name?: string; url?: string; slides?: number; records?: number
+  /** служебная записка, бриф, письмо: записи-источники, число пунктов и не вошедшие (без места в записи) */
+  refs?: { id: string; title: string; label: string }[]; count?: number; located?: number
+  skipped?: { kind: string; text: string; meetingId: string; meetingTitle: string; reason: string }[]
 }
 export interface PrepItem {
   text: string; meetingId: string; meetingTitle: string; date: string; tSec: number | null; view: string | null

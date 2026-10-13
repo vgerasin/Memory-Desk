@@ -2,11 +2,37 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, errorText } from '../api'
 import { useApp } from '../store'
 import { plural } from '../format'
-import type { MapNode, MaterialKind, MaterialResult, MaterialTarget } from '../types'
+import { navigate, recordLink } from '../router'
+import type { ArtifactKind, MapNode, MaterialKind, MaterialResult, MaterialTarget } from '../types'
 import { IconOut, Segmented } from './ui'
 import { ExportMenu, MAP_FORMATS } from './ExportMenu'
 
-const TITLES: Record<MaterialKind, string> = { protocol: 'Протокол встречи', map: 'Карта', deck: 'Презентация' }
+const TITLES: Record<MaterialKind, string> = {
+  protocol: 'Протокол встречи', map: 'Карта', deck: 'Презентация',
+  memo: 'Служебная записка', brief: 'Бриф', followup: 'Письмо участникам (черновик)',
+}
+const isArtifact = (kind: MaterialKind): kind is ArtifactKind => kind === 'memo' || kind === 'brief' || kind === 'followup'
+
+interface TimeLink { id: string; t: string; sec: number; text: string }
+
+/** Таймкоды `⏱ ЧЧ:ММ:СС` из текста документа с записью, к которой они относятся (по названию записи в строке). */
+function timeLinks(text: string, refs: NonNullable<MaterialResult['refs']>): TimeLink[] {
+  const out: TimeLink[] = []
+  const seen = new Set<string>()
+  for (const line of text.split('\n')) {
+    const m = /⏱\s*(\d{1,2}):(\d{2}):(\d{2})/.exec(line)
+    if (!m) continue
+    const ref = refs.length === 1 ? refs[0] : refs.find(r => line.includes(r.label))
+    if (!ref) continue
+    const sec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
+    const key = ref.id + ':' + sec
+    if (seen.has(key)) continue
+    seen.add(key)
+    const plain = line.replace(/\[\[[^\]|]*\|?([^\]]*)\]\]/g, '').replace(/[`*_>|#]/g, '').replace(/^\s*(?:[-*]|\d+\.)\s+/, '').replace(/⏱\s*[\d:]+/, '').replace(/\s+/g, ' ').replace(/[\s—,·-]+$/, '').trim()
+    out.push({ id: ref.id, t: m[0].replace('⏱', '').trim().padStart(8, '0'), sec, text: plain.length > 90 ? plain.slice(0, 89) + '…' : plain })
+  }
+  return out
+}
 const PERIODS = [{ key: '30', label: '30 дней' }, { key: '90', label: '90 дней' }, { key: '365', label: 'Год' }, { key: '3650', label: 'Всё время' }]
 
 function Tree({ node, depth = 0 }: { node: MapNode; depth?: number }) {
@@ -25,8 +51,9 @@ interface ProtocolProgress {
 
 const pause = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 
-function endpoint(target: MaterialTarget, days: string): { path: string; body?: object } {
+function endpoint(target: MaterialTarget, days: string, addressee: string): { path: string; body?: object } {
   const scope = { meetingId: target.meetingId, projectId: target.projectId, personId: target.personId, days: Number(days) }
+  if (isArtifact(target.kind)) return { path: '/api/materials/artifact', body: { ...scope, kind: target.kind, addressee } }
   if (target.kind === 'protocol') return { path: `/api/meetings/${encodeURIComponent(target.meetingId ?? '')}/protocol` }
   return { path: target.kind === 'map' ? '/api/materials/mindmap' : '/api/materials/deck', body: scope }
 }
@@ -35,6 +62,7 @@ function endpoint(target: MaterialTarget, days: string): { path: string; body?: 
 export function MaterialModal() {
   const { material, setMaterial, showToast } = useApp()
   const [days, setDays] = useState('30')
+  const [addressee, setAddressee] = useState('')
   const [result, setResult] = useState<MaterialResult | null>(null)
   const [text, setText] = useState('')
   const [error, setError] = useState('')
@@ -48,7 +76,7 @@ export function MaterialModal() {
     setText(data.markdown ?? (data.mermaid ? `# Карта: ${data.title}\n\n\`\`\`mermaid\n${data.mermaid}\n\`\`\`\n` : ''))
   }
 
-  const generate = useCallback(async (target: MaterialTarget, period: string) => {
+  const generate = useCallback(async (target: MaterialTarget, period: string, to = '') => {
     const mine = ++seq.current
     setBusy(true); setError(''); setResult(null); setSaved(null); setProgress(null)
     try {
@@ -68,7 +96,7 @@ export function MaterialModal() {
         applyResult(state.result)
         return
       }
-      const { path, body } = endpoint(target, period)
+      const { path, body } = endpoint(target, period, to)
       const data = await api.post<MaterialResult>(path, body)
       if (mine !== seq.current) return
       applyResult(data)
@@ -84,7 +112,7 @@ export function MaterialModal() {
     seq.current++
     setResult(null); setError(''); setSaved(null); setBusy(false); setProgress(null)
     if (material?.result) { applyResult(material.result); return }
-    if (material && (material.kind === 'protocol' || material.meetingId)) void generate(material, days)
+    if (material && (material.kind === 'protocol' || material.meetingId)) void generate(material, days, addressee)
   }, [material]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -96,7 +124,9 @@ export function MaterialModal() {
 
   if (!material) return null
   const kind = material.kind
+  const artifact = isArtifact(kind)
   const needsPeriod = kind !== 'protocol' && !material.meetingId
+  const links = result && artifact ? timeLinks(text, result.refs ?? []) : []
   const fileName = result?.fileName ?? `${kind === 'map' ? 'Карта — ' : ''}${result?.title ?? material.title}.md`
 
   const copy = async () => {
@@ -105,7 +135,8 @@ export function MaterialModal() {
   }
   const save = async () => {
     try {
-      const out = await api.post<{ savedAs: string; obsidianUrl?: string }>('/api/materials/save', { kind: kind === 'map' ? 'map' : 'protocol', name: fileName, content: text })
+      const saveKind = artifact ? kind : kind === 'map' ? 'map' : 'protocol'
+      const out = await api.post<{ savedAs: string; obsidianUrl?: string }>('/api/materials/save', { kind: saveKind, name: fileName, content: text })
       setSaved({ path: out.savedAs, url: out.obsidianUrl })
       showToast('Сохранено в Obsidian')
     } catch (e) { showToast(errorText(e)) }
@@ -122,11 +153,15 @@ export function MaterialModal() {
           {result && <span className="prep-count">{plural(result.records ?? 1, 'запись', 'записи', 'записей')}</span>}
         </div>
 
-        {needsPeriod && (
+        {(needsPeriod || (kind === 'memo' && !!material.meetingId)) && (
           <div className="material-period">
-            <Segmented small items={PERIODS} value={days} onChange={v => setDays(v)} />
-            <button className="btn accent s34" disabled={busy} onClick={() => void generate(material, days)}>
-              {busy ? 'Собираю…' : result ? 'Собрать заново' : kind === 'deck' ? 'Создать презентацию' : 'Построить карту'}
+            {needsPeriod && <Segmented small items={PERIODS} value={days} onChange={v => setDays(v)} />}
+            {kind === 'memo' && (
+              <input className="material-to" value={addressee} maxLength={200} onChange={e => setAddressee(e.target.value)}
+                placeholder="Кому: должность, ФИО" aria-label="Адресат записки" />
+            )}
+            <button className="btn accent s34" disabled={busy} onClick={() => void generate(material, days, addressee)}>
+              {busy ? 'Собираю…' : result ? (kind === 'memo' && !needsPeriod ? 'Подставить адресата' : 'Собрать заново') : kind === 'deck' ? 'Создать презентацию' : artifact ? 'Составить' : 'Построить карту'}
             </button>
           </div>
         )}
@@ -153,6 +188,36 @@ export function MaterialModal() {
               {result.mode === 'model' ? 'Ход обсуждения написан локальной моделью по фактам записи — проверьте перед отправкой.' : 'Протокол собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'}
               {' '}Текст можно править здесь.
             </div>
+          </>
+        )}
+        {result && artifact && (
+          <>
+            <textarea className="material-text" value={text} onChange={e => setText(e.target.value)} aria-label={TITLES[kind]} spellCheck={false} />
+            <div className="muted-text" style={{ fontSize: 13 }}>
+              Каждый пункт взят из решений, задач и вопросов записи и помечен таймкодом места в записи.{' '}
+              {result.mode === 'model' ? 'Вводную фразу написала локальная модель — проверьте её.' : 'Документ собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'}
+              {kind === 'followup' && ' Это черновик: письмо не отправляется, скопируйте его или скачайте.'}
+              {' '}Текст можно править здесь.
+            </div>
+            {links.length > 0 && (
+              <details className="doc-times">
+                <summary>Места в записи · {links.length}</summary>
+                <ul>
+                  {links.map(l => (
+                    <li key={l.id + l.sec}>
+                      <button className="link-btn" onClick={() => { setMaterial(null); navigate(recordLink(l.id, { t: l.sec })) }}>⏱ {l.t}</button>
+                      <span>{l.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {(result.skipped?.length ?? 0) > 0 && (
+              <details className="doc-times skipped">
+                <summary>Не вошло: нет места в записи · {result.skipped!.length}</summary>
+                <ul>{result.skipped!.map((x, i) => <li key={i}><span>{x.text}</span></li>)}</ul>
+              </details>
+            )}
           </>
         )}
         {result && kind === 'map' && result.tree && (
