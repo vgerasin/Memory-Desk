@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { api } from '../api'
 import { fmt } from '../format'
 import { IconPause, IconPlay } from './ui'
+import { tr } from '../i18n'
 
 export interface PlayerHandle { seek: (sec: number, play?: boolean) => void }
 interface Props {
@@ -85,10 +86,10 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ meetingI
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onError={() => { setFailed(true); setPlaying(false) }} />
       )}
-      <button className="play" onClick={toggle} disabled={!enabled} aria-label={playing ? 'Пауза' : 'Воспроизвести'}>
+      <button className="play" onClick={toggle} disabled={!enabled} aria-label={playing ? tr('Пауза') : tr('Воспроизвести')}>
         {playing ? <IconPause /> : <IconPlay style={{ marginLeft: 2 }} />}
       </button>
-      <div className="wave" role="slider" aria-label="Позиция в записи" aria-valuemin={0} aria-valuemax={Math.round(dur)} aria-valuenow={Math.round(pos)}>
+      <div className="wave" role="slider" aria-label={tr('Позиция в записи')} aria-valuemin={0} aria-valuemax={Math.round(dur)} aria-valuenow={Math.round(pos)}>
         {shown.map((v, i) => (
           <div key={i} onClick={() => apply((i / shown.length) * dur)}>
             <i className={i / shown.length < progress ? 'on' : ''} style={{ height: Math.max(14, Math.round(v * 100)) + '%' }} />

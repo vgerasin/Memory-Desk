@@ -22,6 +22,8 @@ from pathlib import Path
 from . import attachments, config, knowledge, live, mirror, storage
 
 WORD = "СТЕРЕТЬ"
+# слово подтверждения на языках интерфейса: человек вводит его на своём языке
+WORDS = {WORD, "ERASE", "EFFACER", "LÖSCHEN", "BORRAR"}
 DERIVED_FOLDERS = ("Протоколы", "Карты", "Служебные записки", "Брифы", "Письма", "Дайджесты", "Ответы", "Сводки")
 
 
@@ -284,7 +286,7 @@ def apply(core, meeting_id: str, confirm: str, *, scrub_backups: bool = True, no
     meeting = core.by_id.get(meeting_id)
     if not meeting:
         raise EraseError("Запись не найдена", 404)
-    if " ".join(str(confirm or "").split()).upper() != WORD:
+    if " ".join(str(confirm or "").split()).upper() not in WORDS:
         raise EraseError(f"Для подтверждения введите слово {WORD}")
     if _busy():
         raise EraseError("Идёт обработка файлов: дождитесь окончания и повторите", 409)

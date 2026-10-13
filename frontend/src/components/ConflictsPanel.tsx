@@ -5,12 +5,13 @@ import { navigate, recordLink } from '../router'
 import { useApp } from '../store'
 import { useApi } from '../useApi'
 import type { ConflictPair, ConflictVerdict } from '../types'
+import { tr } from '../i18n'
 
 const VERDICT: Record<ConflictVerdict['relation'], string> = {
-  replaces: 'Модель: новое решение заменяет старое',
-  contradicts: 'Модель: решения противоречат друг другу',
-  consistent: 'Модель: решения согласуются',
-  unrelated: 'Модель: это разные вопросы',
+  replaces: tr('Модель: новое решение заменяет старое'),
+  contradicts: tr('Модель: решения противоречат друг другу'),
+  consistent: tr('Модель: решения согласуются'),
+  unrelated: tr('Модель: это разные вопросы'),
 }
 
 function Pair({ pair, onDone }: { pair: ConflictPair; onDone: () => void }) {
@@ -35,13 +36,13 @@ function Pair({ pair, onDone }: { pair: ConflictPair; onDone: () => void }) {
   )
   return (
     <div className="conflict">
-      <div className="conflict-pair">{part('Было', pair.old)}{part('Стало', pair.new)}</div>
+      <div className="conflict-pair">{part(tr('Было'), pair.old)}{part(tr('Стало'), pair.new)}</div>
       {verdict && <div className={'conflict-verdict ' + verdict.relation}>{VERDICT[verdict.relation]}{verdict.reason ? `. ${verdict.reason}` : ''}</div>}
       <div className="conflict-actions">
         <button className="btn s28 accent" disabled={busy}
-          onClick={() => void run(() => api.patch(`/api/decisions/${pair.old.id}`, { replaced_by: pair.new.id }), 'Старое решение отмечено заменённым')}>Старое заменено новым</button>
-        <button className="btn s28" disabled={busy} onClick={() => void run(() => api.post('/api/decisions/conflicts/dismiss', ids))}>Не связаны</button>
-        <button className="btn s28 muted" disabled={busy} onClick={() => void ask()}>Спросить модель</button>
+          onClick={() => void run(() => api.patch(`/api/decisions/${pair.old.id}`, { replaced_by: pair.new.id }), tr('Старое решение отмечено заменённым'))}>{tr('Старое заменено новым')}</button>
+        <button className="btn s28" disabled={busy} onClick={() => void run(() => api.post('/api/decisions/conflicts/dismiss', ids))}>{tr('Не связаны')}</button>
+        <button className="btn s28 muted" disabled={busy} onClick={() => void ask()}>{tr('Спросить модель')}</button>
       </div>
     </div>
   )
@@ -53,15 +54,15 @@ export function ConflictsPanel() {
   const [open, setOpen] = useState(true)
   if (!data || data.total === 0) return null
   return (
-    <section className="card conflicts" aria-label="Возможные замены решений">
+    <section className="card conflicts" aria-label={tr('Возможные замены решений')}>
       <button className="series-head" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <span className="series-title">Возможно, решение уже устарело · {data.total}</span>
-        <span className="series-toggle">{open ? 'Свернуть' : 'Показать'}</span>
+        <span className="series-title">{tr('Возможно, решение уже устарело · {0}', [data.total])}</span>
+        <span className="series-toggle">{open ? tr('Свернуть') : tr('Показать')}</span>
       </button>
       {open && <div className="conflicts-body">
-        <div className="muted-text" style={{ fontSize: 13 }}>Новое решение похоже на старое из того же проекта. Если оно его заменяет, отметьте старое «Заменено».</div>
+        <div className="muted-text" style={{ fontSize: 13 }}>{tr('Новое решение похоже на старое из того же проекта. Если оно его заменяет, отметьте старое «Заменено».')}</div>
         {data.items.slice(0, 8).map(p => <Pair key={p.key} pair={p} onDone={reload} />)}
-        {data.total > 8 && <div className="muted-text" style={{ fontSize: 13 }}>Ещё {data.total - 8}: появятся после разбора этих.</div>}
+        {data.total > 8 && <div className="muted-text" style={{ fontSize: 13 }}>{tr('Ещё {0}: появятся после разбора этих.', [data.total - 8])}</div>}
       </div>}
     </section>
   )

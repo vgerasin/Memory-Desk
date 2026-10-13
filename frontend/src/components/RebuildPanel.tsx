@@ -3,6 +3,7 @@ import { api, errorText } from '../api'
 import { useApp } from '../store'
 import { useApi } from '../useApi'
 import type { MeetingDetail, RebuildState, TemplatesResponse } from '../types'
+import { tr } from '../i18n'
 
 /** «Шаблон заметки» в карточке записи: какой шаблон применён и кнопка «Пересобрать по другому шаблону». */
 export function RebuildPanel({ meeting }: { meeting: MeetingDetail }) {
@@ -29,8 +30,8 @@ export function RebuildPanel({ meeting }: { meeting: MeetingDetail }) {
             invalidate()
             const kept = (r.keptTasks ?? 0) + (r.keptDecisions ?? 0)
             showToast(r.fallback
-              ? `Шаблон «${names[r.requestedId ?? ''] ?? r.requestedId}» не получился, заметка составлена стандартным`
-              : `Заметка пересобрана по шаблону «${names[r.templateId ?? ''] ?? r.templateId}»` + (kept ? ` · сохранено подтверждённого: ${kept}` : ''))
+              ? tr('Шаблон «{0}» не получился, заметка составлена стандартным', [names[r.requestedId ?? ''] ?? r.requestedId])
+              : tr('Заметка пересобрана по шаблону «{0}»', [names[r.templateId ?? ''] ?? r.templateId]) + (kept ? tr(' · сохранено подтверждённого: {0}', [kept]) : ''))
           }
         }
       } catch (e) { stop(); setError(errorText(e)) }
@@ -49,29 +50,26 @@ export function RebuildPanel({ meeting }: { meeting: MeetingDetail }) {
     } catch (e) { setError(errorText(e)) }
   }
   const running = state.state === 'running'
-  const label = current?.id ? (names[current.id] ?? current.name) : 'стандартный'
+  const label = current?.id ? (names[current.id] ?? current.name) : tr('стандартный')
 
   return (
-    <section className="rebuild" aria-label="Шаблон заметки">
+    <section className="rebuild" aria-label={tr('Шаблон заметки')}>
       <div className="rebuild-head">
-        <span>Шаблон заметки: <b>{label}</b></span>
-        {!open && <button className="link-btn" onClick={() => setOpen(true)}>Пересобрать по другому</button>}
+        <span>{tr('Шаблон заметки: ')}{' '}<b>{label}</b></span>
+        {!open && <button className="link-btn" onClick={() => setOpen(true)}>{tr('Пересобрать по другому')}</button>}
       </div>
       {open && (
         <div className="rebuild-body">
           <div className="backup-plan">
-            <label htmlFor="rebuild-template">Шаблон</label>
+            <label htmlFor="rebuild-template">{tr('Шаблон')}</label>
             <select id="rebuild-template" value={choice} disabled={running} onChange={e => setChoice(e.target.value)}>
-              {data.items.map(t => <option key={t.id} value={t.id}>{t.name}{t.id === current?.suggestedId ? ' · подходит типу записи' : ''}</option>)}
+              {data.items.map(t => <option key={t.id} value={t.id}>{t.name}{t.id === current?.suggestedId ? tr(' · подходит типу записи') : ''}</option>)}
             </select>
-            <button className="btn s28 accent" disabled={running || !choice} onClick={() => void run()}>{running ? 'Составляю…' : 'Пересобрать'}</button>
-            <button className="btn s28" disabled={running} onClick={() => { setOpen(false); setError('') }}>Закрыть</button>
+            <button className="btn s28 accent" disabled={running || !choice} onClick={() => void run()}>{running ? tr('Составляю…') : tr('Пересобрать')}</button>
+            <button className="btn s28" disabled={running} onClick={() => { setOpen(false); setError('') }}>{tr('Закрыть')}</button>
           </div>
-          <span className="hint">
-            Разделы заметки составляются заново по стенограмме (около минуты). Подтверждённые и закрытые задачи и решения сохраняются,
-            черновики заменяются новыми. Ручные правки в разделах заметки пропадут; прежняя заметка остаётся в копиях.
-          </span>
-          {state.state === 'done' && state.fallback && <span className="hint bad">Шаблон не получился: {state.fallback}. Заметка составлена стандартным.</span>}
+          <span className="hint">{tr('Разделы заметки составляются заново по стенограмме (около минуты). Подтверждённые и закрытые задачи и решения сохраняются, черновики заменяются новыми. Ручные правки в разделах заметки пропадут; прежняя заметка остаётся в копиях.')}</span>
+          {state.state === 'done' && state.fallback && <span className="hint bad">{tr('Шаблон не получился: {0}. Заметка составлена стандартным.', [state.fallback])}</span>}
           {(error || state.state === 'error') && <span className="hint bad">{error || state.message}</span>}
         </div>
       )}

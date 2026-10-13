@@ -3,6 +3,7 @@ import { api, ApiError, errorText } from './api'
 import type { AppState, ChatMessage, ChatReply, ChatScope, MaterialTarget, Meta, PrepTarget } from './types'
 
 import { applyPalette, DEFAULT_PALETTE, findPalette, type Appearance, type Mode, type Palette } from './themes'
+import { adoptLang, localize, tr } from './i18n'
 
 type Theme = Mode
 interface Toast { id: number; text: string; undo?: () => void }
@@ -62,7 +63,7 @@ const AppContext = createContext<Ctx | null>(null)
 
 export function useApp(): Ctx {
   const ctx = useContext(AppContext)
-  if (!ctx) throw new Error('AppProvider отсутствует')
+  if (!ctx) throw new Error(tr('AppProvider отсутствует'))
   return ctx
 }
 
@@ -152,12 +153,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (closed) return
       source = new EventSource('/api/stream')
       source.addEventListener('state', e => {
-        try { apply(JSON.parse((e as MessageEvent).data)) } catch { /* битый кадр */ }
+        try { apply(localize(JSON.parse((e as MessageEvent).data))) } catch { /* битый кадр */ }
         if (poll) { clearInterval(poll); poll = undefined }
       })
       source.onerror = () => { setLive(false); startPolling() }
     }
     api.get<AppState>('/api/state').then(apply).catch(() => setLive(false))
+    // язык, выбранный на другом устройстве или в другом браузере
+    api.get<{ ui_lang?: string }>('/api/settings').then(s => { if (s.ui_lang && adoptLang(s.ui_lang)) window.location.reload() }).catch(() => undefined)
     connect()
     return () => { closed = true; source?.close(); if (poll) clearInterval(poll) }
   }, [])
@@ -187,7 +190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     busyRef.current = true
     setBusy(true)
     const userMsg: ChatMessage = { id: ++messageId, role: 'user', text }
-    const pending: ChatMessage = { id: ++messageId, role: 'bot', text: 'Ищу в записях…', pending: true }
+    const pending: ChatMessage = { id: ++messageId, role: 'bot', text: tr('Ищу в записях…'), pending: true }
     setMessages(m => [...m, userMsg, pending])
     const lastBot = [...messagesRef.current].reverse().find(m => m.role === 'bot' && m.sources?.length)
     const previous = [...new Set((lastBot?.sources ?? []).map(s => s.meetingId).filter(Boolean))]
@@ -202,7 +205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const reply = await api.post<ChatReply>('/api/chat', { question: text, scope: payload, previous, asked })
       setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: reply.answer, sources: reply.sources, digest: reply.digest, material: reply.material, suggestions: reply.suggestions, pending: false } : x))
     } catch (error) {
-      const message = error instanceof ApiError && error.status === 503 ? error.message : 'Не удалось получить ответ. ' + errorText(error)
+      const message = error instanceof ApiError && error.status === 503 ? error.message : tr('Не удалось получить ответ. ') + errorText(error)
       setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: message, pending: false, error: true } : x))
     } finally {
       busyRef.current = false
@@ -217,13 +220,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const user = [...list.slice(0, Math.max(0, index))].reverse().find(m => m.role === 'user')
     if (!bot || !user || bot.saving) return
     const current = scopeRef.current
-    const scope = 'label' in current ? current.label : 'Весь архив'
+    const scope = 'label' in current ? current.label : tr('Весь архив')
     setMessages(m => m.map(x => x.id === id ? { ...x, saving: true, saveError: undefined } : x))
     try {
       const saved = await api.post<{ savedAs: string; obsidianUrl: string; already: boolean }>('/api/chat/save',
         { question: user.text, answer: bot.text, sources: bot.sources ?? [], scope })
       setMessages(m => m.map(x => x.id === id ? { ...x, saving: false, saved } : x))
-      showToast(saved.already ? 'Этот ответ уже сохранён: ' + saved.savedAs : 'Ответ сохранён в Obsidian: ' + saved.savedAs)
+      showToast(saved.already ? tr('Этот ответ уже сохранён: ') + saved.savedAs : tr('Ответ сохранён в Obsidian: ') + saved.savedAs)
     } catch (error) {
       setMessages(m => m.map(x => x.id === id ? { ...x, saving: false, saveError: errorText(error) } : x))
     }
@@ -234,7 +237,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const index = list.findIndex(m => m.id === id)
     const user = [...list.slice(0, Math.max(0, index))].reverse().find(m => m.role === 'user')
     const current = scopeRef.current
-    return { question: user?.text ?? '', answer: list[index]?.text ?? '', sources: list[index]?.sources ?? [], scope: 'label' in current ? current.label : 'Весь архив' }
+    return { question: user?.text ?? '', answer: list[index]?.text ?? '', sources: list[index]?.sources ?? [], scope: 'label' in current ? current.label : tr('Весь архив') }
   }, [])
 
   const openChat = useCallback((nextScope?: ChatScope, question?: string) => {

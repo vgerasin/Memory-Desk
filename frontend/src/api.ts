@@ -1,3 +1,4 @@
+import { localize, tr, trServer } from './i18n'
 export class ApiError extends Error {
   status: number
   /** разобранное тело ответа с ошибкой (например, `retryAfter` у неверного PIN) */
@@ -13,7 +14,7 @@ async function fail(response: Response): Promise<never> {
   let data: Record<string, unknown> = {}
   try {
     data = await response.json()
-    detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+    detail = typeof data.detail === 'string' ? trServer(data.detail) : JSON.stringify(data.detail)
   } catch { /* ответ без JSON */ }
   if (response.status === 423) window.dispatchEvent(new Event(LOCKED_EVENT))
   throw new ApiError(response.status, detail, data)
@@ -26,10 +27,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   try {
     response = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   } catch {
-    throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
+    throw new ApiError(0, tr('Нет связи с Memory Desk. Проверьте, что приложение запущено.'))
   }
   if (!response.ok) return fail(response)
-  return (response.status === 204 ? undefined : await response.json()) as T
+  return (response.status === 204 ? undefined : localize(await response.json())) as T
 }
 
 /** Скачивание файла, который собирает сервер (экспорт документов): имя берётся из заголовка ответа. */
@@ -38,7 +39,7 @@ export async function downloadFile(path: string, body: unknown): Promise<string>
   try {
     response = await fetch(path, { method: 'POST', headers: { 'X-Memory-Desk': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   } catch {
-    throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
+    throw new ApiError(0, tr('Нет связи с Memory Desk. Проверьте, что приложение запущено.'))
   }
   if (!response.ok) return fail(response)
   const header = response.headers.get('Content-Disposition') ?? ''
@@ -58,10 +59,10 @@ async function upload<T>(path: string, file: Blob, name: string): Promise<T> {
   try {
     response = await fetch(`${path}?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'X-Memory-Desk': '1', 'Content-Type': 'application/octet-stream' }, body: file })
   } catch {
-    throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
+    throw new ApiError(0, tr('Нет связи с Memory Desk. Проверьте, что приложение запущено.'))
   }
   if (!response.ok) return fail(response)
-  return await response.json() as T
+  return localize(await response.json()) as T
 }
 
 export const api = {
@@ -74,5 +75,5 @@ export const api = {
 }
 
 export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : 'Что-то пошло не так'
+  return error instanceof Error ? error.message : tr('Что-то пошло не так')
 }

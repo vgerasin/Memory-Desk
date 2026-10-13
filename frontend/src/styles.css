@@ -362,6 +362,7 @@ ul { padding: 0; list-style: none; }
 .dictionary-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .backup-plan { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
 .backup-plan label { font-weight: 400; }
+.lang-select { height: 36px; padding: 0 12px; border-radius: 10px; border: none; background: var(--fill); font-size: 14px; outline: none; width: 100%; }
 .backup-plan select { height: 32px; padding: 0 10px; border-radius: 10px; border: none; background: var(--fill); font-size: 13px; outline: none; }
 .backup-plan input[type='number'] { width: 64px; height: 32px; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -371,6 +372,12 @@ ul { padding: 0; list-style: none; }
 .switch.on i { transform: translateX(18px); }
 .modal-foot { display: flex; justify-content: flex-end; gap: 8px; }
 
+@media (max-width: 1400px) {
+  .header-in { gap: 14px; }
+  .seg button { padding: 0 9px; }
+  .seg.small button { padding: 0 10px; }
+  .hbtn { padding: 0 8px 0 10px; gap: 6px; }
+}
 @media (max-width: 800px) {
   .main { padding: 32px 16px 120px; }
   .header-in { padding: 0 12px; gap: 10px; }

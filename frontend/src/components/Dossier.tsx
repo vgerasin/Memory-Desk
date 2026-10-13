@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { navigate, recordLink } from '../router'
-import { dayLabel, due, plural, tc } from '../format'
+import { dayLabel, due, ownerLabel, plural, tc } from '../format'
 import type { DecisionDto, FactLine, MeetingBrief, TaskDto } from '../types'
+import { tr } from '../i18n'
 
 export function BackLink({ to, label }: { to: string; label: string }) {
   return <button className="back-link" onClick={() => navigate(to)}>← {label}</button>
@@ -37,10 +38,10 @@ export function TaskLine({ task, showOwner }: { task: TaskDto; showOwner?: boole
   const d = due(task.due, task.dueText)
   return (
     <button className="dos-line" onClick={() => navigate(recordLink(task.meetingId, { view: 'actions', t: task.tSec }))}>
-      <span className="dos-line-text">{task.text}{task.draft && <span className="chip-draft">черновик</span>}</span>
+      <span className="dos-line-text">{task.text}{task.draft && <span className="chip-draft">{tr('черновик')}</span>}</span>
       <span className="dos-line-meta">
-        {showOwner && task.owner ? task.owner + ' · ' : ''}<span style={{ color: d.color }}>{d.label}</span>
-        {task.stuck ? ` · без движения ${task.ageDays} дн.` : ''} · {task.meetingTitle}
+        {showOwner && task.owner ? ownerLabel(task.owner) + ' · ' : ''}<span style={{ color: d.color }}>{d.label}</span>
+        {task.stuck ? tr(' · без движения {0} дн.', [task.ageDays]) : ''} · {task.meetingTitle}
       </span>
     </button>
   )
@@ -49,7 +50,7 @@ export function TaskLine({ task, showOwner }: { task: TaskDto; showOwner?: boole
 export function DecisionLine({ item }: { item: DecisionDto }) {
   return (
     <button className="dos-line" onClick={() => navigate(recordLink(item.meetingId, { view: 'actions', t: item.tSec }))}>
-      <span className="dos-line-text">{item.text}{item.draft && <span className="chip-draft">черновик</span>}</span>
+      <span className="dos-line-text">{item.text}{item.draft && <span className="chip-draft">{tr('черновик')}</span>}</span>
       <span className="dos-line-meta">{dayLabel(item.meetingDate)} · {item.meetingTitle}</span>
     </button>
   )
@@ -75,7 +76,7 @@ export function MeetingRow({ m }: { m: MeetingBrief }) {
 
 export function agoLabel(days: number | null): string {
   if (days == null) return '—'
-  if (days === 0) return 'сегодня'
-  if (days === 1) return 'вчера'
-  return plural(days, 'день', 'дня', 'дней') + ' назад'
+  if (days === 0) return tr('сегодня')
+  if (days === 1) return tr('вчера')
+  return tr('{0} назад', [plural(days, 'день', 'дня', 'дней')])
 }

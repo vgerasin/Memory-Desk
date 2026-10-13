@@ -5,6 +5,7 @@ import { navigate } from '../router'
 import { useApi } from '../useApi'
 import type { MeetingsResponse } from '../types'
 import { ErrorBox, Loading } from '../components/ui'
+import { tr } from '../i18n'
 
 export function Archive() {
   const { data, error } = useApi<MeetingsResponse>('/api/meetings?archived=true')
@@ -15,12 +16,12 @@ export function Archive() {
     <>
       <div className="page-head">
         <div className="titles">
-          <h1 className="h1">Архив</h1>
+          <h1 className="h1">{tr('Архив')}</h1>
           <div className="subtitle">
-            {data ? (items.length ? `${plural(items.length, 'запись', 'записи', 'записей')} · скрыты из списков, поиска и ответов чата` : 'Архив пуст') : ' '}
+            {data ? (items.length ? tr('{0} · скрыты из списков, поиска и ответов чата', [plural(items.length, 'запись', 'записи', 'записей')]) : tr('Архив пуст')) : ' '}
           </div>
         </div>
-        <button className="btn s32" onClick={() => navigate('/records')}>К записям</button>
+        <button className="btn s32" onClick={() => navigate('/records')}>{tr('К записям')}</button>
       </div>
       {error && !data && <ErrorBox text={error} />}
       {!data && !error && <Loading />}
@@ -32,12 +33,10 @@ export function Archive() {
                 <span className="archive-title">{r.title}</span>
                 <span className="archive-meta">
                   {dayLabel(r.date)}, {r.time}{r.durationSec != null ? ' · ' + fmt(r.durationSec) : ''}
-                  {' · '}{r.project?.title ?? 'Без проекта'}
+                  {' · '}{r.project?.title ?? tr('Без проекта')}
                 </span>
               </button>
-              <button className="btn accent s28" onClick={() => actions.safe(() => api.post(`/api/meetings/${r.id}/restore`), 'Запись возвращена из архива')}>
-                Вернуть
-              </button>
+              <button className="btn accent s28" onClick={() => actions.safe(() => api.post(`/api/meetings/${r.id}/restore`), tr('Запись возвращена из архива'))}>{tr('Вернуть')}</button>
             </div>
           ))}
         </div>

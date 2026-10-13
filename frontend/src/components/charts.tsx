@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { navigate, recordLink } from '../router'
-import { plural } from '../format'
+import { ownerLabel, plural } from '../format'
 import type { AnalyticsData } from '../types'
 import { addDays, barPath, dayNumber, hoursText, niceMax, shortDate, useTip, useWidth } from './viz'
+import { lc, tr } from '../i18n'
 
 type Weeks = AnalyticsData['weeks']
 
@@ -19,7 +20,7 @@ export function WeeklyChart({ weeks }: { weeks: Weeks }) {
   const peak = weeks.reduce((best, w, i) => (w.meetings > weeks[best].meetings ? i : best), 0)
   return (
     <div className="viz-svg-wrap" ref={box}>
-      <svg width={W} height={H} className="viz-svg" role="img" aria-label="Записи по неделям" onMouseLeave={tip.hide}>
+      <svg width={W} height={H} className="viz-svg" role="img" aria-label={tr('Записи по неделям')} onMouseLeave={tip.hide}>
         {ticks.map(t => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className={t === 0 ? 'v-axis' : 'v-grid'} />
@@ -37,9 +38,9 @@ export function WeeklyChart({ weeks }: { weeks: Weeks }) {
               {labelled && <text x={cx} y={y(w.meetings) - 6} textAnchor="middle" className="v-value">{w.meetings}</text>}
               {(W > 560 ? i % 2 === 1 : i % 3 === 2) || i === weeks.length - 1 ? <text x={cx} y={H - 8} textAnchor="middle" className="v-tick">{shortDate(w.start)}</text> : null}
               <rect x={L + band * i} y={T} width={band} height={H - T - B} fill="transparent" tabIndex={0}
-                aria-label={`Неделя с ${shortDate(w.start)}: ${text.join(', ')}`}
-                onMouseMove={e => tip.at(e, `Неделя с ${shortDate(w.start)}`, text)}
-                onFocus={e => tip.onElement(e.currentTarget, `Неделя с ${shortDate(w.start)}`, text)} onBlur={tip.hide} />
+                aria-label={tr('Неделя с {0}: {1}', [shortDate(w.start), text.join(', ')])}
+                onMouseMove={e => tip.at(e, tr('Неделя с {0}', [shortDate(w.start)]), text)}
+                onFocus={e => tip.onElement(e.currentTarget, tr('Неделя с {0}', [shortDate(w.start)]), text)} onBlur={tip.hide} />
             </g>
           )
         })}
@@ -54,9 +55,9 @@ export function OwnerBars({ rows }: { rows: AnalyticsData['byOwner'] }) {
   const tip = useTip()
   const max = Math.max(...rows.map(r => r.open + r.overdue + r.done), 1)
   const parts = [
-    { key: 'open', label: 'Открыты', cls: 'v-blue' }, { key: 'overdue', label: 'Просрочены', cls: 'v-crit' }, { key: 'done', label: 'Выполнены', cls: 'v-mute' },
+    { key: 'open', label: tr('Открыты'), cls: 'v-blue' }, { key: 'overdue', label: tr('Просрочены'), cls: 'v-crit' }, { key: 'done', label: tr('Выполнены'), cls: 'v-mute' },
   ] as const
-  if (rows.length === 0) return <div className="muted-text">Задач пока нет</div>
+  if (rows.length === 0) return <div className="muted-text">{tr('Задач пока нет')}</div>
   return (
     <div className="viz-rows" onMouseLeave={tip.hide}>
       {rows.map(r => {
@@ -64,13 +65,13 @@ export function OwnerBars({ rows }: { rows: AnalyticsData['byOwner'] }) {
         const shown = parts.filter(p => r[p.key] > 0)
         return (
           <div className="viz-row" key={r.owner}>
-            <span className="viz-row-label ellipsis" title={r.owner}>{r.owner}</span>
+            <span className="viz-row-label ellipsis" title={ownerLabel(r.owner)}>{ownerLabel(r.owner)}</span>
             <div className="viz-hbar" style={{ width: `${(total / max) * 100}%` }}>
               {shown.map((p, i) => (
                 <i key={p.key} tabIndex={0} className={`${p.cls}${i === shown.length - 1 ? ' last' : ''}`} style={{ flex: r[p.key] }}
-                  aria-label={`${r.owner}: ${p.label.toLowerCase()} — ${r[p.key]}`}
-                  onMouseMove={e => tip.at(e, r.owner, [`${p.label}: ${r[p.key]}`, `Всего: ${total}`])}
-                  onFocus={e => tip.onElement(e.currentTarget, r.owner, [`${p.label}: ${r[p.key]}`, `Всего: ${total}`])} onBlur={tip.hide} />
+                  aria-label={`${ownerLabel(r.owner)}: ${lc(p.label)} — ${r[p.key]}`}
+                  onMouseMove={e => tip.at(e, ownerLabel(r.owner), [`${p.label}: ${r[p.key]}`, tr('Всего: {0}', [total])])}
+                  onFocus={e => tip.onElement(e.currentTarget, ownerLabel(r.owner), [`${p.label}: ${r[p.key]}`, tr('Всего: {0}', [total])])} onBlur={tip.hide} />
               ))}
             </div>
             <span className="viz-row-value num">{total}</span>
@@ -94,7 +95,7 @@ export function Gantt({ data }: { data: AnalyticsData }) {
     const ticks = Array.from({ length: 5 }, (_, i) => addDays(from, Math.round(((span - 2) * i) / 4) - 1 + 1))
     return { t0, span, ticks }
   }, [rows, data.today])
-  if (rows.length === 0) return <div className="muted-text">Открытых задач со сроком нет</div>
+  if (rows.length === 0) return <div className="muted-text">{tr('Открытых задач со сроком нет')}</div>
   const pct = (iso: string) => ((dayNumber(iso) - range.t0) / range.span) * 100
   const todayPct = pct(data.today)
   return (
@@ -107,14 +108,14 @@ export function Gantt({ data }: { data: AnalyticsData }) {
       </div>
       {rows.map(g => {
         const left = pct(g.start), width = Math.max(pct(g.due) - left, 1.2)
-        const meta = [g.owner || 'Не назначен', g.project].filter(Boolean).join(' · ')
-        const lines = [meta, `${shortDate(g.start)} → ${shortDate(g.due)}${g.overdue ? ' · просрочено' : ''}`]
+        const meta = [ownerLabel(g.owner), g.project].filter(Boolean).join(' · ')
+        const lines = [meta, `${shortDate(g.start)} → ${shortDate(g.due)}${g.overdue ? tr(' · просрочено') : ''}`]
         return (
           <button key={g.id} className="viz-gantt-row" onClick={() => navigate(recordLink(g.meetingId, { t: g.tSec }))}
             onMouseMove={e => tip.at(e, g.text, lines)} onFocus={e => tip.onElement(e.currentTarget, g.text, lines)} onBlur={tip.hide}>
             <span className="viz-gantt-label">
               <span className="ellipsis">{g.text}</span>
-              <span className="viz-gantt-meta ellipsis">{meta}{g.overdue ? ' · просрочено' : ''}</span>
+              <span className="viz-gantt-meta ellipsis">{meta}{g.overdue ? tr(' · просрочено') : ''}</span>
             </span>
             <span className="viz-gantt-track">
               <i className="viz-today" style={{ left: `${todayPct}%` }} />
@@ -123,7 +124,7 @@ export function Gantt({ data }: { data: AnalyticsData }) {
           </button>
         )
       })}
-      <div className="viz-gantt-foot"><span /><span className="viz-gantt-note"><i className="viz-today inline" /> сегодня{data.ganttTotal > rows.length ? ` · показано ${rows.length} из ${data.ganttTotal} по ближайшим срокам` : ''}</span></div>
+      <div className="viz-gantt-foot"><span /><span className="viz-gantt-note"><i className="viz-today inline" />{' '}{tr(' сегодня')}{data.ganttTotal > rows.length ? tr(' · показано {0} из {1} по ближайшим срокам', [rows.length, data.ganttTotal]) : ''}</span></div>
       {tip.node}
     </div>
   )
@@ -135,11 +136,11 @@ export function DecisionTimeline({ data }: { data: AnalyticsData }) {
   const items = data.decisions
   const groups = useMemo(() => {
     const map = new Map<string, typeof items>()
-    for (const d of items) map.set(d.project || 'Без проекта', [...(map.get(d.project || 'Без проекта') ?? []), d])
+    for (const d of items) map.set(d.project || tr('Без проекта'), [...(map.get(d.project || tr('Без проекта')) ?? []), d])
     return [...map.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 6)
   }, [items])
   const color = (name: string) => data.graph.projects.find(p => p.name === name)?.color ?? '#8E8E93'
-  if (items.length === 0) return <div className="muted-text">Решений за выбранный период нет</div>
+  if (items.length === 0) return <div className="muted-text">{tr('Решений за выбранный период нет')}</div>
   const dates = items.map(d => dayNumber(d.date))
   const t0 = Math.min(...dates) - 1, t1 = Math.max(...dates) + 1, span = Math.max(t1 - t0, 2)
   const pct = (iso: string) => ((dayNumber(iso) - t0) / span) * 100
@@ -155,7 +156,7 @@ export function DecisionTimeline({ data }: { data: AnalyticsData }) {
               {list.map(d => {
                 const k = seen.get(d.date) ?? 0
                 seen.set(d.date, k + 1)
-                const lines = [shortDate(d.date) + (d.draft ? ' · черновик' : '')]
+                const lines = [shortDate(d.date) + (d.draft ? tr(' · черновик') : '')]
                 return (
                   <button key={d.id} className="viz-dot" style={{ left: `calc(${pct(d.date)}% - ${k * 12}px)`, background: color(name) }}
                     aria-label={d.text} onClick={() => navigate(recordLink(d.meetingId, { t: d.tSec }))}
@@ -178,7 +179,7 @@ export function LinkGraph({ graph }: { graph: AnalyticsData['graph'] }) {
   const tip = useTip()
   const [hot, setHot] = useState<{ kind: 'p' | 'j'; name: string } | null>(null)
   const { people, projects, links } = graph
-  if (links.length === 0) return <div className="muted-text">Связей пока нет: добавьте участников и проекты к записям</div>
+  if (links.length === 0) return <div className="muted-text">{tr('Связей пока нет: добавьте участников и проекты к записям')}</div>
   const [box, W] = useWidth()
   const rowH = 30, top = 14
   const rows = Math.max(people.length, projects.length)
@@ -190,7 +191,7 @@ export function LinkGraph({ graph }: { graph: AnalyticsData['graph'] }) {
   const active = (l: typeof links[number]) => !hot || (hot.kind === 'p' ? hot.name === l.person : hot.name === l.project)
   return (
     <div className="viz-svg-wrap" ref={box}>
-      <svg width={W} height={H} className="viz-svg" role="img" aria-label="Связи людей и проектов" onMouseLeave={() => { setHot(null); tip.hide() }}>
+      <svg width={W} height={H} className="viz-svg" role="img" aria-label={tr('Связи людей и проектов')} onMouseLeave={() => { setHot(null); tip.hide() }}>
         {links.map(l => {
           const i = people.findIndex(p => p.name === l.person), j = projects.findIndex(p => p.name === l.project)
           const ya = yp(i, people.length), yb = yp(j, projects.length), mid = (x1 + x2) / 2

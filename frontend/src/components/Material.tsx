@@ -6,12 +6,13 @@ import { navigate, recordLink } from '../router'
 import type { ArtifactKind, MapNode, MaterialKind, MaterialResult, MaterialTarget } from '../types'
 import { IconOut, Segmented } from './ui'
 import { ExportMenu, MAP_FORMATS } from './ExportMenu'
+import { tr } from '../i18n'
 
 const TITLES: Record<MaterialKind, string> = {
-  protocol: 'Протокол встречи', map: 'Карта', deck: 'Презентация',
-  memo: 'Служебная записка', brief: 'Бриф', followup: 'Письмо участникам (черновик)', digest: 'Дайджест по проектам',
+  protocol: tr('Протокол встречи'), map: tr('Карта'), deck: tr('Презентация'),
+  memo: tr('Служебная записка'), brief: tr('Бриф'), followup: tr('Письмо участникам (черновик)'), digest: tr('Дайджест по проектам'),
 }
-const DIGEST_PERIODS = [{ key: 'this_week', label: 'Эта неделя' }, { key: 'last_week', label: 'Прошлая неделя' }, { key: 'this_month', label: 'Этот месяц' }, { key: 'last_month', label: 'Прошлый месяц' }]
+const DIGEST_PERIODS = [{ key: 'this_week', label: tr('Эта неделя') }, { key: 'last_week', label: tr('Прошлая неделя') }, { key: 'this_month', label: tr('Этот месяц') }, { key: 'last_month', label: tr('Прошлый месяц') }]
 const isArtifact = (kind: MaterialKind): kind is ArtifactKind => kind === 'memo' || kind === 'brief' || kind === 'followup'
 
 interface TimeLink { id: string; t: string; sec: number; text: string }
@@ -34,7 +35,7 @@ function timeLinks(text: string, refs: NonNullable<MaterialResult['refs']>): Tim
   }
   return out
 }
-const PERIODS = [{ key: '30', label: '30 дней' }, { key: '90', label: '90 дней' }, { key: '365', label: 'Год' }, { key: '3650', label: 'Всё время' }]
+const PERIODS = [{ key: '30', label: tr('30 дней') }, { key: '90', label: tr('90 дней') }, { key: '365', label: tr('Год') }, { key: '3650', label: tr('Всё время') }]
 
 function Tree({ node, depth = 0 }: { node: MapNode; depth?: number }) {
   return (
@@ -77,7 +78,7 @@ export function MaterialModal() {
 
   const applyResult = (data: MaterialResult) => {
     setResult(data)
-    setText(data.markdown ?? (data.mermaid ? `# Карта: ${data.title}\n\n\`\`\`mermaid\n${data.mermaid}\n\`\`\`\n` : ''))
+    setText(data.markdown ?? (data.mermaid ? tr('# Карта: {0}\n\n```mermaid\n{1}\n```\n', [data.title, data.mermaid]) : ''))
   }
 
   const generate = useCallback(async (target: MaterialTarget, period: string, to = '') => {
@@ -95,7 +96,7 @@ export function MaterialModal() {
           state = await api.get<ProtocolProgress>(`${base}/progress`)
         }
         if (mine !== seq.current) return
-        if (state.state === 'error' || !state.result) throw new Error(state.message ?? 'Не удалось составить протокол')
+        if (state.state === 'error' || !state.result) throw new Error(state.message ?? tr('Не удалось составить протокол'))
         setProgress({ ...state, percent: 100 })
         applyResult(state.result)
         return
@@ -133,11 +134,11 @@ export function MaterialModal() {
   const artifact = isArtifact(kind) || kind === 'digest'
   const needsPeriod = kind !== 'protocol' && !material.meetingId
   const links = result && artifact ? timeLinks(text, result.refs ?? []) : []
-  const fileName = result?.fileName ?? `${kind === 'map' ? 'Карта — ' : ''}${result?.title ?? material.title}.md`
+  const fileName = result?.fileName ?? `${kind === 'map' ? tr('Карта — ') : ''}${result?.title ?? material.title}.md`
 
   const copy = async () => {
-    try { await navigator.clipboard.writeText(kind === 'map' && result?.mermaid ? result.mermaid : text); showToast(kind === 'map' ? 'Код карты скопирован' : 'Текст скопирован') }
-    catch { showToast('Не удалось скопировать — выделите текст вручную') }
+    try { await navigator.clipboard.writeText(kind === 'map' && result?.mermaid ? result.mermaid : text); showToast(kind === 'map' ? tr('Код карты скопирован') : tr('Текст скопирован')) }
+    catch { showToast(tr('Не удалось скопировать — выделите текст вручную')) }
   }
   const makeDeck = async () => {
     setDeckBusy(true)
@@ -151,7 +152,7 @@ export function MaterialModal() {
       const saveKind = artifact ? kind : kind === 'map' ? 'map' : 'protocol'
       const out = await api.post<{ savedAs: string; obsidianUrl?: string }>('/api/materials/save', { kind: saveKind, name: fileName, content: text })
       setSaved({ path: out.savedAs, url: out.obsidianUrl })
-      showToast('Сохранено в Obsidian')
+      showToast(tr('Сохранено в Obsidian'))
     } catch (e) { showToast(errorText(e)) }
   }
 
@@ -171,54 +172,45 @@ export function MaterialModal() {
             {needsPeriod && <Segmented small items={kind === 'digest' ? DIGEST_PERIODS : PERIODS} value={days} onChange={v => setDays(v)} />}
             {kind === 'memo' && (
               <input className="material-to" value={addressee} maxLength={200} onChange={e => setAddressee(e.target.value)}
-                placeholder="Кому: должность, ФИО" aria-label="Адресат записки" />
+                placeholder={tr('Кому: должность, ФИО')} aria-label={tr('Адресат записки')} />
             )}
             <button className="btn accent s34" disabled={busy} onClick={() => void generate(material, days, addressee)}>
-              {busy ? 'Собираю…' : result ? (kind === 'memo' && !needsPeriod ? 'Подставить адресата' : 'Собрать заново') : kind === 'deck' ? 'Создать презентацию' : artifact ? 'Составить' : 'Построить карту'}
+              {busy ? tr('Собираю…') : result ? (kind === 'memo' && !needsPeriod ? tr('Подставить адресата') : tr('Собрать заново')) : kind === 'deck' ? tr('Создать презентацию') : artifact ? tr('Составить') : tr('Построить карту')}
             </button>
           </div>
         )}
         {needsPeriod && artifact && !result && !busy && !error && (
-          <div className="muted-text">Выберите период и нажмите «Составить».</div>
+          <div className="muted-text">{tr('Выберите период и нажмите «Составить».')}</div>
         )}
         {!needsPeriod && busy && kind === 'protocol' && (
-          <div className="proto-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress?.percent ?? 0} aria-label="Составление протокола">
+          <div className="proto-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress?.percent ?? 0} aria-label={tr('Составление протокола')}>
             <div className="proto-line">
-              <b>{progress?.label ?? 'Запускаю…'}</b>
+              <b>{progress?.label ?? tr('Запускаю…')}</b>
               <span className="num">{progress?.percent ?? 0}%</span>
             </div>
             <div className="track"><i style={{ width: (progress?.percent ?? 0) + '%' }} /></div>
             <div className="proto-sub">
-              {progress ? `Шаг ${progress.step} из ${progress.steps} · прошло ${progress.elapsed} с` : 'Подготовка'}
-              {progress && progress.step === 2 && ' · с локальной моделью этот шаг занимает от нескольких секунд до минуты'}
+              {progress ? tr('Шаг {0} из {1} · прошло {2} с', [progress.step, progress.steps, progress.elapsed]) : tr('Подготовка')}
+              {progress && progress.step === 2 && tr(' · с локальной моделью этот шаг занимает от нескольких секунд до минуты')}
             </div>
           </div>
         )}
-        {!needsPeriod && busy && kind !== 'protocol' && <div className="muted-text">Собираю…</div>}
+        {!needsPeriod && busy && kind !== 'protocol' && <div className="muted-text">{tr('Собираю…')}</div>}
         {error && <div className="error-box" style={{ marginTop: 0 }}>{error}</div>}
 
         {result && kind === 'protocol' && (
           <>
-            <textarea className="material-text" value={text} onChange={e => setText(e.target.value)} aria-label="Текст протокола" spellCheck={false} />
-            <div className="muted-text" style={{ fontSize: 13 }}>
-              {result.mode === 'model' ? 'Ход обсуждения написан локальной моделью по фактам записи — проверьте перед отправкой.' : 'Протокол собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'}
-              {' '}Текст можно править здесь.
-            </div>
+            <textarea className="material-text" value={text} onChange={e => setText(e.target.value)} aria-label={tr('Текст протокола')} spellCheck={false} />
+            <div className="muted-text" style={{ fontSize: 13 }}>{tr('{0} {1}Текст можно править здесь.', [result.mode === 'model' ? tr('Ход обсуждения написан локальной моделью по фактам записи — проверьте перед отправкой.') : tr('Протокол собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'), ' '])}</div>
           </>
         )}
         {result && artifact && (
           <>
             <textarea className="material-text" value={text} onChange={e => setText(e.target.value)} aria-label={TITLES[kind]} spellCheck={false} />
-            <div className="muted-text" style={{ fontSize: 13 }}>
-              Каждый пункт взят из решений, задач и вопросов записей и помечен таймкодом места в записи.{' '}
-              {result.mode === 'model' ? 'Вводный абзац написала локальная модель — проверьте его.' : 'Документ собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'}
-              {kind === 'digest' && ' «Закрыто за период» — задачи, отмеченные выполненными в этом периоде; «Требует внимания» — просроченные, в том числе из прежних записей.'}
-              {kind === 'followup' && ' Это черновик: письмо не отправляется, скопируйте его или скачайте.'}
-              {' '}Текст можно править здесь.
-            </div>
+            <div className="muted-text" style={{ fontSize: 13 }}>{tr('Каждый пункт взят из решений, задач и вопросов записей и помечен таймкодом места в записи.{0} {1} {2} {3} {4}Текст можно править здесь.', [' ', result.mode === 'model' ? tr('Вводный абзац написала локальная модель — проверьте его.') : tr('Документ собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'), kind === 'digest' && tr(' «Закрыто за период» — задачи, отмеченные выполненными в этом периоде; «Требует внимания» — просроченные, в том числе из прежних записей.'), kind === 'followup' && tr(' Это черновик: письмо не отправляется, скопируйте его или скачайте.'), ' '])}</div>
             {links.length > 0 && (
               <details className="doc-times">
-                <summary>Места в записи · {links.length}</summary>
+                <summary>{tr('Места в записи · {0}', [links.length])}</summary>
                 <ul>
                   {links.map(l => (
                     <li key={l.id + l.sec}>
@@ -231,7 +223,7 @@ export function MaterialModal() {
             )}
             {(result.skipped?.length ?? 0) > 0 && (
               <details className="doc-times skipped">
-                <summary>Не вошло: нет места в записи · {result.skipped!.length}</summary>
+                <summary>{tr('Не вошло: нет места в записи · {0}', [result.skipped!.length])}</summary>
                 <ul>{result.skipped!.map((x, i) => <li key={i}><span>{x.text}</span></li>)}</ul>
               </details>
             )}
@@ -240,46 +232,44 @@ export function MaterialModal() {
         {result && kind === 'map' && result.tree && (
           <>
             <ul className="map-tree"><Tree node={result.tree} /></ul>
-            <div className="muted-text" style={{ fontSize: 13 }}>В Obsidian карта сохраняется как схема Mermaid. «Скачать карту» даёт PNG и SVG для презентаций и OPML для XMind, MindNode и OmniOutliner.</div>
+            <div className="muted-text" style={{ fontSize: 13 }}>{tr('В Obsidian карта сохраняется как схема Mermaid. «Скачать карту» даёт PNG и SVG для презентаций и OPML для XMind, MindNode и OmniOutliner.')}</div>
           </>
         )}
         {result && kind === 'deck' && result.url && (
           <div className="material-deck">
             <div>
               <b>{plural(result.slides ?? 0, 'слайд', 'слайда', 'слайдов')}</b>
-              <span className="muted-text"> · {result.mode === 'model' ? 'слайд «Главное» написала локальная модель' : 'слайд «Главное» собран из цифр и свежих резюме без модели'}</span>
+              <span className="muted-text"> · {result.mode === 'model' ? tr('слайд «Главное» написала локальная модель') : tr('слайд «Главное» собран из цифр и свежих резюме без модели')}</span>
             </div>
-            <a className="btn accent s36" href={result.url} download style={{ textDecoration: 'none' }}>Скачать .pptx</a>
-            <div className="muted-text" style={{ fontSize: 13 }}>Файл открывается в Keynote, PowerPoint и Google Slides. Копия лежит в папке «presentations» кабинета.</div>
+            <a className="btn accent s36" href={result.url} download style={{ textDecoration: 'none' }}>{tr('Скачать .pptx')}</a>
+            <div className="muted-text" style={{ fontSize: 13 }}>{tr('Файл открывается в Keynote, PowerPoint и Google Slides. Копия лежит в папке «presentations» кабинета.')}</div>
           </div>
         )}
         {deck && (
-          <div className="material-saved">
-            Презентация готова: {plural(deck.slides, 'слайд', 'слайда', 'слайдов')}.
-            <a href={deck.url} download style={{ marginLeft: 8 }}>Скачать .pptx</a>
+          <div className="material-saved">{tr('Презентация готова: ')}{' '}{plural(deck.slides, 'слайд', 'слайда', 'слайдов')}.
+            <a href={deck.url} download style={{ marginLeft: 8 }}>{tr('Скачать .pptx')}</a>
           </div>
         )}
         {saved && (
-          <div className="material-saved">
-            Сохранено: <code>{saved.path}</code>
-            {saved.url && <a href={saved.url} style={{ marginLeft: 8 }}>Открыть в Obsidian <IconOut /></a>}
+          <div className="material-saved">{tr('Сохранено: ')}{' '}<code>{saved.path}</code>
+            {saved.url && <a href={saved.url} style={{ marginLeft: 8 }}>{tr('Открыть в Obsidian ')}{' '}<IconOut /></a>}
           </div>
         )}
 
         <div className="modal-foot">
           {result && kind !== 'deck' && (
             <>
-              <button className="btn s34" onClick={() => void copy()}>{kind === 'map' ? 'Копировать код' : 'Копировать'}</button>
+              <button className="btn s34" onClick={() => void copy()}>{kind === 'map' ? tr('Копировать код') : tr('Копировать')}</button>
               {kind === 'map' && result.tree
-                ? <ExportMenu endpoint="/api/export/map" formats={MAP_FORMATS} label="Скачать карту" up body={() => ({ title: result.title, tree: result.tree })} />
+                ? <ExportMenu endpoint="/api/export/map" formats={MAP_FORMATS} label={tr('Скачать карту')} up body={() => ({ title: result.title, tree: result.tree })} />
                 : <ExportMenu endpoint="/api/export" up body={() => ({ title: result.title, markdown: text, name: fileName.replace(/\.md$/i, '') })} />}
-              <button className="btn s34" onClick={() => void save()}>В Obsidian</button>
+              <button className="btn s34" onClick={() => void save()}>{tr('В Obsidian')}</button>
               {kind === 'digest' && (
-                <button className="btn s34" disabled={deckBusy} onClick={() => void makeDeck()}>{deckBusy ? 'Собираю…' : 'Презентация'}</button>
+                <button className="btn s34" disabled={deckBusy} onClick={() => void makeDeck()}>{deckBusy ? tr('Собираю…') : tr('Презентация')}</button>
               )}
             </>
           )}
-          <button className="btn accent s34" onClick={() => setMaterial(null)}>Закрыть</button>
+          <button className="btn accent s34" onClick={() => setMaterial(null)}>{tr('Закрыть')}</button>
         </div>
       </div>
     </div>

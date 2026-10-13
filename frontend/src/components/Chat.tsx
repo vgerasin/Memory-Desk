@@ -5,8 +5,9 @@ import type { ChatScope } from '../types'
 import { dayLabel, tc } from '../format'
 import { IconClose, IconPlay, IconSend } from './ui'
 import { ExportMenu } from './ExportMenu'
+import { lc, tr } from '../i18n'
 
-const SUGGESTIONS = ['Что сделано за последнюю неделю?', 'Итоги за месяц по каждому проекту', 'Какие задачи сейчас открыты?', 'О чём были последние записи?']
+const SUGGESTIONS = [tr('Что сделано за последнюю неделю?'), tr('Итоги за месяц по каждому проекту'), tr('Какие задачи сейчас открыты?'), tr('О чём были последние записи?')]
 
 /** Мини-разметка ответа: **жирный**, _курсив_, списки «- ». Без HTML, поэтому безопасно. */
 function inline(text: string, key: string) {
@@ -42,11 +43,11 @@ export function Chat() {
   if (!chat.open) return null
 
   const scopes: ChatScope[] = [{ kind: 'all' }]
-  if (currentRecord) scopes.push({ kind: 'record', id: currentRecord, label: 'Текущая запись' })
-  for (const p of meta?.projects ?? []) scopes.push({ kind: 'project', id: p.id, title: p.title, label: 'Проект: ' + p.title })
-  for (const p of (meta?.people ?? []).slice(0, 8)) scopes.push({ kind: 'person', id: p.id, label: 'Человек: ' + p.name.split(' ')[0] })
-  scopes.push({ kind: 'days', days: 7, label: '7 дней' })
-  const labelOf = (s: ChatScope) => ('label' in s ? s.label : 'Весь архив')
+  if (currentRecord) scopes.push({ kind: 'record', id: currentRecord, label: tr('Текущая запись') })
+  for (const p of meta?.projects ?? []) scopes.push({ kind: 'project', id: p.id, title: p.title, label: tr('Проект: ') + p.title })
+  for (const p of (meta?.people ?? []).slice(0, 8)) scopes.push({ kind: 'person', id: p.id, label: tr('Человек: ') + p.name.split(' ')[0] })
+  scopes.push({ kind: 'days', days: 7, label: tr('7 дней') })
+  const labelOf = (s: ChatScope) => ('label' in s ? s.label : tr('Весь архив'))
   const sameScope = (a: ChatScope, b: ChatScope) =>
     a.kind === b.kind && ('id' in a ? 'id' in b && a.id === b.id : true) && ('days' in a ? 'days' in b && a.days === b.days : true)
 
@@ -55,13 +56,13 @@ export function Chat() {
   return (
     <>
       <div className="scrim" onClick={chat.closeChat} />
-      <aside className="chat" role="dialog" aria-label="Спросить архив">
+      <aside className="chat" role="dialog" aria-label={tr('Спросить архив')}>
         <div className="chat-head">
           <div>
-            <span className="chat-title">Спросить архив</span>
-            <span className="chat-sub">Ответы только по вашим записям, с источниками</span>
+            <span className="chat-title">{tr('Спросить архив')}</span>
+            <span className="chat-sub">{tr('Ответы только по вашим записям, с источниками')}</span>
           </div>
-          <button className="round-btn" onClick={chat.closeChat} aria-label="Закрыть"><IconClose /></button>
+          <button className="round-btn" onClick={chat.closeChat} aria-label={tr('Закрыть')}><IconClose /></button>
         </div>
         <div className="scopes">
           {scopes.map(s => (
@@ -73,7 +74,7 @@ export function Chat() {
         <div className="chat-scroll" ref={scroll}>
           {!chat.messages.length && (
             <div className="suggest">
-              <span>Например</span>
+              <span>{tr('Например')}</span>
               {SUGGESTIONS.map(t => <button key={t} onClick={() => chat.send(t)}>{t}</button>)}
             </div>
           )}
@@ -85,23 +86,21 @@ export function Chat() {
                 {m.digest || m.material ? <RichText text={m.text} /> : m.text}
               </div>
               {m.material && m.material.kind === 'deck' && m.material.result.url && (
-                <a className="btn accent s34 chat-file" href={m.material.result.url} download>Скачать презентацию (.pptx)</a>
+                <a className="btn accent s34 chat-file" href={m.material.result.url} download>{tr('Скачать презентацию (.pptx)')}</a>
               )}
               {m.material && m.material.kind !== 'deck' && (
-                <button className="btn s34 chat-file" onClick={() => setMaterial({ kind: m.material!.kind, title: m.material!.result.title, result: m.material!.result })}>
-                  Открыть окно: править, скачать, в Obsidian
-                </button>
+                <button className="btn s34 chat-file" onClick={() => setMaterial({ kind: m.material!.kind, title: m.material!.result.title, result: m.material!.result })}>{tr('Открыть окно: править, скачать, в Obsidian')}</button>
               )}
               {!m.pending && !m.error && !m.material && (m.sources?.length ?? 0) > 0 && (
                 <div className="save-answer">
                   {m.saved ? (
                     <>
-                      <span className="saved-mark">Сохранено в Obsidian</span>
-                      <a className="link-btn" href={m.saved.obsidianUrl}>Открыть заметку</a>
+                      <span className="saved-mark">{tr('Сохранено в Obsidian')}</span>
+                      <a className="link-btn" href={m.saved.obsidianUrl}>{tr('Открыть заметку')}</a>
                     </>
                   ) : (
                     <button className="btn s28" disabled={m.saving} onClick={() => void chat.saveAnswer(m.id)}>
-                      {m.saving ? 'Сохраняю…' : 'Сохранить в Obsidian'}
+                      {m.saving ? tr('Сохраняю…') : tr('Сохранить в Obsidian')}
                     </button>
                   )}
                   <ExportMenu endpoint="/api/chat/export" className="btn s28" up
@@ -110,7 +109,7 @@ export function Chat() {
                 </div>
               )}
               {m.digest && m.sources && m.sources.length > 0 && (
-                <div className="digest-note">Записи за период: {m.digest.shown < m.digest.records ? `последние ${m.digest.shown} из ${m.digest.records}` : m.digest.records}</div>
+                <div className="digest-note">{tr('Записи за период: {0}', [m.digest.shown < m.digest.records ? tr('последние {0} из {1}', [m.digest.shown, m.digest.records]) : m.digest.records])}</div>
               )}
               {(m.sources ?? []).map((s, i) => (
                 <div className="source" key={i}>
@@ -123,14 +122,14 @@ export function Chat() {
                     <button className="source-open" onClick={() => { chat.closeChat(); navigate(recordLink(s.meetingId, { t: s.tSec })) }}>
                       <IconPlay size={9} />
                       {s.tSec != null && <span className="num">{tc(s.tSec)}</span>}
-                      <span>{s.tSec != null ? '· открыть' : 'Открыть запись'}</span>
+                      <span>{s.tSec != null ? tr('· открыть') : tr('Открыть запись')}</span>
                     </button>
                   )}
                 </div>
               ))}
               {index === chat.messages.length - 1 && !m.pending && !m.error && (m.suggestions?.length ?? 0) > 0 && (
-                <div className="followups" aria-label="Что спросить дальше">
-                  <span>Что спросить дальше</span>
+                <div className="followups" aria-label={tr('Что спросить дальше')}>
+                  <span>{tr('Что спросить дальше')}</span>
                   {m.suggestions!.map(q => <button key={q} disabled={chat.busy} onClick={() => chat.send(q)}>{q}</button>)}
                 </div>
               )}
@@ -139,11 +138,11 @@ export function Chat() {
         </div>
         <div className="chat-foot">
           <div className="chat-input">
-            <input ref={field} value={input} onChange={e => setInput(e.target.value)} placeholder={'Вопрос · ' + labelOf(chat.scope).toLowerCase()}
+            <input ref={field} value={input} onChange={e => setInput(e.target.value)} placeholder={tr('Вопрос · ') + lc(labelOf(chat.scope))}
               onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} />
-            <button className="send" onClick={submit} disabled={chat.busy} aria-label="Отправить"><IconSend /></button>
+            <button className="send" onClick={submit} disabled={chat.busy} aria-label={tr('Отправить')}><IconSend /></button>
           </div>
-          {chat.messages.length > 0 && <button className="chat-clear" onClick={chat.clear}>Очистить беседу</button>}
+          {chat.messages.length > 0 && <button className="chat-clear" onClick={chat.clear}>{tr('Очистить беседу')}</button>}
         </div>
       </aside>
     </>

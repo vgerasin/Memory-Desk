@@ -4,6 +4,7 @@ import { useApp } from '../store'
 import { useApi } from '../useApi'
 import { tc } from '../format'
 import type { MeetingDetail, ViewDto, ViewJob, ViewPresets } from '../types'
+import { tr } from '../i18n'
 
 /** Вкладка «Взгляды»: дополнительные разделы заметки с другим фокусом. Основное саммари они не заменяют. */
 export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump: (sec: number | null) => void }) {
@@ -28,7 +29,7 @@ export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump
         setJob(r)
         if (r.state === 'done' || r.state === 'error') {
           stop()
-          if (r.state === 'done') { invalidate(); if (r.viewId) setActive(r.viewId); showToast(`Взгляд «${r.title}» готов`) }
+          if (r.state === 'done') { invalidate(); if (r.viewId) setActive(r.viewId); showToast(tr('Взгляд «{0}» готов', [r.title])) }
         }
       } catch (e) { stop(); setError(errorText(e)) }
     }, 600)
@@ -62,33 +63,33 @@ export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump
     try {
       await api.del(`/api/meetings/${meeting.id}/views/${v.id}`)
       setConfirm(null); setActive(''); invalidate()
-      showToast(`Взгляд «${v.title}» удалён, остальная заметка не изменилась`)
+      showToast(tr('Взгляд «{0}» удалён, остальная заметка не изменилась', [v.title]))
     } catch (e) { setError(errorText(e)) }
   }
 
   return (
     <div className="views">
       <div className="views-head">
-        <div className="hint">Взгляд — отдельный раздел заметки с другим фокусом. Основное краткое содержание он не заменяет, а строится заново по стенограмме.</div>
-        {!adding && !running && views.length < max && <button className="btn s28 accent" onClick={() => setAdding(true)}>Добавить взгляд</button>}
+        <div className="hint">{tr('Взгляд — отдельный раздел заметки с другим фокусом. Основное краткое содержание он не заменяет, а строится заново по стенограмме.')}</div>
+        {!adding && !running && views.length < max && <button className="btn s28 accent" onClick={() => setAdding(true)}>{tr('Добавить взгляд')}</button>}
       </div>
 
       {running && (
-        <div className="proto-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={job.percent ?? 0} aria-label="Построение взгляда">
-          <div className="proto-line"><b>{job.label ?? 'Запускаю…'}</b><span className="num">{job.percent ?? 0}%</span></div>
+        <div className="proto-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={job.percent ?? 0} aria-label={tr('Построение взгляда')}>
+          <div className="proto-line"><b>{job.label ?? tr('Запускаю…')}</b><span className="num">{job.percent ?? 0}%</span></div>
           <div className="track"><i style={{ width: (job.percent ?? 0) + '%' }} /></div>
-          <div className="proto-sub">Прошло {job.elapsed ?? 0} с · локальная модель читает стенограмму, обычно это от нескольких секунд до минуты</div>
+          <div className="proto-sub">{tr('Прошло {0} с · локальная модель читает стенограмму, обычно это от нескольких секунд до минуты', [job.elapsed ?? 0])}</div>
         </div>
       )}
       {(error || job.state === 'error') && <div className="hint bad" role="alert">{error || job.message}</div>}
 
       {adding && presets && (
         <div className="view-add">
-          <div className="label-caps">Готовые взгляды</div>
+          <div className="label-caps">{tr('Готовые взгляды')}</div>
           <div className="view-presets">
             {(presets.presets).map(p => have(p.id) ? (
               <button key={p.id} className="view-preset have" onClick={() => { setActive(p.id); setAdding(false) }}>
-                <b>{p.title}</b><span>Уже есть в этой записи. Открыть; обновить можно кнопкой «Пересчитать».</span>
+                <b>{p.title}</b><span>{tr('Уже есть в этой записи. Открыть; обновить можно кнопкой «Пересчитать».')}</span>
               </button>
             ) : (
               <button key={p.id} className="view-preset" onClick={() => void launch(`/api/meetings/${meeting.id}/views`, { presetId: p.id })}>
@@ -96,23 +97,23 @@ export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump
               </button>
             ))}
           </div>
-          <div className="label-caps">Свой взгляд</div>
+          <div className="label-caps">{tr('Свой взгляд')}</div>
           <div className="view-custom">
-            <input value={title} maxLength={60} placeholder="Название, например «Что согласовать с юристом»" aria-label="Название взгляда" onChange={e => setTitle(e.target.value)} />
-            {sameAsPreset && <div className="hint">«{sameAsPreset.title}» — готовый взгляд: выберите его в списке выше, описывать ничего не нужно.</div>}
-            <textarea value={instruction} maxLength={400} placeholder="Что выписывать: одной-двумя фразами" aria-label="Что выписывать" onChange={e => setInstruction(e.target.value)} />
+            <input value={title} maxLength={60} placeholder={tr('Название, например «Что согласовать с юристом»')} aria-label={tr('Название взгляда')} onChange={e => setTitle(e.target.value)} />
+            {sameAsPreset && <div className="hint">{tr('«{0}» — готовый взгляд: выберите его в списке выше, описывать ничего не нужно.', [sameAsPreset.title])}</div>}
+            <textarea value={instruction} maxLength={400} placeholder={tr('Что выписывать: одной-двумя фразами')} aria-label={tr('Что выписывать')} onChange={e => setInstruction(e.target.value)} />
             <div className="row">
               <button className="btn s28 accent" disabled={!title.trim() || tooShort || !!sameAsPreset}
-                onClick={() => void launch(`/api/meetings/${meeting.id}/views`, { title, instruction })}>Построить</button>
-              <button className="btn s28" onClick={() => setAdding(false)}>Отмена</button>
+                onClick={() => void launch(`/api/meetings/${meeting.id}/views`, { title, instruction })}>{tr('Построить')}</button>
+              <button className="btn s28" onClick={() => setAdding(false)}>{tr('Отмена')}</button>
             </div>
-            {!sameAsPreset && (!title.trim() || tooShort) && <div className="hint">Чтобы «Построить» стало активным, введите название и опишите, что выписывать (не короче 8 символов).</div>}
+            {!sameAsPreset && (!title.trim() || tooShort) && <div className="hint">{tr('Чтобы «Построить» стало активным, введите название и опишите, что выписывать (не короче 8 символов).')}</div>}
           </div>
         </div>
       )}
 
       {views.length === 0 && !adding && !running && (
-        <div className="muted-text">Взглядов пока нет. Например: «Только решения», «Риски» или «Для руководителя на 5 строк».</div>
+        <div className="muted-text">{tr('Взглядов пока нет. Например: «Только решения», «Риски» или «Для руководителя на 5 строк».')}</div>
       )}
 
       {views.length > 0 && (
@@ -123,14 +124,14 @@ export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump
             ))}
           </div>
           {current && (
-            <section className="view-body" aria-label={`Взгляд «${current.title}»`}>
+            <section className="view-body" aria-label={tr('Взгляд «{0}»', [current.title])}>
               <div className="view-source">
-                {current.date && <span>Построен {current.date.split('-').reverse().join('.')}</span>}
+                {current.date && <span>{tr('Построен {0}', [current.date.split('-').reverse().join('.')])}</span>}
                 {current.model && <span>{current.model}</span>}
-                <span>по стенограмме</span>
-                {current.edited && <span className="view-edited">правили вручную</span>}
+                <span>{tr('по стенограмме')}</span>
+                {current.edited && <span className="view-edited">{tr('правили вручную')}</span>}
               </div>
-              {current.items.length === 0 && <div className="muted-text">Подходящего в записи не нашлось</div>}
+              {current.items.length === 0 && <div className="muted-text">{tr('Подходящего в записи не нашлось')}</div>}
               {current.items.map((it, i) => (
                 <div className="extra-item" key={i}>
                   <span>{it.text}</span>
@@ -140,21 +141,21 @@ export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump
               <div className="view-actions">
                 {confirm === 'refresh' ? (
                   <>
-                    <span className="hint bad">Раздел правили вручную, пересчёт заменит правки.</span>
-                    <button className="btn s28 accent" disabled={running} onClick={() => void launch(`/api/meetings/${meeting.id}/views/${current.id}/refresh?force=true`)}>Заменить</button>
-                    <button className="btn s28" onClick={() => setConfirm(null)}>Не надо</button>
+                    <span className="hint bad">{tr('Раздел правили вручную, пересчёт заменит правки.')}</span>
+                    <button className="btn s28 accent" disabled={running} onClick={() => void launch(`/api/meetings/${meeting.id}/views/${current.id}/refresh?force=true`)}>{tr('Заменить')}</button>
+                    <button className="btn s28" onClick={() => setConfirm(null)}>{tr('Не надо')}</button>
                   </>
                 ) : confirm === 'delete' ? (
                   <>
-                    <span className="hint">Удалить только этот раздел. Остальная заметка не изменится.</span>
-                    <button className="btn s28 accent" onClick={() => void remove(current)}>Удалить</button>
-                    <button className="btn s28" onClick={() => setConfirm(null)}>Не надо</button>
+                    <span className="hint">{tr('Удалить только этот раздел. Остальная заметка не изменится.')}</span>
+                    <button className="btn s28 accent" onClick={() => void remove(current)}>{tr('Удалить')}</button>
+                    <button className="btn s28" onClick={() => setConfirm(null)}>{tr('Не надо')}</button>
                   </>
                 ) : (
                   <>
                     <button className="btn s28" disabled={running}
-                      onClick={() => (current.edited ? setConfirm('refresh') : void launch(`/api/meetings/${meeting.id}/views/${current.id}/refresh`))}>Пересчитать</button>
-                    <button className="btn s28" disabled={running} onClick={() => setConfirm('delete')}>Удалить</button>
+                      onClick={() => (current.edited ? setConfirm('refresh') : void launch(`/api/meetings/${meeting.id}/views/${current.id}/refresh`))}>{tr('Пересчитать')}</button>
+                    <button className="btn s28" disabled={running} onClick={() => setConfirm('delete')}>{tr('Удалить')}</button>
                   </>
                 )}
               </div>

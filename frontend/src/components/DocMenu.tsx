@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../store'
 import type { ArtifactKind } from '../types'
+import { tr } from '../i18n'
 
 export const ARTIFACTS: { kind: ArtifactKind; label: string; hint: string }[] = [
-  { kind: 'memo', label: 'Служебная записка', hint: 'суть, обоснование, решения, что просим' },
-  { kind: 'brief', label: 'Бриф', hint: 'цель, договорённости, сроки, ответственные' },
-  { kind: 'followup', label: 'Письмо участникам', hint: 'черновик: итоги и задачи по людям' },
+  { kind: 'memo', label: tr('Служебная записка'), hint: tr('суть, обоснование, решения, что просим') },
+  { kind: 'brief', label: tr('Бриф'), hint: tr('цель, договорённости, сроки, ответственные') },
+  { kind: 'followup', label: tr('Письмо участникам'), hint: tr('черновик: итоги и задачи по людям') },
 ]
 
 /** «Документ ▾»: служебная записка, бриф или письмо участникам по записи, проекту или человеку. Каждый пункт — с таймкодом записи. */
@@ -25,7 +26,7 @@ export function DocMenu({ scope, className = 'btn s34', up = false }: {
   }, [open])
   return (
     <div className="export-menu" ref={root}>
-      <button className={className} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}>Документ ▾</button>
+      <button className={className} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}>{tr('Документ ▾')}</button>
       {open && (
         <div className={'export-list wide' + (up ? ' up' : '')} role="menu">
           {ARTIFACTS.map(a => (

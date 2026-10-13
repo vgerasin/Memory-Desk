@@ -2,6 +2,7 @@ import { navigate, recordLink } from '../router'
 import { dayLabel, ownerLabel } from '../format'
 import { useApi } from '../useApi'
 import type { MorningMeeting, MorningPayload, MorningTask } from '../types'
+import { tr } from '../i18n'
 
 function dueText(task: MorningTask): string {
   return task.due ? dayLabel(task.due) : task.dueText
@@ -18,7 +19,7 @@ function TaskList({ title, tone, items, total }: { title: string; tone?: 'bad'; 
           <div className="m">{[ownerLabel(t.owner), dueText(t)].filter(Boolean).join(' · ')}</div>
         </button>
       ))}
-      {total > items.length && <button className="link-btn" onClick={() => navigate('/tasks')}>Ещё {total - items.length}</button>}
+      {total > items.length && <button className="link-btn" onClick={() => navigate('/tasks')}>{tr('Ещё {0}', [total - items.length])}</button>}
     </div>
   )
 }
@@ -27,7 +28,7 @@ function Meetings({ items }: { items: MorningMeeting[] }) {
   if (items.length === 0) return null
   return (
     <div className="morning-col wide">
-      <div className="label-caps">Встречи сегодня · {items.length}</div>
+      <div className="label-caps">{tr('Встречи сегодня · {0}', [items.length])}</div>
       {items.map(m => (
         <div className="hero-item static" key={m.start + m.title}>
           <div className="t">{m.start.slice(11, 16)} · {m.title}</div>
@@ -44,21 +45,21 @@ export function MorningCard() {
   if (!data || (data.empty && data.counts.stuck === 0)) return null
   const c = data.counts
   return (
-    <section className="card morning" aria-label="Утренняя сводка">
+    <section className="card morning" aria-label={tr('Утренняя сводка')}>
       <div className="panel-head">
-        <h3 className="h3">Утро</h3>
+        <h3 className="h3">{tr('Утро')}</h3>
         <span className="muted-text" style={{ fontSize: 13 }}>{data.message}</span>
       </div>
       <div className="morning-cols">
         <Meetings items={data.meetings} />
-        <TaskList title="Просрочено" tone="bad" items={data.overdue} total={c.overdue} />
-        <TaskList title="Ваши на неделе" items={data.mine} total={c.mine} />
-        <TaskList title="Вам обещали на неделе" items={data.promised} total={c.promised} />
+        <TaskList title={tr('Просрочено')} tone="bad" items={data.overdue} total={c.overdue} />
+        <TaskList title={tr('Ваши на неделе')} items={data.mine} total={c.mine} />
+        <TaskList title={tr('Вам обещали на неделе')} items={data.promised} total={c.promised} />
       </div>
       {c.stuck > 0 && (
         <div className="morning-foot">
-          <span>Зависших задач: <b>{c.stuck}</b> — без движения больше двух недель.</span>
-          <button className="btn s28" onClick={() => navigate('/tasks?stuck=1')}>Разобрать</button>
+          <span>{tr('Зависших задач: ')}{' '}<b>{c.stuck}</b>{' '}{tr(' — без движения больше двух недель.')}</span>
+          <button className="btn s28" onClick={() => navigate('/tasks?stuck=1')}>{tr('Разобрать')}</button>
         </div>
       )}
     </section>

@@ -108,6 +108,7 @@ export interface Settings {
   lock_timeout_min?: number
   suggestions_auto?: boolean
   dossier_model?: boolean
+  ui_lang?: string
   exists?: Record<string, boolean>
 }
 

@@ -5,11 +5,12 @@ import { useApp } from '../store'
 import type { ReindexStatus, SystemStatus } from '../types'
 import { useLock } from '../lock'
 import { IconGear, IconLock, IconRefresh, IconSearch, Segmented } from './ui'
+import { lc, tr } from '../i18n'
 
 const TABS = [
-  { key: '/', label: 'Сегодня' }, { key: '/records', label: 'Записи' },
-  { key: '/tasks', label: 'Задачи и решения' }, { key: '/projects', label: 'Проекты и люди' },
-  { key: '/analytics', label: 'Аналитика' },
+  { key: '/', label: tr('Сегодня') }, { key: '/records', label: tr('Записи') },
+  { key: '/tasks', label: tr('Задачи и решения') }, { key: '/projects', label: tr('Проекты и люди') },
+  { key: '/analytics', label: tr('Аналитика') },
 ]
 const STATE_COLOR = { ok: '#34C759', warn: '#FF9F0A', bad: '#FF3B30' }
 
@@ -50,14 +51,14 @@ function SystemPopover({ status }: { status: SystemStatus | null }) {
     } catch (e) {
       // 404 здесь значит, что запущен сервер старой версии: интерфейс уже обновлён, а сервер нет
       showToast(e instanceof ApiError && e.status === 404
-        ? 'Сервер запущен со старой версией кода. Закройте его и запустите start.command заново' : errorText(e))
+        ? tr('Сервер запущен со старой версией кода. Закройте его и запустите start.command заново') : errorText(e))
     }
   }
   const pct = reindex && reindex.total > 0 ? Math.min(100, Math.round(reindex.done / reindex.total * 100)) : 0
   return (
-    <div className="sys" role="dialog" aria-label="Состояние системы">
-      <div className="sys-title">Состояние системы</div>
-      <div className="sys-sub">Всё работает локально · 127.0.0.1</div>
+    <div className="sys" role="dialog" aria-label={tr('Состояние системы')}>
+      <div className="sys-title">{tr('Состояние системы')}</div>
+      <div className="sys-sub">{tr('Всё работает локально · 127.0.0.1')}</div>
       <div className="sys-rows">
         {(status?.rows ?? []).map(r => (
           <div className="sys-row" key={r.key}>
@@ -65,32 +66,32 @@ function SystemPopover({ status }: { status: SystemStatus | null }) {
             <span className="val">{r.value}</span>
           </div>
         ))}
-        {!status && <div className="sys-row"><span className="val">Проверяю…</span></div>}
+        {!status && <div className="sys-row"><span className="val">{tr('Проверяю…')}</span></div>}
       </div>
       <div className="sys-buttons">
-        <button className="sys-btn" onClick={() => { setOpenMenu(null); setSettingsOpen(true) }}>Настройки</button>
-        <button className="sys-btn" onClick={() => run('/api/system/backup', 'Резервная копия создана')}>Резервная копия</button>
+        <button className="sys-btn" onClick={() => { setOpenMenu(null); setSettingsOpen(true) }}>{tr('Настройки')}</button>
+        <button className="sys-btn" onClick={() => run('/api/system/backup', tr('Резервная копия создана'))}>{tr('Резервная копия')}</button>
       </div>
       <div className="sys-buttons">
-        <button className="sys-btn" onClick={() => void startReindex()} disabled={reindexRunning}>{reindexRunning ? 'Идёт…' : 'Переиндексировать'}</button>
-        <button className="sys-btn" onClick={toggleTheme}>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
+        <button className="sys-btn" onClick={() => void startReindex()} disabled={reindexRunning}>{reindexRunning ? tr('Идёт…') : tr('Переиндексировать')}</button>
+        <button className="sys-btn" onClick={toggleTheme}>{theme === 'dark' ? tr('Светлая тема') : tr('Тёмная тема')}</button>
       </div>
       <div className="sys-buttons">
-        <button className="sys-btn" onClick={() => { setOpenMenu(null); setStorageOpen(true) }}>Хранилище</button>
+        <button className="sys-btn" onClick={() => { setOpenMenu(null); setStorageOpen(true) }}>{tr('Хранилище')}</button>
       </div>
       {reindex && ['running', 'done', 'error'].includes(reindex.state) && (
         <div className={'sys-reindex ' + reindex.state} role="status" aria-live="polite">
           {reindex.state === 'running' && (
             <>
-              <div className="sys-reindex-line"><span>Переиндексация · {reindex.message.toLowerCase()}</span><span className="num">{reindex.total ? pct + '%' : ''}</span></div>
+              <div className="sys-reindex-line"><span>{tr('Переиндексация · {0}', [lc(reindex.message)])}</span><span className="num">{reindex.total ? pct + '%' : ''}</span></div>
               <div className="sys-reindex-bar"><i style={{ width: (reindex.total ? pct : 4) + '%' }} /></div>
-              <div className="sys-reindex-sub">{reindex.total ? `${reindex.done} из ${reindex.total} фрагментов · ` : ''}{reindex.records ? `${reindex.records} записей · ` : ''}{reindex.seconds} с</div>
+              <div className="sys-reindex-sub">{tr('{0}{1}{2} с', [reindex.total ? tr('{0} из {1} фрагментов · ', [reindex.done, reindex.total]) : '', reindex.records ? tr('{0} записей · ', [reindex.records]) : '', reindex.seconds])}</div>
             </>
           )}
           {reindex.state === 'done' && (
-            <div className="sys-reindex-line"><span>✓ Индекс перестроен: {reindex.records} записей, {reindex.total} фрагментов</span><span className="num">{String(reindex.seconds).replace(".", ",")} с</span></div>
+            <div className="sys-reindex-line"><span>{tr('✓ Индекс перестроен: {0} записей, {1} фрагментов', [reindex.records, reindex.total])}</span><span className="num">{tr('{0} с', [String(reindex.seconds).replace(".", ",")])}</span></div>
           )}
-          {reindex.state === 'error' && <div className="sys-reindex-line"><span>Не удалось: {reindex.message}</span></div>}
+          {reindex.state === 'error' && <div className="sys-reindex-line"><span>{tr('Не удалось: {0}', [reindex.message])}</span></div>}
         </div>
       )}
     </div>
@@ -134,27 +135,27 @@ export function Header() {
           value={tab} onChange={key => navigate(key)} />
         <div className="header-spacer" />
         <div className="header-actions">
-          <button className="hbtn" onClick={() => chat.openChat()} aria-label="Спросить архив">
+          <button className="hbtn" onClick={() => chat.openChat()} aria-label={tr('Спросить архив')}>
             <IconSearch />
-            {wide && <><span>Спросить архив</span><kbd>⌘K</kbd></>}
+            {wide && <><span>{tr('Спросить архив')}</span><kbd>⌘K</kbd></>}
           </button>
           {running && (
-            <button className="hbtn proc" onClick={() => navigate('/records')} title="Идёт обработка">
+            <button className="hbtn proc" onClick={() => navigate('/records')} title={tr('Идёт обработка')}>
               <span className="ring" style={{ background: `conic-gradient(currentColor ${running.percent}%, color-mix(in srgb, currentColor 25%, transparent) 0)` }} />
               <span className="num">{Math.floor(running.percent)}%</span>
             </button>
           )}
-          <button className="hbtn primary" onClick={scan} disabled={scanning} aria-label="Обработать новые">
+          <button className="hbtn primary" onClick={scan} disabled={scanning} aria-label={tr('Обработать новые')}>
             <IconRefresh />
-            {wide && <span>Обработать новые</span>}
+            {wide && <span>{tr('Обработать новые')}</span>}
           </button>
           {lock.status.enabled && (
-            <button className="hbtn icon" onClick={() => void lock.lockNow()} title="Заблокировать сейчас" aria-label="Заблокировать">
+            <button className="hbtn icon" onClick={() => void lock.lockNow()} title={tr('Заблокировать сейчас')} aria-label={tr('Заблокировать')}>
               <IconLock />
             </button>
           )}
           <div className={'dd' + (sysOpen ? ' open' : '')}>
-            <button className="hbtn icon" onClick={() => setOpenMenu(sysOpen ? null : 'sys')} title="Состояние системы" aria-label="Состояние системы">
+            <button className="hbtn icon" onClick={() => setOpenMenu(sysOpen ? null : 'sys')} title={tr('Состояние системы')} aria-label={tr('Состояние системы')}>
               <IconGear />
               <span className="status-dot" style={{ background: STATE_COLOR[status?.overall === 'bad' ? 'warn' : status?.overall ?? 'ok'] }} />
             </button>

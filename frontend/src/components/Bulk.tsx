@@ -1,6 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { api, errorText } from '../api'
 import { useApp } from '../store'
+import { tr } from '../i18n'
 
 export interface BulkResult { updated: number; noteMissing?: number; failed: { id: string; error: string }[]; failedCount: number }
 
@@ -33,8 +34,8 @@ export function useBulk() {
       const result = await api.post<BulkResult>(path, { ids: [...ids], ...body })
       invalidate()
       const parts = [`${ok}: ${result.updated}`]
-      if (result.failedCount) parts.push(`не удалось: ${result.failedCount}${result.failed[0] ? ` (${result.failed[0].error})` : ''}`)
-      if (result.noteMissing) parts.push(`в заметках строку не нашли: ${result.noteMissing}`)
+      if (result.failedCount) parts.push(tr('не удалось: {0}{1}', [result.failedCount, result.failed[0] ? ` (${result.failed[0].error})` : '']))
+      if (result.noteMissing) parts.push(tr('в заметках строку не нашли: {0}', [result.noteMissing]))
       showToast(parts.join(' · '))
       setIds(new Set())
       return true
@@ -52,27 +53,27 @@ export function BulkBar({ count, total, onAll, onClear, onStop, children }: {
   count: number; total: number; onAll: () => void; onClear: () => void; onStop: () => void; children: ReactNode
 }) {
   return (
-    <div className="bulk-bar" role="toolbar" aria-label="Действия над выбранным">
-      <div className="bulk-count">Выбрано: <b>{count}</b></div>
-      <button className="btn link s28" onClick={count >= total ? onClear : onAll}>{count >= total ? 'Снять всё' : `Выбрать все (${total})`}</button>
+    <div className="bulk-bar" role="toolbar" aria-label={tr('Действия над выбранным')}>
+      <div className="bulk-count">{tr('Выбрано: ')}{' '}<b>{count}</b></div>
+      <button className="btn link s28" onClick={count >= total ? onClear : onAll}>{count >= total ? tr('Снять всё') : tr('Выбрать все ({0})', [total])}</button>
       <div className="bulk-actions">{children}</div>
-      <button className="btn s28 muted" onClick={onStop}>Готово</button>
+      <button className="btn s28 muted" onClick={onStop}>{tr('Готово')}</button>
     </div>
   )
 }
 
 /** Срок пачкой: быстрые кнопки, дата и «Без срока». */
-export function BulkDue({ disabled, onPick, label = 'Срок…' }: { disabled: boolean; onPick: (iso: string) => void; label?: string }) {
+export function BulkDue({ disabled, onPick, label = tr('Срок…') }: { disabled: boolean; onPick: (iso: string) => void; label?: string }) {
   const [open, setOpen] = useState(false)
-  const quick: [string, string][] = [['Сегодня', isoDay(0)], ['Завтра', isoDay(1)], ['Через неделю', isoDay(7)]]
+  const quick: [string, string][] = [[tr('Сегодня'), isoDay(0)], [tr('Завтра'), isoDay(1)], [tr('Через неделю'), isoDay(7)]]
   return (
     <span className="bulk-pop-wrap">
       <button className="btn s28" disabled={disabled} onClick={() => setOpen(o => !o)}>{label}</button>
       {open && (
         <div className="bulk-pop" onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}>
           {quick.map(([label, iso]) => <button key={label} className="btn s28" onClick={() => { setOpen(false); onPick(iso) }}>{label}</button>)}
-          <input type="date" aria-label="Дата срока" onChange={e => { if (e.target.value) { setOpen(false); onPick(e.target.value) } }} />
-          <button className="btn link s28" onClick={() => { setOpen(false); onPick('') }}>Без срока</button>
+          <input type="date" aria-label={tr('Дата срока')} onChange={e => { if (e.target.value) { setOpen(false); onPick(e.target.value) } }} />
+          <button className="btn link s28" onClick={() => { setOpen(false); onPick('') }}>{tr('Без срока')}</button>
         </div>
       )}
     </span>
@@ -86,11 +87,11 @@ export function BulkOwner({ disabled, onPick }: { disabled: boolean; onPick: (ow
   const apply = () => { const v = value.trim(); if (!v) return; setOpen(false); setValue(''); onPick(v) }
   return (
     <span className="bulk-pop-wrap">
-      <button className="btn s28" disabled={disabled} onClick={() => setOpen(o => !o)}>Ответственный…</button>
+      <button className="btn s28" disabled={disabled} onClick={() => setOpen(o => !o)}>{tr('Ответственный…')}</button>
       {open && (
         <div className="bulk-pop" onKeyDown={e => { if (e.key === 'Enter') apply(); if (e.key === 'Escape') setOpen(false) }}>
-          <input autoFocus value={value} maxLength={120} placeholder="Имя ответственного" onChange={e => setValue(e.target.value)} aria-label="Ответственный" />
-          <button className="btn accent s28" disabled={!value.trim()} onClick={apply}>Назначить</button>
+          <input autoFocus value={value} maxLength={120} placeholder={tr('Имя ответственного')} onChange={e => setValue(e.target.value)} aria-label={tr('Ответственный')} />
+          <button className="btn accent s28" disabled={!value.trim()} onClick={apply}>{tr('Назначить')}</button>
         </div>
       )}
     </span>
@@ -102,8 +103,8 @@ export function MoreButton({ shown, total, onMore }: { shown: number; total: num
   if (shown >= total) return null
   return (
     <div className="more-row">
-      <button className="btn s32" onClick={onMore}>Показать ещё</button>
-      <span className="muted-text">показано {shown} из {total}</span>
+      <button className="btn s32" onClick={onMore}>{tr('Показать ещё')}</button>
+      <span className="muted-text">{tr('показано {0} из {1}', [shown, total])}</span>
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { api, ApiError, errorText, LOCKED_EVENT } from './api'
 import type { LockStatus } from './types'
 import { IconLock } from './components/ui'
+import { tr } from './i18n'
 
 interface LockCtx {
   status: LockStatus
@@ -14,7 +15,7 @@ const LockContext = createContext<LockCtx | null>(null)
 
 export function useLock(): LockCtx {
   const ctx = useContext(LockContext)
-  if (!ctx) throw new Error('LockGate отсутствует')
+  if (!ctx) throw new Error(tr('LockGate отсутствует'))
   return ctx
 }
 
@@ -80,7 +81,7 @@ export function LockGate({ children }: { children: ReactNode }) {
   if (!status) {
     return <div className="lockscreen"><div className="lock-card"><div className="lock-mark"><IconLock size={26} /></div>
       <div className="lock-title">Memory Desk</div>
-      <div className="lock-sub">{offline ? 'Нет связи с Memory Desk. Проверьте, что приложение запущено. Переподключаюсь…' : 'Загрузка…'}</div></div></div>
+      <div className="lock-sub">{offline ? tr('Нет связи с Memory Desk. Проверьте, что приложение запущено. Переподключаюсь…') : tr('Загрузка…')}</div></div></div>
   }
   if (status.locked) return <LockScreen status={status} onOpen={setStatus} />
   return <LockContext.Provider value={{ status, setStatus, lockNow }}>{children}</LockContext.Provider>
@@ -115,15 +116,15 @@ function LockScreen({ status, onOpen }: { status: LockStatus; onOpen: (value: Lo
     <div className="lockscreen">
       <form className="lock-card" onSubmit={e => void submit(e)}>
         <div className="lock-mark"><IconLock size={26} /></div>
-        <div className="lock-title">Memory Desk заблокирован</div>
-        <div className="lock-sub">Введите PIN, чтобы продолжить</div>
+        <div className="lock-title">{tr('Memory Desk заблокирован')}</div>
+        <div className="lock-sub">{tr('Введите PIN, чтобы продолжить')}</div>
         <input className="lock-input" type="password" inputMode="numeric" autoComplete="off" autoFocus maxLength={status.maxLength}
           value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} aria-label="PIN" placeholder="••••" />
         {wait > 0
-          ? <div className="lock-error" role="alert">Слишком много попыток. Подождите {wait} с</div>
+          ? <div className="lock-error" role="alert">{tr('Слишком много попыток. Подождите {0} с', [wait])}</div>
           : error && <div className="lock-error" role="alert">{error}</div>}
-        <button className="btn accent s34" type="submit" disabled={busy || wait > 0 || pin.length < status.minLength}>Открыть</button>
-        <div className="lock-help">Забыли PIN? Закройте окно и запустите «Сбросить PIN.command» из папки программы: заметки и записи останутся на месте.</div>
+        <button className="btn accent s34" type="submit" disabled={busy || wait > 0 || pin.length < status.minLength}>{tr('Открыть')}</button>
+        <div className="lock-help">{tr('Забыли PIN? Закройте окно и запустите «Сбросить PIN.command» из папки программы: заметки и записи останутся на месте.')}</div>
       </form>
     </div>
   )

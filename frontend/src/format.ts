@@ -1,4 +1,6 @@
-const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+import { formatDay, lc, localeTag, plural, tr } from './i18n'
+
+export { plural }
 
 export function parseDate(value: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || '')
@@ -16,13 +18,12 @@ export function daysAgo(value: string): number {
 
 export function dayLabel(value: string): string {
   const n = daysAgo(value)
-  if (n === 0) return 'Сегодня'
-  if (n === 1) return 'Вчера'
-  if (n === -1) return 'Завтра'
+  if (n === 0) return tr('Сегодня')
+  if (n === 1) return tr('Вчера')
+  if (n === -1) return tr('Завтра')
   const d = parseDate(value)
-  if (!d) return value || 'Без даты'
-  const label = `${d.getDate()} ${MONTHS[d.getMonth()]}`
-  return d.getFullYear() === new Date().getFullYear() ? label : `${label} ${d.getFullYear()}`
+  if (!d) return value || tr('Без даты')
+  return formatDay(d, d.getFullYear() !== new Date().getFullYear())
 }
 
 const pad = (v: number) => String(v).padStart(2, '0')
@@ -43,28 +44,23 @@ export function tc(seconds: number | null | undefined): string {
   return h ? `${h}:${pad(m)}:${pad(x)}` : `${pad(m)}:${pad(x)}`
 }
 
-export function plural(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10, m100 = n % 100
-  return `${n} ${m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? few : many}`
-}
-
 export function due(iso: string | null, text: string): { label: string; color: string } {
   if (iso) {
     const n = daysAgo(iso)
-    if (n === 0) return { label: 'сегодня', color: '#E0352B' }
-    if (n > 0) return { label: 'просрочено', color: '#E0352B' }
-    return { label: 'до ' + dayLabel(iso).toLowerCase(), color: 'var(--text2)' }
+    if (n === 0) return { label: tr('сегодня'), color: '#E0352B' }
+    if (n > 0) return { label: tr('просрочено'), color: '#E0352B' }
+    return { label: tr('до ') + lc(dayLabel(iso)), color: 'var(--text2)' }
   }
   if (text) return { label: text, color: 'var(--text2)' }
-  return { label: 'без срока', color: 'var(--text3)' }
+  return { label: tr('без срока'), color: 'var(--text3)' }
 }
 
 export function ownerLabel(owner: string): string {
-  return !owner || owner === 'Я' ? (owner ? 'Вы' : 'Не назначен') : owner
+  return !owner ? tr('Не назначен') : owner === 'Я' || owner === 'Вы' ? tr('Вы') : owner // i18n-ignore: «Я» и «Вы» — метки владельца в данных, не надписи
 }
 
 export function longDate(now = new Date()): string {
-  const s = now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
+  const s = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
@@ -78,18 +74,18 @@ export function meetingWhen(start: string): string {
   const d = new Date(start)
   if (isNaN(d.getTime())) return ''
   const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  const day = dayLabel(iso)
-  const rel = day === 'Сегодня' ? 'сегодня' : day === 'Завтра' ? 'завтра' : day.toLowerCase()
-  return `${rel} в ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const n = daysAgo(iso)
+  const rel = n === 0 ? tr('сегодня') : n === -1 ? tr('завтра') : lc(dayLabel(iso))
+  return tr('{0} в {1}:{2}', [rel, pad(d.getHours()), pad(d.getMinutes())])
 }
 
 export function etaLabel(seconds: number | null): string {
   if (seconds == null) return '—'
-  return `≈ ${Math.max(1, Math.round(seconds / 60))} мин`
+  return tr('≈ {0} мин', [Math.max(1, Math.round(seconds / 60))])
 }
 
 export function fmtBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`
-  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} КБ`
-  return `${(bytes / 1024 ** 2).toFixed(1)} МБ`
+  if (bytes < 1024) return tr('{0} Б', [bytes])
+  if (bytes < 1024 ** 2) return tr('{0} КБ', [Math.round(bytes / 1024)])
+  return tr('{0} МБ', [(bytes / 1024 ** 2).toFixed(1)])
 }

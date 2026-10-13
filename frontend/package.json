@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "i18n": "node scripts/i18n-scan.mjs --check && node scripts/i18n-check.mjs",
+    "build": "npm run i18n && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

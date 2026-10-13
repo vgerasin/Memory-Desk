@@ -20,6 +20,7 @@ import { Projects } from './screens/Projects'
 import { Records } from './screens/Records'
 import { Tasks } from './screens/Tasks'
 import { Today } from './screens/Today'
+import { tr } from './i18n'
 
 function Redirect({ to }: { to: string }) {
   useEffect(() => { navigate(to, true) }, [to])
@@ -47,9 +48,7 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   render() {
     if (!this.state.failed) return this.props.children
     return (
-      <div className="empty" style={{ marginTop: 48 }}>
-        Экран не отобразился. Чаще всего так бывает, когда страница обновилась, а сервер ещё старой версии: закройте Memory Desk и запустите start.command заново.
-        <div style={{ marginTop: 12 }}><button className="btn s34" onClick={() => location.reload()}>Перезагрузить страницу</button></div>
+      <div className="empty" style={{ marginTop: 48 }}>{tr('Экран не отобразился. Чаще всего так бывает, когда страница обновилась, а сервер ещё старой версии: закройте Memory Desk и запустите start.command заново.')}{' '}<div style={{ marginTop: 12 }}><button className="btn s34" onClick={() => location.reload()}>{tr('Перезагрузить страницу')}</button></div>
       </div>
     )
   }
@@ -60,7 +59,7 @@ export default function App() {
   return (
     <div className="app">
       <Header />
-      {!live && <div className="offline">Нет связи с Memory Desk — данные могут быть устаревшими. Переподключаюсь…</div>}
+      {!live && <div className="offline">{tr('Нет связи с Memory Desk — данные могут быть устаревшими. Переподключаюсь…')}</div>}
       <main className="main"><Boundary><Screen /></Boundary></main>
       <Chat />
       <SettingsModal />

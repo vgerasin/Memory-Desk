@@ -1,3 +1,4 @@
+import { tr } from './i18n'
 // Палитры приложения. Источник — дизайн-канва «Memory Desk: дизайн всех разделов» (A1–A18), 5 тем × светлая и тёмная.
 // Ключи соответствуют CSS-переменным (`accentOnInk` → `--accentOnInk`, исключения — в VARIABLE). Тема «Things» дублируется в styles.css как запасная.
 
@@ -16,7 +17,7 @@ export const PALETTES: Palette[] = [
   {
     "id": "things",
     "name": "Things",
-    "note": "Белое окно, синий акцент",
+    "note": tr('Белое окно, синий акцент'),
     "light": {
       "bg": "#ffffff",
       "bgImage": "none",
@@ -64,8 +65,8 @@ export const PALETTES: Palette[] = [
   },
   {
     "id": "mineral",
-    "name": "Минерал",
-    "note": "Минеральная бумага, зелёный акцент",
+    "name": tr('Минерал'),
+    "note": tr('Минеральная бумага, зелёный акцент'),
     "light": {
       "bg": "#eef1ed",
       "bgImage": "none",
@@ -113,8 +114,8 @@ export const PALETTES: Palette[] = [
   },
   {
     "id": "lavender",
-    "name": "Лаванда",
-    "note": "Пастель и стекло, лиловый акцент",
+    "name": tr('Лаванда'),
+    "note": tr('Пастель и стекло, лиловый акцент'),
     "light": {
       "bg": "#f5f1f8",
       "bgImage": "radial-gradient(900px 620px at 8% 0%, #fde3ee 0%, rgba(253,227,238,0) 62%), radial-gradient(820px 620px at 92% 6%, #dbe6ff 0%, rgba(219,230,255,0) 62%), radial-gradient(900px 700px at 62% 100%, #daf3e6 0%, rgba(218,243,230,0) 62%), #f5f1f8",
@@ -162,8 +163,8 @@ export const PALETTES: Palette[] = [
   },
   {
     "id": "sand",
-    "name": "Песок",
-    "note": "Тёплая бумага, терракотовый акцент",
+    "name": tr('Песок'),
+    "note": tr('Тёплая бумага, терракотовый акцент'),
     "light": {
       "bg": "#fbf7f0",
       "bgImage": "none",
@@ -211,8 +212,8 @@ export const PALETTES: Palette[] = [
   },
   {
     "id": "rose",
-    "name": "Роза",
-    "note": "Светло-розовый фон, ягодный акцент",
+    "name": tr('Роза'),
+    "note": tr('Светло-розовый фон, ягодный акцент'),
     "light": {
       "bg": "#fbf6f8",
       "bgImage": "none",

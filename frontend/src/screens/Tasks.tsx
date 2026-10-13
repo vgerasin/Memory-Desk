@@ -8,6 +8,7 @@ import { Checkbox, ErrorBox, Loading, Segmented } from '../components/ui'
 import { DecisionRow, TaskRow } from '../components/Items'
 import { ConflictsPanel } from '../components/ConflictsPanel'
 import { BulkBar, BulkDue, BulkOwner, MoreButton, PAGE, useBulk } from '../components/Bulk'
+import { tr } from '../i18n'
 
 interface Registry<T> { items: T[]; total: number; counts: { tasks: number; decisions: number; stuck?: number } }
 
@@ -29,17 +30,17 @@ export function Tasks() {
     <>
       <div className="page-head">
         <div className="titles">
-          <h1 className="h1">Решения и задачи</h1>
-          <div className="subtitle">{stuckOnly ? 'Задачи в работе без движения больше двух недель: закройте, перенесите срок или отклоните.' : 'Извлечённое автоматически появляется как черновик и ждёт подтверждения.'}</div>
+          <h1 className="h1">{tr('Решения и задачи')}</h1>
+          <div className="subtitle">{stuckOnly ? tr('Задачи в работе без движения больше двух недель: закройте, перенесите срок или отклоните.') : tr('Извлечённое автоматически появляется как черновик и ждёт подтверждения.')}</div>
         </div>
         <div className="head-tools">
           {kind === 'tasks' && (counts?.stuck ?? 0) + (stuckOnly ? 1 : 0) > 0 && (
             <button className={'btn s32' + (stuckOnly ? ' accent' : '')} aria-pressed={stuckOnly}
-              onClick={() => navigate(stuckOnly ? '/tasks' : '/tasks?stuck=1', true)}>Зависшие{counts?.stuck != null ? ` · ${counts.stuck}` : ''}</button>
+              onClick={() => navigate(stuckOnly ? '/tasks' : '/tasks?stuck=1', true)}>{tr('Зависшие{0}', [counts?.stuck != null ? ` · ${counts.stuck}` : ''])}</button>
           )}
-          <button className={'btn s32' + (bulk.on ? ' accent' : '')} onClick={() => (bulk.on ? bulk.stop() : bulk.setOn(true))}>{bulk.on ? 'Закончить выбор' : 'Выбрать'}</button>
+          <button className={'btn s32' + (bulk.on ? ' accent' : '')} onClick={() => (bulk.on ? bulk.stop() : bulk.setOn(true))}>{bulk.on ? tr('Закончить выбор') : tr('Выбрать')}</button>
           <Segmented small value={kind} onChange={k => navigate(k === 'tasks' ? '/tasks' : '/tasks?kind=decisions', true)}
-            items={[{ key: 'tasks', label: 'Задачи', count: counts?.tasks ?? null }, { key: 'decisions', label: 'Решения', count: counts?.decisions ?? null }]} />
+            items={[{ key: 'tasks', label: tr('Задачи'), count: counts?.tasks ?? null }, { key: 'decisions', label: tr('Решения'), count: counts?.decisions ?? null }]} />
         </div>
       </div>
       {kind === 'decisions' && <ConflictsPanel />}
@@ -47,11 +48,11 @@ export function Tasks() {
       {!data && !error && <Loading />}
       {data && (
         <div className="card tasks-card">
-          {items.length === 0 && <div className="muted-text" style={{ padding: '20px 0' }}>{stuckOnly ? 'Зависших задач нет' : kind === 'tasks' ? 'Задач пока нет' : 'Решений пока нет'}</div>}
+          {items.length === 0 && <div className="muted-text" style={{ padding: '20px 0' }}>{stuckOnly ? tr('Зависших задач нет') : kind === 'tasks' ? tr('Задач пока нет') : tr('Решений пока нет')}</div>}
           {kind === 'tasks'
             ? items.map((k, i) => (
               <div className={'sel-row' + (bulk.on ? ' on' : '')} key={k.id}>
-                {bulk.on && <Checkbox on={bulk.ids.has(k.id)} onClick={() => bulk.toggle(k.id)} label="Выбрать задачу" />}
+                {bulk.on && <Checkbox on={bulk.ids.has(k.id)} onClick={() => bulk.toggle(k.id)} label={tr('Выбрать задачу')} />}
                 <TaskRow task={k} first={i === 0} source="meeting"
                   onToggle={() => actions.toggleTask(k)} onConfirm={() => actions.confirmTask(k)} onReject={() => actions.rejectTask(k)}
                   onOpen={() => navigate(recordLink(k.meetingId, { t: k.tSec }))}
@@ -59,7 +60,7 @@ export function Tasks() {
               </div>))
             : items.map((d, i) => (
               <div className={'sel-row' + (bulk.on ? ' on' : '')} key={d.id}>
-                {bulk.on && <Checkbox on={bulk.ids.has(d.id)} onClick={() => bulk.toggle(d.id)} label="Выбрать решение" />}
+                {bulk.on && <Checkbox on={bulk.ids.has(d.id)} onClick={() => bulk.toggle(d.id)} label={tr('Выбрать решение')} />}
                 <DecisionRow decision={d} first={i === 0}
                   source={[d.meetingTitle, dayLabel(d.meetingDate), tc(d.tSec)].filter(Boolean).join(' · ')}
                   onConfirm={() => actions.confirmDecision(d)} onReject={() => actions.rejectDecision(d)}
@@ -73,16 +74,16 @@ export function Tasks() {
         <BulkBar count={bulk.ids.size} total={items.length} onAll={() => bulk.setAll(items.map(i => i.id))} onClear={bulk.clear} onStop={bulk.stop}>
           {kind === 'tasks' ? (
             <>
-              <button className="btn s28" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'open' }, 'Подтверждено')}>Подтвердить</button>
-              <button className="btn s28" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'done' }, 'Выполнено')}>{stuckOnly ? 'Закрыть' : 'Выполнено'}</button>
-              <BulkDue label={stuckOnly ? 'Перенести…' : undefined} disabled={bulk.busy} onPick={iso => void bulk.run(base, { deadline: iso }, iso ? 'Срок назначен' : 'Срок снят')} />
-              <BulkOwner disabled={bulk.busy} onPick={owner => void bulk.run(base, { owner }, 'Ответственный назначен')} />
-              <button className="btn s28 danger" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'rejected' }, 'Отклонено')}>Отклонить</button>
+              <button className="btn s28" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'open' }, tr('Подтверждено'))}>{tr('Подтвердить')}</button>
+              <button className="btn s28" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'done' }, tr('Выполнено'))}>{stuckOnly ? tr('Закрыть') : tr('Выполнено')}</button>
+              <BulkDue label={stuckOnly ? tr('Перенести…') : undefined} disabled={bulk.busy} onPick={iso => void bulk.run(base, { deadline: iso }, iso ? tr('Срок назначен') : tr('Срок снят'))} />
+              <BulkOwner disabled={bulk.busy} onPick={owner => void bulk.run(base, { owner }, tr('Ответственный назначен'))} />
+              <button className="btn s28 danger" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'rejected' }, tr('Отклонено'))}>{tr('Отклонить')}</button>
             </>
           ) : (
             <>
-              <button className="btn s28" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'confirmed' }, 'Подтверждено')}>Подтвердить</button>
-              <button className="btn s28 danger" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'rejected' }, 'Отклонено')}>Отклонить</button>
+              <button className="btn s28" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'confirmed' }, tr('Подтверждено'))}>{tr('Подтвердить')}</button>
+              <button className="btn s28 danger" disabled={bulk.busy} onClick={() => void bulk.run(base, { status: 'rejected' }, tr('Отклонено'))}>{tr('Отклонить')}</button>
             </>
           )}
         </BulkBar>

@@ -4,9 +4,10 @@ import { useApp } from '../store'
 import { navigate, recordLink } from '../router'
 import { dayLabel, due, ownerLabel, plural, tc } from '../format'
 import type { PrepBrief as Brief, PrepHeadline, PrepItem } from '../types'
+import { lc, tr } from '../i18n'
 
 function SourceLink({ item, onGo }: { item: PrepItem; onGo: () => void }) {
-  const label = [dayLabel(item.date).toLowerCase(), item.tSec != null ? tc(item.tSec) : ''].filter(Boolean).join(' · ')
+  const label = [lc(dayLabel(item.date)), item.tSec != null ? tc(item.tSec) : ''].filter(Boolean).join(' · ')
   return (
     <button className="prep-src" onClick={onGo} title={item.meetingTitle}>{label} ↗</button>
   )
@@ -49,29 +50,29 @@ export function PrepModal() {
   const ask = () => {
     setPrep(null)
     if (prep.projectId) {
-      chat.openChat({ kind: 'project', id: prep.projectId, title: brief?.title ?? '', label: 'Проект: ' + (brief?.title ?? '') }, 'Что важно помнить перед встречей по этому проекту?')
+      chat.openChat({ kind: 'project', id: prep.projectId, title: brief?.title ?? '', label: tr('Проект: ') + (brief?.title ?? '') }, tr('Что важно помнить перед встречей по этому проекту?'))
     } else if (prep.meetingId) {
-      chat.openChat({ kind: 'record', id: prep.meetingId, label: 'Запись' }, 'Что важно помнить перед следующей встречей?')
-    } else chat.openChat({ kind: 'all' }, 'Что важно помнить перед встречей?')
+      chat.openChat({ kind: 'record', id: prep.meetingId, label: tr('Запись') }, tr('Что важно помнить перед следующей встречей?'))
+    } else chat.openChat({ kind: 'all' }, tr('Что важно помнить перед встречей?'))
   }
   return (
     <div className="modal-wrap" onClick={e => { if (e.target === e.currentTarget) setPrep(null) }}>
-      <div className="modal prep" role="dialog" aria-label="Подготовка к встрече">
+      <div className="modal prep" role="dialog" aria-label={tr('Подготовка к встрече')}>
         <div className="prep-head">
           <div>
-            <span className="label-caps">Подготовка к встрече</span>
+            <span className="label-caps">{tr('Подготовка к встрече')}</span>
             <div className="h3">{brief?.title ?? prep.title ?? ''}</div>
           </div>
           {brief && <span className="prep-count">{plural(brief.records, 'запись', 'записи', 'записей')}</span>}
         </div>
         {error && <div className="error-box" style={{ marginTop: 0 }}>{error}</div>}
-        {!brief && !error && <div className="muted-text">Собираю…</div>}
+        {!brief && !error && <div className="muted-text">{tr('Собираю…')}</div>}
         {brief && headline && (
           <div className="prep-headline">
-            <span className="label-caps">Главное к встрече</span>
+            <span className="label-caps">{tr('Главное к встрече')}</span>
             <div className="prep-headline-text">{headline.text}</div>
             <div className="muted-text" style={{ fontSize: 12 }}>
-              {refining ? 'Уточняю локальной моделью…' : headline.mode === 'model' ? 'Написано локальной моделью по тезисам ниже' : 'Собрано из цифр; модель недоступна'}
+              {refining ? tr('Уточняю локальной моделью…') : headline.mode === 'model' ? tr('Написано локальной моделью по тезисам ниже') : tr('Собрано из цифр; модель недоступна')}
             </div>
           </div>
         )}
@@ -89,7 +90,7 @@ export function PrepModal() {
                         {' · '}{ownerLabel(item.owner ?? '')}{' · '}{due(item.due ?? null, item.dueText ?? '').label}
                       </span>
                     )}
-                    {item.draft && <span className="prep-meta"> · черновик</span>}
+                    {item.draft && <span className="prep-meta">{tr(' · черновик')}</span>}
                   </span>
                   <SourceLink item={item} onGo={() => go(item)} />
                 </li>
@@ -98,8 +99,8 @@ export function PrepModal() {
           </section>
         ))}
         <div className="modal-foot">
-          <button className="btn s34" onClick={ask}>Спросить в чате</button>
-          <button className="btn accent s34" onClick={() => setPrep(null)}>Закрыть</button>
+          <button className="btn s34" onClick={ask}>{tr('Спросить в чате')}</button>
+          <button className="btn accent s34" onClick={() => setPrep(null)}>{tr('Закрыть')}</button>
         </div>
       </div>
     </div>

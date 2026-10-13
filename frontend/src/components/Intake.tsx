@@ -4,11 +4,12 @@ import { useApi } from '../useApi'
 import { useApp } from '../store'
 import { clockOf, etaLabel, fmt, plural } from '../format'
 import type { Job, TemplateDto } from '../types'
+import { tr } from '../i18n'
 
 const STATUS = {
-  running: { label: 'Обработка', bg: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)' },
-  queued: { label: 'В очереди', bg: 'var(--fill)', color: 'var(--text2)' },
-  failed: { label: 'Ошибка', bg: 'color-mix(in srgb, #FF3B30 12%, transparent)', color: '#E0352B' },
+  running: { label: tr('Обработка'), bg: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)' },
+  queued: { label: tr('В очереди'), bg: 'var(--fill)', color: 'var(--text2)' },
+  failed: { label: tr('Ошибка'), bg: 'color-mix(in srgb, #FF3B30 12%, transparent)', color: '#E0352B' },
 }
 
 export function useNow(active: boolean) {
@@ -43,12 +44,12 @@ export function JobCard({ job, now, templates }: { job: Job; now: number; templa
       const r = await api.get<{ events: { created_at?: string; stage?: string; detail?: string; event?: string }[]; tail: string }>(
         `/api/jobs/log?file=${encodeURIComponent(job.file)}`)
       const lines = r.events.slice(-40).map(e => `${(e.created_at || '').slice(11, 19)}  ${e.stage || e.event || ''}  ${e.detail || ''}`)
-      setLog((lines.join('\n') + (r.tail ? '\n\n' + r.tail : '')).trim() || 'Журнал пока пуст')
+      setLog((lines.join('\n') + (r.tail ? '\n\n' + r.tail : '')).trim() || tr('Журнал пока пуст'))
     } catch (e) { showToast(errorText(e)) }
   }
 
   const sub = job.duration != null ? fmt(job.duration) : ''
-  const subLine = [sub, running && started ? 'начато в ' + clockOf(job.started_at) : failed ? 'не обработан' : 'ждёт свободного исполнителя'].filter(Boolean).join(' · ')
+  const subLine = [sub, running && started ? tr('начато в ') + clockOf(job.started_at) : failed ? tr('не обработан') : tr('ждёт свободного исполнителя')].filter(Boolean).join(' · ')
 
   return (
     <div className="card r20 job">
@@ -60,21 +61,21 @@ export function JobCard({ job, now, templates }: { job: Job; now: number; templa
         <div className="job-side">
           <span className="chip" style={{ background: st.bg, color: st.color }}>{st.label}</span>
           {running && <>
-            <button className="btn s28" onClick={toggleLog}>Журнал</button>
-            <button className="btn s28 danger" onClick={() => call('/api/jobs/cancel', {})}>Отменить</button>
+            <button className="btn s28" onClick={toggleLog}>{tr('Журнал')}</button>
+            <button className="btn s28 danger" onClick={() => call('/api/jobs/cancel', {})}>{tr('Отменить')}</button>
           </>}
           {failed && <>
-            {job.error?.action !== 'formats' && <button className="btn s28 ghost-accent" onClick={() => call('/api/jobs/retry', { file: job.file })}>Повторить</button>}
-            <button className="btn s28" onClick={toggleLog}>Журнал</button>
-            <button className="btn s28 muted" onClick={() => call('/api/jobs/dismiss', { file: job.file })}>Убрать</button>
+            {job.error?.action !== 'formats' && <button className="btn s28 ghost-accent" onClick={() => call('/api/jobs/retry', { file: job.file })}>{tr('Повторить')}</button>}
+            <button className="btn s28" onClick={toggleLog}>{tr('Журнал')}</button>
+            <button className="btn s28 muted" onClick={() => call('/api/jobs/dismiss', { file: job.file })}>{tr('Убрать')}</button>
           </>}
           {job.state === 'queued' && templates.length > 1 && (
-            <select className="job-template" aria-label="Шаблон заметки" value={job.templateId ?? 'meeting'}
+            <select className="job-template" aria-label={tr('Шаблон заметки')} value={job.templateId ?? 'meeting'}
               onChange={e => void call('/api/jobs/template', { file: job.file, templateId: e.target.value })}>
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           )}
-          {job.state === 'queued' && <button className="btn s28 muted" onClick={() => call('/api/jobs/dismiss', { file: job.file })}>Убрать</button>}
+          {job.state === 'queued' && <button className="btn s28 muted" onClick={() => call('/api/jobs/dismiss', { file: job.file })}>{tr('Убрать')}</button>}
         </div>
       </div>
 
@@ -82,14 +83,14 @@ export function JobCard({ job, now, templates }: { job: Job; now: number; templa
         <div className="job-body">
           <div className="steps">{Array.from({ length: 12 }, (_, i) => <i key={i} className={i < stageIdx ? 'done' : i === stageIdx ? 'cur' : ''} />)}</div>
           <div className="job-line">
-            <span style={{ whiteSpace: 'nowrap' }}><b style={{ fontWeight: 600 }}>{job.stage_label}</b><span style={{ color: 'var(--text2)' }}> · этап {job.stage_index} из 12</span></span>
+            <span style={{ whiteSpace: 'nowrap' }}><b style={{ fontWeight: 600 }}>{job.stage_label}</b><span style={{ color: 'var(--text2)' }}>{tr(' · этап {0} из 12', [job.stage_index])}</span></span>
             <span className="num" style={{ fontWeight: 600, color: 'var(--accent)' }}>{Math.floor(job.percent)}%</span>
           </div>
           <div className="job-stats">
-            <div><span className="k">Начато</span><span className="v">{clockOf(job.started_at) || '—'}</span></div>
-            <div><span className="k">Прошло</span><span className="v">{elapsed != null ? fmt(elapsed) : '—'}</span></div>
-            <div><span className="k">Осталось</span><span className="v">{etaLabel(job.eta)}</span></div>
-            <div><span className="k">Исполнитель</span><span className="v">{job.runner}</span></div>
+            <div><span className="k">{tr('Начато')}</span><span className="v">{clockOf(job.started_at) || '—'}</span></div>
+            <div><span className="k">{tr('Прошло')}</span><span className="v">{elapsed != null ? fmt(elapsed) : '—'}</span></div>
+            <div><span className="k">{tr('Осталось')}</span><span className="v">{etaLabel(job.eta)}</span></div>
+            <div><span className="k">{tr('Исполнитель')}</span><span className="v">{job.runner}</span></div>
           </div>
           <div className="job-msg mono">› {job.last_message || job.stage_label + '…'}</div>
         </div>
@@ -98,11 +99,11 @@ export function JobCard({ job, now, templates }: { job: Job; now: number; templa
       {failed && job.error && (
         <div className="job-error">
           <span className="why">
-            <span><b>{job.error.title}</b> — на этапе «{job.error.stage}»</span>
+            <span><b>{job.error.title}</b>{' '}{tr(' — на этапе «')}{job.error.stage}»</span>
             <span className="err-detail">{job.error.detail}</span>
           </span>
-          {job.error.action === 'formats' && <button className="fix" onClick={() => showToast('Поддерживаются: MP3, M4A, WAV, AAC, OGG, FLAC, MP4')}>Допустимые форматы</button>}
-          {job.error.action === 'retry' && <button className="fix" onClick={() => call('/api/jobs/retry', { file: job.file })}>Повторить</button>}
+          {job.error.action === 'formats' && <button className="fix" onClick={() => showToast(tr('Поддерживаются: MP3, M4A, WAV, AAC, OGG, FLAC, MP4'))}>{tr('Допустимые форматы')}</button>}
+          {job.error.action === 'retry' && <button className="fix" onClick={() => call('/api/jobs/retry', { file: job.file })}>{tr('Повторить')}</button>}
         </div>
       )}
       {log !== null && <pre className="log-box mono">{log}</pre>}
@@ -121,12 +122,12 @@ export function IntakePanel() {
   const folder = settings?.recordings_dir?.replace(/^\/Users\/[^/]+/, '~') ?? ''
   const waiting = state.queue.filter(j => j.state === 'queued').length
   return (
-    <section className="intake" aria-label="Новые и в обработке">
+    <section className="intake" aria-label={tr('Новые и в обработке')}>
       <div className="intake-head">
-        <h3 className="h3">Новые и в обработке</h3>
+        <h3 className="h3">{tr('Новые и в обработке')}</h3>
         <span className="intake-sub">
-          {plural(state.queue.length, 'файл', 'файла', 'файлов')}{waiting > 0 ? ` · ждут запуска: ${waiting}` : ''}
-          {settings ? ` · папка ${folder}, автообнаружение ${settings.auto_process ? 'включено' : 'выключено'}` : ''}
+          {plural(state.queue.length, 'файл', 'файла', 'файлов')}{waiting > 0 ? tr(' · ждут запуска: {0}', [waiting]) : ''}
+          {settings ? tr(' · папка {0}, автообнаружение {1}', [folder, settings.auto_process ? tr('включено') : tr('выключено')]) : ''}
         </span>
       </div>
       <div className="jobs">

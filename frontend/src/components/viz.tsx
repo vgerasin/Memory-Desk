@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Segmented } from './ui'
+import { monthShort, tr } from '../i18n'
 
 /* Вспомогательные части графиков: подсказка, карточка с «Таблицей», шкалы и даты. */
 
-const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
 export function shortDate(iso: string): string {
   const [, m, d] = iso.split('-').map(Number)
-  return m ? `${d} ${MONTHS[m - 1]}` : iso
+  return m ? `${d} ${monthShort(m - 1)}` : iso
 }
 export const dayNumber = (iso: string) => Math.floor(Date.parse(iso + 'T00:00:00Z') / 86400000)
 export const addDays = (iso: string, n: number) => new Date((dayNumber(iso) + n) * 86400000).toISOString().slice(0, 10)
 
 export function hoursText(minutes: number): string {
   const h = Math.floor(minutes / 60), m = minutes % 60
-  if (!h) return `${m} мин`
-  return m ? `${h} ч ${m} мин` : `${h} ч`
+  if (!h) return tr('{0} мин', [m])
+  return m ? tr('{0} ч {1} мин', [h, m]) : tr('{0} ч', [h])
 }
 
 export function niceMax(value: number): { max: number; step: number } {
@@ -95,7 +95,7 @@ export function ChartCard({ title, sub, legend, table, wide, children }: {
         </div>
         {table && (
           <Segmented small value={view} onChange={setView}
-            items={[{ key: 'chart', label: 'График' }, { key: 'table', label: 'Таблица' }]} />
+            items={[{ key: 'chart', label: tr('График') }, { key: 'table', label: tr('Таблица') }]} />
         )}
       </div>
       {legend && view === 'chart' && (

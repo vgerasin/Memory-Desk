@@ -3,11 +3,12 @@ import { api, errorText } from '../api'
 import { useApp } from '../store'
 import { tc } from '../format'
 import type { BookmarkColor, BookmarkDto, MeetingDetail } from '../types'
+import { tr } from '../i18n'
 
 export const BOOKMARK_COLORS: { id: BookmarkColor; label: string; hex: string }[] = [
-  { id: 'yellow', label: 'Жёлтая', hex: '#F2B400' }, { id: 'red', label: 'Красная', hex: '#E5484D' },
-  { id: 'green', label: 'Зелёная', hex: '#30A46C' }, { id: 'blue', label: 'Синяя', hex: '#2F6BFF' },
-  { id: 'purple', label: 'Фиолетовая', hex: '#8E4EC6' },
+  { id: 'yellow', label: tr('Жёлтая'), hex: '#F2B400' }, { id: 'red', label: tr('Красная'), hex: '#E5484D' },
+  { id: 'green', label: tr('Зелёная'), hex: '#30A46C' }, { id: 'blue', label: tr('Синяя'), hex: '#2F6BFF' },
+  { id: 'purple', label: tr('Фиолетовая'), hex: '#8E4EC6' },
 ]
 export const colorHex = (id: string) => BOOKMARK_COLORS.find(c => c.id === id)?.hex ?? BOOKMARK_COLORS[0].hex
 
@@ -20,7 +21,7 @@ export function useBookmarkActions(meetingId: string) {
   return {
     add: async (sec: number) => {
       const r = await run(() => api.post<{ sec: number; t: string; created: boolean }>(`/api/meetings/${meetingId}/bookmarks`, { sec: Math.floor(sec) }))
-      if (r) showToast(r.created ? `Закладка ${r.t} добавлена` : `Закладка ${r.t} уже есть`)
+      if (r) showToast(r.created ? tr('Закладка {0} добавлена', [r.t]) : tr('Закладка {0} уже есть', [r.t]))
       return r ? r.sec : null
     },
     update: (sec: number, patch: { text?: string; color?: BookmarkColor }) => run(() => api.patch(`/api/meetings/${meetingId}/bookmarks/${sec}`, patch)),
@@ -40,7 +41,7 @@ function Row({ mark, focus, onJump, actions }: {
   return (
     <li className="bm-row">
       <div className="bm-color">
-        <button className="bm-dot" style={{ background: colorHex(mark.color) }} aria-label="Цвет закладки" aria-expanded={palette} onClick={() => setPalette(v => !v)} />
+        <button className="bm-dot" style={{ background: colorHex(mark.color) }} aria-label={tr('Цвет закладки')} aria-expanded={palette} onClick={() => setPalette(v => !v)} />
         {palette && (
           <div className="bm-palette" role="menu">
             {BOOKMARK_COLORS.map(c => (
@@ -50,13 +51,13 @@ function Row({ mark, focus, onJump, actions }: {
           </div>
         )}
       </div>
-      <button className="link-btn mono bm-time" onClick={() => onJump(mark.sec)} title="Перейти к месту записи">{tc(mark.sec)}</button>
+      <button className="link-btn mono bm-time" onClick={() => onJump(mark.sec)} title={tr('Перейти к месту записи')}>{tc(mark.sec)}</button>
       <div className="bm-main">
-        <input ref={input} value={text} maxLength={300} placeholder="Комментарий" aria-label={`Комментарий к закладке ${mark.t}`}
+        <input ref={input} value={text} maxLength={300} placeholder={tr('Комментарий')} aria-label={tr('Комментарий к закладке {0}', [mark.t])}
           onChange={e => setText(e.target.value)} onBlur={save} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
         {mark.context && <span className="bm-context">{mark.context}</span>}
       </div>
-      <button className="bm-del" onClick={() => void actions.remove(mark.sec)} aria-label={`Удалить закладку ${mark.t}`} title="Удалить закладку">×</button>
+      <button className="bm-del" onClick={() => void actions.remove(mark.sec)} aria-label={tr('Удалить закладку {0}', [mark.t])} title={tr('Удалить закладку')}>×</button>
     </li>
   )
 }
@@ -71,11 +72,11 @@ export function BookmarksPanel({ meeting, pos, onJump, focusSec }: {
   useEffect(() => { if (focusSec != null) setFocus(focusSec) }, [focusSec])
   const add = async () => { const sec = await actions.add(pos); if (sec != null) setFocus(sec) }
   return (
-    <section className="bookmarks" aria-label="Закладки">
+    <section className="bookmarks" aria-label={tr('Закладки')}>
       <div className="bm-head">
-        <button className="btn s28" onClick={() => void add()} title="Поставить закладку на текущем месте (клавиша B)">Закладка <kbd>B</kbd></button>
+        <button className="btn s28" onClick={() => void add()} title={tr('Поставить закладку на текущем месте (клавиша B)')}>{tr('Закладка ')}{' '}<kbd>B</kbd></button>
         <span className="bm-hint">
-          {marks.length === 0 ? 'Отметьте важное место записи: кнопка или клавиша B, на стенограмме — значок у реплики' : `Закладок: ${marks.length}`}
+          {marks.length === 0 ? tr('Отметьте важное место записи: кнопка или клавиша B, на стенограмме — значок у реплики') : tr('Закладок: {0}', [marks.length])}
         </span>
       </div>
       {marks.length > 0 && (

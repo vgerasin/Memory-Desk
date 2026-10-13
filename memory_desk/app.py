@@ -540,6 +540,7 @@ def create_app() -> FastAPI:
         lock_timeout_min: int | None = None
         suggestions_auto: bool | None = None
         dossier_model: bool | None = None
+        ui_lang: str | None = None
 
     @app.get("/api/settings")
     def get_settings():
@@ -549,7 +550,8 @@ def create_app() -> FastAPI:
     @app.put("/api/settings")
     def put_settings(body: SettingsBody, request: Request):
         before = core.cfg
-        audit.detail(request, "изменены: " + ", ".join(sorted(k for k, v in body.model_dump().items() if k in before and before.get(k) != v)))
+        changed = sorted(k for k, v in body.model_dump().items() if k in before and before.get(k) != v)
+        audit.detail(request, "изменены: " + ", ".join(changed) if changed else "без изменений")
         for key, label in (("recordings_dir", "записей"), ("obsidian_dir", "заметок Obsidian")):
             value = getattr(body, key).strip()
             if value and value != str(core.cfg.get(key, "")) and not Path(value).expanduser().is_dir():
@@ -564,6 +566,10 @@ def create_app() -> FastAPI:
                 values["lock_timeout_min"] = core.cfg.get("lock_timeout_min", lock.DEFAULT_TIMEOUT)
             if values.get("suggestions_auto") is None:
                 values["suggestions_auto"] = core.cfg.get("suggestions_auto", True)
+            if values.get("ui_lang") is None:
+                values["ui_lang"] = core.cfg.get("ui_lang", "ru")
+            elif values["ui_lang"] not in config.UI_LANGS:
+                raise HTTPException(400, "Такого языка интерфейса нет")
             if values.get("dossier_model") is None:
                 values["dossier_model"] = core.cfg.get("dossier_model", True)
             saved = core.apply_settings(values)
@@ -1194,7 +1200,8 @@ def create_app() -> FastAPI:
                 titles[ident] = f"«{meeting.title}»" if meeting else "стёртая запись"
             elif kind in ("task", "decision"):
                 found = storage.one(f"SELECT m.title FROM {kind}s t JOIN meetings m ON m.id=t.meeting_id WHERE t.id=?", (ident,))
-                titles[ident] = ("задача" if kind == "task" else "решение") + (f" из «{found['title']}»" if found else " (запись стёрта)")
+                word = "задача" if kind == "task" else "решение"
+                titles[ident] = f"{word} из «{found['title']}»" if found else f"{word} (запись стёрта)"
             elif kind == "pin":
                 found = storage.one("SELECT scope,owner_id FROM dossier_pins WHERE id=?", (ident,))
                 titles[ident] = "закреплённый факт" if found else "закреплённый факт (убран)"

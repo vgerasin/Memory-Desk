@@ -30,6 +30,9 @@ MODEL_CACHE = PROJECT_ROOT / "huggingface-cache"
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
+UI_LANGS = ("ru", "en", "fr", "de", "es")
+
+
 def defaults() -> dict:
     recordings = Path.home() / "Downloads/PLAUD"
     return {
@@ -59,6 +62,7 @@ def defaults() -> dict:
         "lock_timeout_min": 15,
         "suggestions_auto": True,
         "dossier_model": True,
+        "ui_lang": "ru",
     }
 
 
@@ -98,6 +102,8 @@ def save_config(values: dict) -> dict:
     normalized["morning_brief"] = bool(normalized["morning_brief"])
     normalized["suggestions_auto"] = bool(normalized["suggestions_auto"])
     normalized["dossier_model"] = bool(normalized["dossier_model"])
+    if normalized.get("ui_lang") not in UI_LANGS:
+        normalized["ui_lang"] = "ru"
     try:
         normalized["morning_hour"] = min(23, max(0, int(normalized["morning_hour"])))
     except (TypeError, ValueError):

@@ -1,6 +1,7 @@
 import { navigate } from '../router'
 import type { CSSProperties, ReactNode } from 'react'
 import { useApp } from '../store'
+import { tr } from '../i18n'
 
 type IconProps = { size?: number; style?: CSSProperties }
 const base = (size: number, sw: number, style?: CSSProperties) => ({
@@ -122,7 +123,7 @@ export function Checkbox({ on, onClick, label }: { on: boolean; onClick: () => v
   )
 }
 
-export function Loading({ text = 'Загрузка…' }: { text?: string }) {
+export function Loading({ text = tr('Загрузка…') }: { text?: string }) {
   return <div className="empty flat">{text}</div>
 }
 
@@ -134,6 +135,6 @@ export function ErrorBox({ text }: { text: string }) {
 export function DirectoryTabs({ current }: { current: 'projects' | 'people' }) {
   return (
     <Segmented small className="dir-tabs" value={current} onChange={key => navigate('/' + key)}
-      items={[{ key: 'projects', label: 'Проекты' }, { key: 'people', label: 'Люди' }]} />
+      items={[{ key: 'projects', label: tr('Проекты') }, { key: 'people', label: tr('Люди') }]} />
   )
 }
