@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, bookmarks, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, bookmarks, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -1290,6 +1290,17 @@ def create_app() -> FastAPI:
     def export_document(body: ExportBody):
         """Документ из окна материалов (с правками пользователя) в Markdown, HTML, PDF или DOCX."""
         return file_response(lambda: export.export(body.format, body.title, body.markdown, body.name))
+
+    class MapExportBody(BaseModel):
+        format: str
+        title: str = Field("", max_length=300)
+        tree: dict
+        name: str | None = Field(None, max_length=200)
+
+    @app.post("/api/export/map")
+    def export_map(body: MapExportBody):
+        """Карта из окна материалов в PNG (от 2000 px), SVG или OPML."""
+        return file_response(lambda: mapexport.export(body.format, body.title, body.tree, body.name))
 
     class ChatExportBody(ChatSaveBody):
         format: str

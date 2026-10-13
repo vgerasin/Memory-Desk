@@ -4,7 +4,7 @@ import { useApp } from '../store'
 import { plural } from '../format'
 import type { MapNode, MaterialKind, MaterialResult, MaterialTarget } from '../types'
 import { IconOut, Segmented } from './ui'
-import { ExportMenu } from './ExportMenu'
+import { ExportMenu, MAP_FORMATS } from './ExportMenu'
 
 const TITLES: Record<MaterialKind, string> = { protocol: 'Протокол встречи', map: 'Карта', deck: 'Презентация' }
 const PERIODS = [{ key: '30', label: '30 дней' }, { key: '90', label: '90 дней' }, { key: '365', label: 'Год' }, { key: '3650', label: 'Всё время' }]
@@ -158,7 +158,7 @@ export function MaterialModal() {
         {result && kind === 'map' && result.tree && (
           <>
             <ul className="map-tree"><Tree node={result.tree} /></ul>
-            <div className="muted-text" style={{ fontSize: 13 }}>В Obsidian карта сохраняется как схема Mermaid и рисуется в режиме чтения; код можно вставить в любой редактор диаграмм.</div>
+            <div className="muted-text" style={{ fontSize: 13 }}>В Obsidian карта сохраняется как схема Mermaid. «Скачать карту» даёт PNG и SVG для презентаций и OPML для XMind, MindNode и OmniOutliner.</div>
           </>
         )}
         {result && kind === 'deck' && result.url && (
@@ -182,7 +182,9 @@ export function MaterialModal() {
           {result && kind !== 'deck' && (
             <>
               <button className="btn s34" onClick={() => void copy()}>{kind === 'map' ? 'Копировать код' : 'Копировать'}</button>
-              <ExportMenu endpoint="/api/export" up body={() => ({ title: result.title, markdown: text, name: fileName.replace(/\.md$/i, '') })} />
+              {kind === 'map' && result.tree
+                ? <ExportMenu endpoint="/api/export/map" formats={MAP_FORMATS} label="Скачать карту" up body={() => ({ title: result.title, tree: result.tree })} />
+                : <ExportMenu endpoint="/api/export" up body={() => ({ title: result.title, markdown: text, name: fileName.replace(/\.md$/i, '') })} />}
               <button className="btn s34" onClick={() => void save()}>В Obsidian</button>
             </>
           )}
