@@ -47,7 +47,24 @@ export async function downloadFile(path: string, body: unknown): Promise<string>
   return name
 }
 
+/** Отправка файла телом запроса (вложение к записи): имя уходит в параметре, файл остаётся на этом компьютере. */
+async function upload<T>(path: string, file: Blob, name: string): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`${path}?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'X-Memory-Desk': '1', 'Content-Type': 'application/octet-stream' }, body: file })
+  } catch {
+    throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
+  }
+  if (!response.ok) {
+    let detail = response.statusText
+    try { const data = await response.json(); detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail) } catch { /* без JSON */ }
+    throw new ApiError(response.status, detail)
+  }
+  return await response.json() as T
+}
+
 export const api = {
+  upload,
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),

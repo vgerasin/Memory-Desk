@@ -103,7 +103,8 @@ def check_components(report: Report) -> None:
     report.row("ffmpeg", mask(ffmpeg) if ffmpeg else "не найден", "ok" if ffmpeg else "bad")
     for module, label in (("mlx_whisper", "mlx-whisper"), ("qdrant_client", "qdrant-client"), ("fastapi", "fastapi"),
                           ("torch", "torch (для голосов)"), ("speechbrain", "speechbrain (для голосов)"),
-                          ("EventKit", "pyobjc-framework-EventKit")):
+                          ("EventKit", "pyobjc-framework-EventKit"),
+                          ("Vision", "pyobjc-framework-Vision (текст с фото)")):
         found = importlib.util.find_spec(module) is not None
         needed = module in ("mlx_whisper", "qdrant_client", "fastapi")
         report.row(label, "установлен" if found else "нет", "ok" if found else ("bad" if needed else "warn"))
@@ -143,6 +144,37 @@ def check_apple(report: Report) -> None:
         report.row(label, str(value), "ok" if value == "authorized" else "warn")
     if status.get("events") != "authorized" or status.get("reminders") != "authorized":
         report.text("Доступ выдаётся в приложении: Настройки → «Разрешить доступ». Затем запустите проверку ещё раз.")
+
+
+def check_ocr(report: Report) -> None:
+    """Распознавание текста на фото: рисуем картинку с известным русским и английским текстом и смотрим, что прочтёт движок."""
+    import tempfile
+    from PIL import Image, ImageDraw, ImageFont
+    from memory_desk import ocr
+    engines = ocr.engines()
+    report.row("Движки распознавания", ", ".join(engines) or "нет (Vision не установлен, Tesseract не найден)", "ok" if engines else "warn")
+    if not engines:
+        report.text("На macOS Vision ставится установщиком (pyobjc-framework-Vision); запасной вариант: brew install tesseract tesseract-lang.")
+        return
+    font = ImageFont.truetype(str(ROOT / "memory_desk/fonts/DejaVuSans.ttf"), 44)
+    lines = ["План запуска проекта", "Срок: пятнадцатое ноября", "Ответственный: Анна", "Project launch plan"]
+    image = Image.new("RGB", (1200, 120 * len(lines)), "white")
+    draw = ImageDraw.Draw(image)
+    for i, line in enumerate(lines):
+        draw.text((40, 30 + i * 100), line, fill="black", font=font)
+    with tempfile.TemporaryDirectory(prefix="md-ocr-check-") as tmp:
+        path = Path(tmp) / "check.png"
+        image.save(path)
+        started = time.time()
+        result = ocr.recognize(path)
+        seconds = time.time() - started
+    low = result.text.lower()
+    russian = sum(word in low for word in ("запуска", "проекта", "пятнадцатое", "ноября", "ответственный", "анна"))
+    english = "launch" in low and "plan" in low
+    report.row(f"Распознавание ({result.engine})", f"русский: {russian} из 6 слов, английский: {'да' if english else 'нет'}, {seconds:.1f} с",
+               "ok" if russian >= 5 and english else ("warn" if russian >= 3 or english else "bad"))
+    if result.note:
+        report.text(result.note)
 
 
 # --------------------------------------------------------------------------- 2. устойчивость JSON модели
@@ -326,6 +358,7 @@ def main() -> int:
     guarded(report, "Система", check_system)
     guarded(report, "Компоненты", check_components)
     guarded(report, "Календарь и Напоминания", check_apple)
+    guarded(report, "Распознавание текста на фото", check_ocr)
     if not args.skip_ollama:
         guarded(report, "Устойчивость JSON и скорость модели", check_ollama, models, max(1, args.runs))
     if args.voice:

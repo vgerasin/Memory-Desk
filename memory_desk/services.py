@@ -9,7 +9,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import bookmarks, config, daily, dictionary, digest, followups, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, templates, views, voice
+from . import attachments, bookmarks, config, daily, dictionary, digest, followups, integrations, jobs, knowledge, materials, ocr, speakers as speakers_mod, storage, templates, views, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -155,7 +155,7 @@ def list_meetings(core: Core, *, q: str = "", project: str = "", person: str = "
                                        "noProject": sum(1 for m in total_live if project_dto(m) is None)}}
 
 
-_KNOWN_SECTIONS = {t.casefold() for t in templates.STANDARD.values()} | {"краткое резюме", "стенограмма", "полная стенограмма", "закладки"}
+_KNOWN_SECTIONS = {t.casefold() for t in templates.STANDARD.values()} | {"краткое резюме", "стенограмма", "полная стенограмма", "закладки", "вложения"}
 
 
 def extra_sections(m: knowledge.Meeting) -> list[dict]:
@@ -212,6 +212,7 @@ def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
         "template": {"id": template.id if m.template else "", "name": template.name if m.template else "",
                      "suggestedId": templates.suggest(m.record_type).id},
         "extraSections": extra_sections(m), "views": views.list_views(m), "bookmarks": bookmark_dtos(m, transcript),
+        "attachments": attachments.list_for(m),
         "transcript": transcript, "speakers": speaker_list, "diarization": speakers_mod.status(m.id),
         "obsidianUrl": knowledge.obsidian_url(m.path), "notePath": knowledge.note_relative_path(m.path),
         "hasAudio": audio is not None, "audioUrl": f"/api/meetings/{m.id}/audio" if audio else None,
@@ -760,6 +761,7 @@ def system_status(core: Core) -> dict:
         free_gb = 0
     backups = storage.list_backups()
     db_ok, db_message = storage.check_integrity()
+    ocr_engines = ocr.engines()
     index = core.index
     if index.state == "ready":
         index_value, index_state = ("Qdrant · " + str(len(core.meetings)) + " записей"
@@ -778,6 +780,8 @@ def system_status(core: Core) -> dict:
         {"key": "vault", "name": "Obsidian Vault", "value": "доступ есть" if vault.exists() else "не найден",
          "state": "ok" if vault.exists() else "bad"},
         {"key": "disk", "name": "Свободное место", "value": f"{free_gb:.0f} ГБ", "state": "ok" if free_gb > 20 else "warn"},
+        {"key": "ocr", "name": "Распознавание текста на фото", "value": ", ".join(ocr_engines) if ocr_engines else "нет движка: фото сохраняются без текста",
+         "state": "ok" if ocr_engines else "warn"},
         {"key": "database", "name": "База кабинета", "value": "цела" if db_ok else "повреждена: восстановите из копии",
          "state": "ok" if db_ok else "bad", "detail": db_message},
         {"key": "backup", "name": "Резервная копия",

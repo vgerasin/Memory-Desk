@@ -43,7 +43,7 @@ export interface MeetingDetail extends MeetingItem {
   speakers: SpeakerInfo[]; diarization: DiarizationStatus | null
   obsidianUrl: string | null; notePath: string; hasAudio: boolean; audioUrl: string | null
   template?: { id: string; name: string; suggestedId: string }; extraSections?: { title: string; items: Fact[] }[]
-  views?: ViewDto[]; bookmarks?: BookmarkDto[]
+  views?: ViewDto[]; bookmarks?: BookmarkDto[]; attachments?: AttachmentDto[]
 }
 
 export interface MeetingsResponse { items: MeetingItem[]; total: number; counts: { total: number; needsReview: number; noProject: number } }
@@ -286,4 +286,9 @@ export interface ProjectDossier {
   weeks: { start: string; meetings: number }[]
   series: { id: string; title: string; count: number; first: string; last: string; latestId: string; repeatedQuestions: number }[]
   recent: MeetingBrief[]
+}
+
+export interface AttachmentDto {
+  id: string; name: string; kind: 'image' | 'text'; text: string; engine: string; draft: boolean
+  path: string; exists: boolean; size: number; url: string | null; already?: boolean; warning?: string
 }

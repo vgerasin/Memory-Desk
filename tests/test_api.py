@@ -238,7 +238,7 @@ def test_scan_cancel_retry_dismiss(client):
 
 def test_system_and_settings(client, fixture_dir):
     s = client.get("/api/system").json()
-    assert [r["key"] for r in s["rows"]] == ["whisper", "ollama", "index", "recordings", "vault", "disk", "database", "backup"]
+    assert [r["key"] for r in s["rows"]] == ["whisper", "ollama", "index", "recordings", "vault", "disk", "ocr", "database", "backup"]
     assert next(r for r in s["rows"] if r["key"] == "ollama")["state"] == "warn"
     assert next(r for r in s["rows"] if r["key"] == "index")["state"] == "ok"
     cfg = client.get("/api/settings").json()

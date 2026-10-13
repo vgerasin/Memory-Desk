@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, bookmarks, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, attachments, bookmarks, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -538,6 +538,60 @@ def create_app() -> FastAPI:
     def delete_bookmark(meeting_id: str, sec: int):
         if not bookmark_call(bookmarks.remove, core, meeting_id, sec):
             raise HTTPException(404, "Такой закладки нет")
+        return {"ok": True}
+
+    # ------------------------------------------------------------------ вложения
+    class AttachmentText(BaseModel):
+        name: str = Field("", max_length=200)
+        text: str = Field(..., max_length=attachments.MAX_TEXT * 2)
+
+    class AttachmentPatch(BaseModel):
+        text: str | None = Field(None, max_length=attachments.MAX_TEXT * 2)
+        name: str | None = Field(None, max_length=200)
+
+    def attachment_call(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except attachments.AttachmentError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить вложение: {exc}") from exc
+
+    @app.get("/api/meetings/{meeting_id}/attachments")
+    def list_attachments(meeting_id: str):
+        return {"items": attachments.list_for(get_meeting(meeting_id)), "engines": ocr.engines()}
+
+    @app.post("/api/meetings/{meeting_id}/attachments")
+    async def add_attachment(meeting_id: str, request: Request, name: str = Query("", max_length=300)):
+        """Файл приходит телом запроса как есть (без multipart): имя — в параметре `name`."""
+        get_meeting(meeting_id)
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > attachments.MAX_BYTES + 1024:
+            raise HTTPException(413, f"Файл больше {attachments.MAX_BYTES // 1024 // 1024} МБ")
+        data = await request.body()
+        return await asyncio.to_thread(attachment_call, attachments.add_file, core, meeting_id, name, data)
+
+    @app.post("/api/meetings/{meeting_id}/attachments/text")
+    def add_attachment_text(meeting_id: str, body: AttachmentText):
+        return attachment_call(attachments.add_text, core, meeting_id, body.name, body.text)
+
+    @app.patch("/api/meetings/{meeting_id}/attachments/{att_id}")
+    def update_attachment(meeting_id: str, att_id: str, body: AttachmentPatch):
+        return attachment_call(attachments.update, core, meeting_id, att_id, body.text, body.name)
+
+    @app.post("/api/meetings/{meeting_id}/attachments/{att_id}/recognize")
+    async def recognize_attachment(meeting_id: str, att_id: str, force: bool = False):
+        return await asyncio.to_thread(attachment_call, attachments.recognize_again, core, meeting_id, att_id, force)
+
+    @app.get("/api/meetings/{meeting_id}/attachments/{att_id}/file")
+    def attachment_file(meeting_id: str, att_id: str):
+        path, media = attachment_call(attachments.file_for, core, meeting_id, att_id)
+        return FileResponse(path, media_type=media, headers={"Content-Disposition": "inline", "X-Content-Type-Options": "nosniff"})
+
+    @app.delete("/api/meetings/{meeting_id}/attachments/{att_id}")
+    def delete_attachment(meeting_id: str, att_id: str):
+        if not attachment_call(attachments.remove, core, meeting_id, att_id):
+            raise HTTPException(404, "Такого вложения нет")
         return {"ok": True}
 
     # ------------------------------------------------------------------ взгляды на запись

@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
-from . import bookmarks, config, digest, knowledge, storage
+from . import attachments, bookmarks, config, digest, knowledge, storage
 
 MAX_ITEMS = 8
 
@@ -160,6 +160,13 @@ def protocol(core, meeting_id: str, date_of: Callable, today: date | None = None
     marks = bookmarks.list_for(meeting)
     if marks:
         lines += ["", "## Отмечено на записи", ""] + [f"- `⏱ {m['t']}`" + (f" — {m['text']}" if m["text"] else "") for m in marks[:MAX_ITEMS]]
+    files = attachments.notes_for(meeting, 600)
+    if files:
+        lines += ["", "## Материалы к записи", ""]
+        for item in files[:MAX_ITEMS]:
+            kind = "фото" if item["kind"] == "image" else "текст"
+            lines.append(f"- **{item['name']}** ({kind}{', черновик распознавания' if item['draft'] else ''}): "
+                         + " ".join(item["text"].split()))
     lines += ["", f"_Составлено автоматически из записи «{meeting.title}» ({digest.short(f.date)}); проверьте перед рассылкой._"]
     note(4, "Проверяю текст", 97)
     return {"title": f"Протокол: {meeting.title}", "markdown": "\n".join(lines) + "\n", "mode": mode, "meetingId": meeting.id,

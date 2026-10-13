@@ -178,6 +178,21 @@ if [ -x "$PY" ]; then
   fi
 fi
 
+# Распознавание текста на фото (вложения к записи) — тоже необязательная часть: без неё фото сохраняются без текста.
+if [ -x "$PY" ]; then
+  if "$PY" -c "import Vision" >/dev/null 2>&1; then
+    ok "Распознавание текста на фото (Vision) есть"
+  elif [ "$MODE" = install ]; then
+    if "$PY" -m pip install -q "pyobjc-framework-Vision>=10" >>"$LOG" 2>&1; then
+      ok "Распознавание текста на фото (Vision) установлено"
+    else
+      warn "Vision не установился: фото будут сохраняться без текста (запасной вариант: brew install tesseract tesseract-lang)"
+    fi
+  else
+    warn "Нет Vision: текст с фото не распознаётся"
+  fi
+fi
+
 # --------------------------------------------------------------------------- 4. папки
 step "Рабочие папки"
 for dir in logs runtime webui/data work; do

@@ -135,10 +135,11 @@ def build_text(meeting: knowledge.Meeting, template: templates.Template, data: d
         sections = _replace_section(sections + "\n", knowledge.DECISION_SECTION, "\n".join(
             knowledge.render_item_line("decisions", i) for i in decision_lines) or "Не выявлено.")
     signature = f"\n_{used.signature}_\n" if used.signature else ""
-    from . import bookmarks, views
-    kept_marks = bookmarks.section_text(body)   # закладки и «Взгляды» не зависят от шаблона и переживают пересборку
+    from . import attachments, bookmarks, views
+    kept_marks = bookmarks.section_text(body)   # закладки, вложения и «Взгляды» не зависят от шаблона и переживают пересборку
+    kept_files = attachments.section_text(body)
     kept_views = views.sections_text(body)
-    views_block = "".join(f"{part.strip()}\n\n" for part in (kept_marks, kept_views) if part.strip())
+    views_block = "".join(f"{part.strip()}\n\n" for part in (kept_marks, kept_files, kept_views) if part.strip())
     new_body = f"{preamble}\n{sections.strip()}\n\n{views_block}{transcript_block}{signature}"
     # поле template в метаданных
     line = f'template: "{used.id}"'
@@ -161,7 +162,9 @@ def rebuild(core, meeting_id: str, template_id: str) -> dict:
     if len(transcript) < 20:
         raise RebuildError("У записи нет стенограммы: пересобирать заметку не из чего")
     mp = _worker()
-    data, used, fallback = mp.analyze_with_template(transcript, template)
+    from . import attachments
+    extra = attachments.model_context(meeting)   # текст приложенных фото и заметок помогает составить «Основные темы»
+    data, used, fallback = mp.analyze_with_template(transcript + extra, template)
     text, task_drafts, decision_drafts, kept_tasks, kept_decisions = build_text(meeting, template, data, used, fallback)
     backup_dir().mkdir(parents=True, exist_ok=True)
     backup = backup_dir() / f"{meeting.path.stem}.{datetime.now():%Y%m%d-%H%M%S}.md"

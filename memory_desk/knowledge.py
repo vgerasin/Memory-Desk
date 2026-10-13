@@ -588,6 +588,11 @@ def sections(meeting: Meeting) -> list[dict]:
             for line in storage.bullet_lines(body):
                 chunks.append(make_chunk(meeting, "Закладки", "Закладка: " + line))
             continue
+        if heading.strip() == "Вложения":   # у каждого вложения свой фрагмент с названием: «найдено на фото доски»
+            from . import attachments
+            for text in attachments.chunk_texts(body):
+                chunks.append(make_chunk(meeting, "Вложения", text))
+            continue
         buffer = ""
         for paragraph in paragraphs:
             candidate = f"{buffer}\n\n{paragraph}".strip()
