@@ -854,3 +854,6 @@ ul { padding: 0; list-style: none; }
 .intake-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .intake-head .h3 { margin: 0; }
 .intake-sub { color: var(--text2); font-size: 13px; }
+
+/* Переключатель «Проекты | Люди» над заголовком экрана */
+.dir-tabs { align-self: flex-start; margin-bottom: 4px; }

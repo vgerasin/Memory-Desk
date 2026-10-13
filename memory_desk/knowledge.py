@@ -173,6 +173,36 @@ def create_project(title: str) -> dict:
     return {"id": project_id, "title": title, "status": "active", "path": str(path), "created": True}
 
 
+PROJECT_STATUSES = ("active", "paused", "done")
+
+
+def update_project(project_id: str, *, status: str | None = None, goal: str | None = None) -> dict:
+    """Статус и цель проекта пишутся в его файл `Проекты/<Название>.md`; остальной текст файла не меняется."""
+    project = next((p for p in load_projects() if p["id"] == project_id), None)
+    if not project:
+        raise KeyError("Проект не найден")
+    if status is not None and status not in PROJECT_STATUSES:
+        raise ValueError("Статус проекта: active, paused или done")
+    path = Path(project["path"])
+    text = path.read_text(encoding="utf-8")
+    if status is not None:
+        if re.search(r"(?m)^status:.*$", text.split("\n---\n", 1)[0]):
+            text = re.sub(r"(?m)^status:.*$", f"status: {status}", text, count=1)
+        else:
+            text = text.replace("\n---\n", f"\nstatus: {status}\n---\n", 1)
+    if goal is not None:
+        goal = re.sub(r"(?m)^##\s+", "### ", goal.replace("\r\n", "\n").strip())[:2000]
+        block = "## Цели\n\n" + (goal + "\n" if goal else "")
+        if re.search(r"(?m)^##\s+Цели\s*$", text):
+            text = re.sub(r"(?ms)^##\s+Цели\s*$.*?(?=^##\s|\Z)", lambda _m: block + "\n", text, count=1).rstrip() + "\n"
+        else:
+            text = text.rstrip() + "\n\n" + block
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(text, encoding="utf-8")
+    temp.replace(path)
+    return next(p for p in load_projects() if p["id"] == project_id)
+
+
 def create_record_type(title: str, type_id: str | None = None) -> dict:
     title = title.strip()
     if not title:

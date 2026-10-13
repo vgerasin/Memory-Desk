@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import config, jobs, knowledge, storage, voice
+from . import config, jobs, knowledge, people, storage, voice
 
 
 def vault_fingerprint(vault: Path) -> str:
@@ -65,6 +65,10 @@ class Core:
             fresh = knowledge.load_meetings()
             storage.sync_meetings(fresh, knowledge.sections)
             storage.sync_projects(knowledge.load_projects())
+            try:
+                storage.sync_person_cards(people.load_cards())
+            except OSError:
+                pass   # карточки людей вторичны: записи важнее
             self.meetings = fresh
             self.by_id = {m.id: m for m in fresh}
             self.fingerprint = fingerprint

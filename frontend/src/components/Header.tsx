@@ -7,13 +7,14 @@ import { IconGear, IconRefresh, IconSearch, Segmented } from './ui'
 
 const TABS = [
   { key: '/', label: 'Сегодня' }, { key: '/records', label: 'Записи' },
-  { key: '/projects', label: 'Проекты' }, { key: '/people', label: 'Люди' }, { key: '/tasks', label: 'Задачи' },
+  { key: '/tasks', label: 'Задачи и решения' }, { key: '/projects', label: 'Проекты и люди' },
   { key: '/analytics', label: 'Аналитика' },
 ]
 const STATE_COLOR = { ok: '#34C759', warn: '#FF9F0A', bad: '#FF3B30' }
 
 function activeTab(path: string): string {
   if (path === '/archive') return '/records'
+  if (path === '/people' || path.startsWith('/people/')) return '/projects'   // «Проекты и люди» — один пункт, внутри две вкладки
   const hit = TABS.find(t => t.key !== '/' && (path === t.key || path.startsWith(t.key + '/')))
   return hit ? hit.key : '/'
 }

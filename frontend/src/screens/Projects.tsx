@@ -5,7 +5,7 @@ import { useApi } from '../useApi'
 import { useApp } from '../store'
 import { dayLabel } from '../format'
 import type { ProjectOverview } from '../types'
-import { AvatarStack, ErrorBox, Loading } from '../components/ui'
+import { AvatarStack, DirectoryTabs, ErrorBox, Loading } from '../components/ui'
 
 export function Projects() {
   const { data, error } = useApi<{ items: ProjectOverview[] }>('/api/projects')
@@ -23,7 +23,7 @@ export function Projects() {
   return (
     <>
       <div className="page-head">
-        <h1 className="h1">Проекты</h1>
+        <div className="titles"><DirectoryTabs current="projects" /><h1 className="h1">Проекты</h1></div>
         {!adding && <button className="btn s34" onClick={() => setAdding(true)}>Новый проект</button>}
       </div>
       {adding && (

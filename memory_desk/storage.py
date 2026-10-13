@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import json
 import sqlite3
 import threading
 import uuid
@@ -105,6 +106,10 @@ def initialize() -> None:
             columns = {row[1] for row in db.execute("PRAGMA table_info(meetings)")}
             if "archived" not in columns:
                 db.execute("ALTER TABLE meetings ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+            people_columns = {row[1] for row in db.execute("PRAGMA table_info(people)")}
+            for column in ("organization", "aliases"):
+                if column not in people_columns:
+                    db.execute(f"ALTER TABLE people ADD COLUMN {column} TEXT")
             for column, ddl in (("calendar_event_id", "TEXT"), ("calendar_event_title", "TEXT"),
                                 ("calendar_dismissed", "INTEGER NOT NULL DEFAULT 0")):
                 if column not in columns:
@@ -246,7 +251,7 @@ ALLOWED_FIELDS = {
     "tasks": {"text", "owner", "deadline", "status", "evidence_time"},
     "meetings": {"review_status", "important", "archived", "project_id", "project_title",
                  "record_type_id", "record_type_title", "calendar_event_id", "calendar_event_title", "calendar_dismissed"},
-    "people": {"name", "role", "notes"},
+    "people": {"name", "role", "notes", "organization", "aliases"},
     "projects": {"goal", "description", "status"},
 }
 
@@ -334,7 +339,7 @@ def _upsert_person(db: sqlite3.Connection, name: str, role: str) -> dict:
         if role:
             db.execute("UPDATE people SET role=?, updated_at=? WHERE id=?", (role, now_iso(), existing["id"]))
         return {"id": existing["id"], "name": existing["name"], "role": role or existing["role"] or ""}
-    person_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "plaud-person:" + folded))
+    person_id = person_id_for(name)
     db.execute(
         "INSERT INTO people (id,name,role,updated_at) VALUES (?,?,?,?)",
         (person_id, name, role, now_iso()),
@@ -351,6 +356,22 @@ def create_person(name: str, role: str = "") -> dict:
     initialize()
     with connect() as db:
         return _upsert_person(db, name, " ".join(role.split())[:200])
+
+
+def person_id_for(name: str) -> str:
+    """Идентификатор человека зависит только от имени: карточка в Obsidian и записи находят друг друга без базы."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "plaud-person:" + " ".join(name.split()).casefold()))
+
+
+def sync_person_cards(cards: list[dict]) -> None:
+    """Карточки из Obsidian (`Люди/*.md`) — источник правды: должность, организация, заметка и псевдонимы берутся из файла."""
+    initialize()
+    with connect() as db:
+        for card in cards:
+            person = _upsert_person(db, card["name"], "")
+            db.execute("UPDATE people SET role=?, organization=?, aliases=?, notes=?, updated_at=? WHERE id=?",
+                       (card.get("role", ""), card.get("organization", ""), json.dumps(card.get("aliases", []), ensure_ascii=False),
+                        card.get("notes", ""), now_iso(), person["id"]))
 
 
 def set_meeting_people(meeting_id: str, names: list[str]) -> list[dict]:

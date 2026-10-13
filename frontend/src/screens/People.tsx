@@ -4,7 +4,7 @@ import { useApi } from '../useApi'
 import { useApp } from '../store'
 import { due, plural } from '../format'
 import type { PersonOverview } from '../types'
-import { Avatar, ErrorBox, Loading } from '../components/ui'
+import { Avatar, DirectoryTabs, ErrorBox, Loading } from '../components/ui'
 
 function RoleEdit({ person }: { person: PersonOverview }) {
   const { showToast, invalidate } = useApp()
@@ -56,7 +56,7 @@ export function People() {
   const { chat, setMaterial } = useApp()
   return (
     <>
-      <h1 className="h1">Люди</h1>
+      <div className="page-head"><div className="titles"><DirectoryTabs current="people" /><h1 className="h1">Люди</h1></div></div>
       {error && !data && <ErrorBox text={error} />}
       {!data && !error && <Loading />}
       {data && data.items.length === 0 && <div className="empty" style={{ marginTop: 36 }}>Участники появятся здесь, когда вы добавите их к записям.</div>}

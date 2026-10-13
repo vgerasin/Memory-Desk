@@ -1,3 +1,4 @@
+import { navigate } from '../router'
 import type { CSSProperties, ReactNode } from 'react'
 import { useApp } from '../store'
 
@@ -121,4 +122,12 @@ export function Loading({ text = 'Загрузка…' }: { text?: string }) {
 
 export function ErrorBox({ text }: { text: string }) {
   return <div className="error-box">{text}</div>
+}
+
+/** Переключатель внутри пункта «Проекты и люди»: у обоих экранов один и тот же. */
+export function DirectoryTabs({ current }: { current: 'projects' | 'people' }) {
+  return (
+    <Segmented small className="dir-tabs" value={current} onChange={key => navigate('/' + key)}
+      items={[{ key: 'projects', label: 'Проекты' }, { key: 'people', label: 'Люди' }]} />
+  )
 }

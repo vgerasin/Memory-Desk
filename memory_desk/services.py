@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 import urllib.request
@@ -27,7 +28,13 @@ def initials(name: str) -> str:
 
 
 def person_dto(person: dict) -> dict:
+    try:
+        aliases = json.loads(person.get("aliases") or "[]")
+    except (TypeError, ValueError):
+        aliases = []
     return {"id": person["id"], "name": person["name"], "role": person.get("role") or "",
+            "organization": person.get("organization") or "", "aliases": aliases if isinstance(aliases, list) else [],
+            "notes": person.get("notes") or "",
             "initials": initials(person["name"]), "color": color_for("person:" + person["name"].casefold())}
 
 
@@ -238,11 +245,22 @@ def projects_overview(core: Core) -> list[dict]:
         stored = storage.one("SELECT goal,description FROM projects WHERE id=?", (project["id"],)) or {}
         result.append({
             "id": project["id"], "title": project["title"], "color": color_for("project:" + project["id"]),
+            "status": project.get("status") or "active",
             "goal": project.get("goal") or stored.get("goal") or stored.get("description") or "",
             "counts": {"records": len(linked), "openTasks": open_tasks, "questions": questions},
             "people": list(people.values()), "lastChange": change,
         })
     return result
+
+
+def person_names(person: dict) -> set[str]:
+    """Как человека называют в задачах: полное имя, имя без фамилии и псевдонимы из карточки (всё в нижнем регистре)."""
+    name = " ".join(person["name"].split()).casefold()
+    names = {name}
+    if name.split():
+        names.add(name.split()[0])
+    names.update(a.casefold() for a in person_dto(person)["aliases"])
+    return names
 
 
 def people_overview(core: Core) -> list[dict]:
@@ -255,9 +273,8 @@ def people_overview(core: Core) -> list[dict]:
     voices = voice.all_profile_stats()
     for person in people:
         mine = [l for l in links if l["person_id"] == person["id"]]
-        name_cf = person["name"].casefold()
-        first = name_cf.split()[0] if name_cf.split() else name_cf
-        owned = [t for t in tasks if (t.get("owner") or "").casefold() in {name_cf, first}]
+        names = person_names(person)
+        owned = [t for t in tasks if (t.get("owner") or "").casefold() in names]
         projects = list(dict.fromkeys(l["project_title"] for l in mine if l["project_title"] and l["project_title"] != NO_PROJECT))
         last = _task_dto(owned[0], owned[0]["mt"], owned[0]["md"]) if owned else None
         result.append({**person_dto(person), "meetings": len(mine), "projects": projects,

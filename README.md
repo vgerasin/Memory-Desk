@@ -57,10 +57,12 @@ Intel-Mac не поддерживается: MLX Whisper работает тол
 ## Установка
 
 ```bash
-git clone <адрес-репозитория> memory-desk
+git clone https://github.com/vgerasin/Memory-Desk.git memory-desk
 cd memory-desk
 ./install.command
 ```
+
+Если `git` на Mac ещё не установлен, macOS сам предложит поставить Command Line Tools — согласитесь и повторите команду.
 
 Если проект скачан архивом (ZIP), macOS помечает файлы карантином — снимите отметку перед запуском:
 

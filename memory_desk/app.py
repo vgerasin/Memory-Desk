@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, bookmarks, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, bookmarks, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -927,22 +927,68 @@ def create_app() -> FastAPI:
     def projects():
         return {"items": services.projects_overview(core)}
 
+    @app.get("/api/people/{person_id}")
+    def person_dossier(person_id: str):
+        try:
+            return dossier.person(core, person_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc.args[0])) from exc
+
+    @app.get("/api/projects/{project_id}")
+    def project_dossier(project_id: str):
+        try:
+            return dossier.project(core, project_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc.args[0])) from exc
+
+    class ProjectPatch(BaseModel):
+        status: str | None = None
+        goal: str | None = Field(None, max_length=2000)
+
+    @app.patch("/api/projects/{project_id}")
+    def patch_project(project_id: str, body: ProjectPatch):
+        """Статус (active, paused, done) и цель проекта; пишутся в файл проекта в Obsidian."""
+        if body.status is None and body.goal is None:
+            raise HTTPException(400, "Нечего менять: допустимы status и goal")
+        try:
+            knowledge.update_project(project_id, status=body.status, goal=body.goal)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc.args[0])) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить проект: {exc}") from exc
+        storage.sync_projects(core.projects())
+        core.data_version += 1
+        return {"ok": True}
+
     class PersonBody(BaseModel):
         name: str
         role: str = ""
+        organization: str = ""
+        aliases: list[str] | str = Field(default_factory=list)
+        notes: str = ""
 
     @app.get("/api/people")
     def people():
         return {"items": services.people_overview(core)}
 
+    def person_call(fn, *args):
+        try:
+            return fn(*args)
+        except people_cards.PersonError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить карточку: {exc}") from exc
+
     @app.post("/api/people")
     def create_person(body: PersonBody):
-        try:
-            person = storage.create_person(body.name, body.role)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
+        """Новый человек (или карточка для уже встречающегося в записях): строка в базе и файл `Люди/<Имя>.md`."""
+        fields = {"role": body.role, "organization": body.organization, "aliases": body.aliases, "notes": body.notes}
+        made = person_call(people_cards.create, body.name, fields)
         core.data_version += 1
-        return services.person_dto(person)
+        person = storage.one("SELECT * FROM people WHERE id=?", (made["id"],))
+        return {**services.person_dto(person), "created": made["created"]}
 
     # ------------------------------------------------------------------ голоса
     def voice_state():
@@ -989,8 +1035,10 @@ def create_app() -> FastAPI:
 
     @app.patch("/api/people/{person_id}")
     def patch_person(person_id: str, body: dict = Body(...)):
-        fields = {k: " ".join(str(v).split())[:200] for k, v in body.items() if k in {"role"}}
-        if not fields or not storage.update_item("people", person_id, **fields):
+        fields = {k: body[k] for k in ("role", "organization", "aliases", "notes") if k in body}
+        if not fields:
+            raise HTTPException(400, "Нечего менять: допустимы role, organization, aliases, notes")
+        if not person_call(people_cards.update, person_id, fields):
             raise HTTPException(404, "Человек не найден")
         core.data_version += 1
         return {"ok": True}
