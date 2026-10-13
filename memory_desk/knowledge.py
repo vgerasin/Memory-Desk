@@ -900,7 +900,9 @@ def answer_question(question: str, sources: list[dict], mode: str = "") -> str:
             raw = json.load(response).get("response", "")
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         reason = getattr(exc, "reason", exc)
-        return f"Локальная модель Ollama недоступна: {reason}. Источники ниже найдены в архиве."
+        refused = isinstance(reason, ConnectionRefusedError) or "refused" in str(reason).lower()
+        why = "она не запущена" if refused else str(reason)
+        return f"Локальная модель Ollama сейчас недоступна ({why}). Источники ниже найдены в архиве."
     if "</think>" in raw:
         raw = raw.rsplit("</think>", 1)[-1]
     raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE)
