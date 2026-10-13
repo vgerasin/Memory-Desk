@@ -76,7 +76,7 @@ export function Chat() {
               {SUGGESTIONS.map(t => <button key={t} onClick={() => chat.send(t)}>{t}</button>)}
             </div>
           )}
-          {chat.messages.map(m => m.role === 'user' ? (
+          {chat.messages.map((m, index) => m.role === 'user' ? (
             <div key={m.id} className="bubble-user">{m.text}</div>
           ) : (
             <div key={m.id} className="bot">
@@ -125,6 +125,12 @@ export function Chat() {
                   )}
                 </div>
               ))}
+              {index === chat.messages.length - 1 && !m.pending && !m.error && (m.suggestions?.length ?? 0) > 0 && (
+                <div className="followups" aria-label="Что спросить дальше">
+                  <span>Что спросить дальше</span>
+                  {m.suggestions!.map(q => <button key={q} disabled={chat.busy} onClick={() => chat.send(q)}>{q}</button>)}
+                </div>
+              )}
             </div>
           ))}
         </div>

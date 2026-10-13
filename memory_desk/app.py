@@ -1204,6 +1204,7 @@ def create_app() -> FastAPI:
         question: str
         scope: dict = {"kind": "all"}
         previous: list[str] = []
+        asked: list[str] = []
 
     @app.post("/api/chat")
     def chat(body: ChatBody):
@@ -1212,7 +1213,7 @@ def create_app() -> FastAPI:
                 else "Поисковый индекс ещё готовится — это занимает до минуты после запуска."
             raise HTTPException(503, detail)
         try:
-            return services.chat(core, body.question, body.scope, body.previous)
+            return services.chat(core, body.question, body.scope, body.previous, body.asked[-20:])
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except knowledge.IndexNotReady as exc:

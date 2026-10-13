@@ -116,9 +116,10 @@ export interface ChatDigest {
   stats: { records: number; decisions: number; decisionsDraft: number; tasksDone: number; tasksOpen: number; tasksOverdue: number; risks: number }
 }
 export interface ChatMaterial { kind: MaterialKind; result: MaterialResult }
-export interface ChatReply { answer: string; sources: ChatSource[]; mode: string; confirmed: boolean; digest?: ChatDigest; material?: ChatMaterial }
+export interface ChatReply { answer: string; sources: ChatSource[]; mode: string; confirmed: boolean; digest?: ChatDigest; material?: ChatMaterial; suggestions?: string[] }
 export interface ChatMessage {
   id: number; role: 'user' | 'bot'; text: string; sources?: ChatSource[]; digest?: ChatDigest; material?: ChatMaterial; pending?: boolean; error?: boolean
+  suggestions?: string[]
   saved?: { savedAs: string; obsidianUrl: string; already: boolean }; saving?: boolean; saveError?: string
 }
 export type ChatScope =

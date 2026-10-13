@@ -8,7 +8,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import config, daily, dictionary, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, templates, views, voice
+from . import config, daily, dictionary, digest, followups, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, templates, views, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -665,7 +665,7 @@ def _excerpt(source: dict) -> str:
     return text[:220].rsplit(" ", 1)[0] + "…" if len(text) > 220 else text
 
 
-def chat(core: Core, question: str, scope: dict, previous: list[str]) -> dict:
+def chat(core: Core, question: str, scope: dict, previous: list[str], asked: list[str] | None = None) -> dict:
     question = question.strip()
     if not question:
         raise ValueError("Вопрос не может быть пустым")
@@ -674,6 +674,7 @@ def chat(core: Core, question: str, scope: dict, previous: list[str]) -> dict:
         return made
     summary = digest.build(core, question, scope, meeting_date)
     if summary is not None:
+        summary["suggestions"] = followups.suggest(core, question, summary.get("sources", []), asked, str(scope.get("kind") or "all"))
         return summary
     allowed = scope_paths(core, scope)
     path_to_id = {str(m.path): m.id for m in core.meetings}
@@ -694,7 +695,9 @@ def chat(core: Core, question: str, scope: dict, previous: list[str]) -> dict:
             "t": source.get("timestamp", ""), "tSec": clock_seconds(source.get("timestamp", "")),
             "excerpt": _excerpt(source),
         })
-    return {"answer": answer, "sources": grouped[:4], "mode": mode, "confirmed": bool(sources)}
+    shown = grouped[:4]
+    return {"answer": answer, "sources": shown, "mode": mode, "confirmed": bool(sources),
+            "suggestions": followups.suggest(core, question, shown, asked, str(scope.get("kind") or "all"))}
 
 
 # --------------------------------------------------------------------------- система

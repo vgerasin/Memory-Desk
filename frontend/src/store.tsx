@@ -188,8 +188,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       : current.kind === 'person' ? { kind: 'person', id: current.id }
       : { kind: 'days', days: current.days }
     try {
-      const reply = await api.post<ChatReply>('/api/chat', { question: text, scope: payload, previous })
-      setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: reply.answer, sources: reply.sources, digest: reply.digest, material: reply.material, pending: false } : x))
+      const asked = messagesRef.current.filter(m => m.role === 'user').map(m => m.text)
+      const reply = await api.post<ChatReply>('/api/chat', { question: text, scope: payload, previous, asked })
+      setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: reply.answer, sources: reply.sources, digest: reply.digest, material: reply.material, suggestions: reply.suggestions, pending: false } : x))
     } catch (error) {
       const message = error instanceof ApiError && error.status === 503 ? error.message : 'Не удалось получить ответ. ' + errorText(error)
       setMessages(m => m.map(x => x.id === pending.id ? { ...x, text: message, pending: false, error: true } : x))

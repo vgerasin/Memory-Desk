@@ -24,10 +24,10 @@ TRANSCRIPT = (
 def _modules(fixture_dir):
     # модули приложения читают окружение при импорте, поэтому импортируем их только после `fixture_dir`
     sys.path.insert(0, str(ROOT))
-    import meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views  # noqa: F401
+    import meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views, memory_desk.followups  # noqa: F401
     g = globals()
-    g["mp"], g["knowledge"], g["storage"], g["templates"], g["views"] = (
-        meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views)
+    g["mp"], g["knowledge"], g["storage"], g["templates"], g["views"], g["followups"] = (
+        meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views, memory_desk.followups)
 
 
 @pytest.fixture()
@@ -913,3 +913,52 @@ def test_save_answer_validation(client, note, answers_dir):
     assert client.post("/api/chat/save", json=weird).status_code == 200
     name = next(answers_dir.glob("*.md")).name
     assert not re.search(r'[\\/:*?"<>|]', name)
+
+
+# --------------------------------------------------------------------------- 3.4 подсказки уточняющих вопросов
+
+def make_note_with_questions(note):
+    text = note.path.read_text(encoding="utf-8")
+    text = re.sub(r"(?ms)(^## Открытые вопросы\n\n).*?(?=^## )", lambda m: m.group(1) + "- Кто согласует доступ к тестовому контуру — `⏱ 00:01:10`\n\n", text, count=1)
+    text = re.sub(r"(?ms)(^## Риски\n\n).*?(?=^## )", lambda m: m.group(1) + "- Выгрузка может сорвать срок — `⏱ 00:01:30`\n\n", text, count=1)
+    note.path.write_text(text, encoding="utf-8")
+    note.client.app.state.core.reload(force=True)
+
+
+def test_followups_use_open_questions_and_record_content(client, note):
+    make_note_with_questions(note)
+    core = client.app.state.core
+    src = [{"meetingId": note.id}]
+    found = followups.suggest(core, "Что решили про справочник?", src)
+    assert len(found) == 3 and found[0] == "Кто согласует доступ к тестовому контуру?"
+    # в общей области вопрос называет запись
+    wide = followups.suggest(core, "Что обсуждали?", src, scope_kind="all")
+    assert any("«Разговор о справочнике»" in q for q in wide)
+    assert all(q.endswith("?") for q in found + wide)
+
+
+def test_followups_do_not_repeat_asked(client, note):
+    make_note_with_questions(note)
+    core = client.app.state.core
+    first = followups.suggest(core, "Вопрос", [{"meetingId": note.id}], scope_kind="record")
+    again = followups.suggest(core, "Вопрос", [{"meetingId": note.id}], asked=first, scope_kind="record")
+    assert not set(first) & set(again) and len(again) == 3
+    # почти тот же вопрос другими словами тоже считается заданным
+    same = followups.suggest(core, "Какие решения приняты?", [{"meetingId": note.id}], scope_kind="record")
+    assert "Какие решения приняты?" not in same
+
+
+def test_followups_fall_back_to_generic_without_sources(client):
+    core = client.app.state.core
+    found = followups.suggest(core, "Что-то неведомое", [])
+    assert found == list(followups.GENERIC[:3])
+    assert followups.suggest(core, "Что решили?", [])[0] == "Кто за что отвечает?"
+
+
+def test_chat_reply_carries_suggestions(client, note):
+    reply = client.post("/api/chat", json={"question": "Что решили про единый справочник?", "scope": {"kind": "all"}, "asked": ["Что решили про единый справочник?"]})
+    assert reply.status_code == 200
+    data = reply.json()
+    assert 1 <= len(data["suggestions"]) <= 3 and "Что решили про единый справочник?" not in data["suggestions"]
+    empty = client.post("/api/chat", json={"question": "Совсем не по теме абракадабра", "scope": {"kind": "all"}}).json()
+    assert 1 <= len(empty["suggestions"]) <= 3
