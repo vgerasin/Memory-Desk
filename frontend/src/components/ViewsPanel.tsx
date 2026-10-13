@@ -44,7 +44,10 @@ export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump
   const current: ViewDto | undefined = views.find(v => v.id === active) ?? views[0]
   const running = job.state === 'running'
   const max = presets?.max ?? 8
-  const free = (presets?.presets ?? []).filter(p => !views.some(v => v.id === p.id))
+  const have = (id: string) => views.some(v => v.id === id)
+  const typed = title.trim().toLowerCase()
+  const sameAsPreset = (presets?.presets ?? []).find(p => p.title.toLowerCase() === typed)
+  const tooShort = instruction.trim().length < 8
 
   const launch = async (url: string, body?: unknown) => {
     setError('')
@@ -81,27 +84,29 @@ export function ViewsPanel({ meeting, onJump }: { meeting: MeetingDetail; onJump
 
       {adding && presets && (
         <div className="view-add">
-          {free.length > 0 && (
-            <>
-              <div className="label-caps">Готовые взгляды</div>
-              <div className="view-presets">
-                {free.map(p => (
-                  <button key={p.id} className="view-preset" onClick={() => void launch(`/api/meetings/${meeting.id}/views`, { presetId: p.id })}>
-                    <b>{p.title}</b><span>{p.instruction}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+          <div className="label-caps">Готовые взгляды</div>
+          <div className="view-presets">
+            {(presets.presets).map(p => have(p.id) ? (
+              <button key={p.id} className="view-preset have" onClick={() => { setActive(p.id); setAdding(false) }}>
+                <b>{p.title}</b><span>Уже есть в этой записи. Открыть; обновить можно кнопкой «Пересчитать».</span>
+              </button>
+            ) : (
+              <button key={p.id} className="view-preset" onClick={() => void launch(`/api/meetings/${meeting.id}/views`, { presetId: p.id })}>
+                <b>{p.title}</b><span>{p.instruction}</span>
+              </button>
+            ))}
+          </div>
           <div className="label-caps">Свой взгляд</div>
           <div className="view-custom">
             <input value={title} maxLength={60} placeholder="Название, например «Что согласовать с юристом»" aria-label="Название взгляда" onChange={e => setTitle(e.target.value)} />
+            {sameAsPreset && <div className="hint">«{sameAsPreset.title}» — готовый взгляд: выберите его в списке выше, описывать ничего не нужно.</div>}
             <textarea value={instruction} maxLength={400} placeholder="Что выписывать: одной-двумя фразами" aria-label="Что выписывать" onChange={e => setInstruction(e.target.value)} />
             <div className="row">
-              <button className="btn s28 accent" disabled={!title.trim() || instruction.trim().length < 8}
+              <button className="btn s28 accent" disabled={!title.trim() || tooShort || !!sameAsPreset}
                 onClick={() => void launch(`/api/meetings/${meeting.id}/views`, { title, instruction })}>Построить</button>
               <button className="btn s28" onClick={() => setAdding(false)}>Отмена</button>
             </div>
+            {!sameAsPreset && (!title.trim() || tooShort) && <div className="hint">Чтобы «Построить» стало активным, введите название и опишите, что выписывать (не короче 8 символов).</div>}
           </div>
         </div>
       )}

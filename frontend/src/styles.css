@@ -805,3 +805,5 @@ ul { padding: 0; list-style: none; }
 .save-answer .saved-mark { font-size: 12px; font-weight: 600; color: var(--text2); }
 .save-answer .link-btn { font-size: 12px; text-decoration: none; }
 .save-answer .save-error { font-size: 12px; color: var(--danger); }
+.view-preset.have { background: var(--fill2, var(--surface)); opacity: .85; }
+.view-preset.have b::after { content: ' · уже есть'; font-weight: 500; color: var(--text2); }
