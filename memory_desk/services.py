@@ -8,7 +8,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import config, daily, dictionary, digest, followups, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, templates, views, voice
+from . import bookmarks, config, daily, dictionary, digest, followups, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, templates, views, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -148,7 +148,7 @@ def list_meetings(core: Core, *, q: str = "", project: str = "", person: str = "
                                        "noProject": sum(1 for m in total_live if project_dto(m) is None)}}
 
 
-_KNOWN_SECTIONS = {t.casefold() for t in templates.STANDARD.values()} | {"краткое резюме", "стенограмма", "полная стенограмма"}
+_KNOWN_SECTIONS = {t.casefold() for t in templates.STANDARD.values()} | {"краткое резюме", "стенограмма", "полная стенограмма", "закладки"}
 
 
 def extra_sections(m: knowledge.Meeting) -> list[dict]:
@@ -160,6 +160,16 @@ def extra_sections(m: knowledge.Meeting) -> list[dict]:
         items = [{"text": f["text"], "t": f["evidence_time"], "tSec": clock_seconds(f["evidence_time"])}
                  for f in (storage.parse_fact(line) for line in storage.bullet_lines(body)) if f["text"]]
         result.append({"title": title, "items": items})
+    return result
+
+
+def bookmark_dtos(m: knowledge.Meeting, transcript: list[dict]) -> list[dict]:
+    """Закладки записи; к каждой — реплика стенограммы в этот момент (для списка), она не хранится."""
+    result = []
+    for mark in bookmarks.list_for(m):
+        line = next((seg for seg in reversed(transcript) if float(seg["sec"]) <= mark["sec"]), None)
+        context = " ".join(str(line["text"]).split()) if line else ""
+        result.append({**mark, "context": context if len(context) <= 140 else context[:140].rsplit(" ", 1)[0] + "…"})
     return result
 
 
@@ -194,7 +204,7 @@ def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
         "risks": facts("Риски"), "questions": facts("Открытые вопросы"), "nextSteps": facts("Следующие шаги"),
         "template": {"id": template.id if m.template else "", "name": template.name if m.template else "",
                      "suggestedId": templates.suggest(m.record_type).id},
-        "extraSections": extra_sections(m), "views": views.list_views(m),
+        "extraSections": extra_sections(m), "views": views.list_views(m), "bookmarks": bookmark_dtos(m, transcript),
         "transcript": transcript, "speakers": speaker_list, "diarization": speakers_mod.status(m.id),
         "obsidianUrl": knowledge.obsidian_url(m.path), "notePath": knowledge.note_relative_path(m.path),
         "hasAudio": audio is not None, "audioUrl": f"/api/meetings/{m.id}/audio" if audio else None,
@@ -371,6 +381,10 @@ def prep_brief(core: Core, project_id: str | None = None, meeting_id: str | None
             questions.append({"text": _thesis(f["text"]), **link(m, f["sec"])})
         for f in knowledge.fact_items(m, "Риски"):
             risks.append({"text": _thesis(f["text"]), **link(m, f["sec"])})
+    marked = []
+    for m in scope:
+        for mark in bookmarks.list_for(m):
+            marked.append({"text": _thesis(mark["text"] or "Отмеченное место записи"), "color": mark["color"], **link(m, mark["sec"])})
     sections = [
         {"key": "changes", "title": "Что менялось", "empty": "Записей пока нет", "items": changes},
         {"key": "decisions", "title": "Решения", "empty": "Решений пока нет", "items": decisions},
@@ -378,6 +392,8 @@ def prep_brief(core: Core, project_id: str | None = None, meeting_id: str | None
         {"key": "questions", "title": "Открытые вопросы", "empty": "Открытых вопросов нет", "items": questions[:6]},
         {"key": "risks", "title": "Риски", "empty": "Рисков не отмечено", "items": risks[:4]},
     ]
+    if marked:   # блок появляется, только если закладки есть
+        sections.append({"key": "bookmarks", "title": "Отмечено вами на записях", "empty": "Закладок нет", "items": marked[:6]})
     brief = {"title": title, "projectId": project_id, "meetingId": meeting_id, "records": len(scope), "sections": sections}
     brief["headline"] = {"text": _structured_headline(brief), "mode": "structured"}
     return brief

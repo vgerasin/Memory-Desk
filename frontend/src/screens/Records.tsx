@@ -13,6 +13,7 @@ import { DecisionRow, TaskRow } from '../components/Items'
 import { RecordMenus } from '../components/RecordMenus'
 import { RebuildPanel } from '../components/RebuildPanel'
 import { ViewsPanel } from '../components/ViewsPanel'
+import { BookmarksPanel, colorHex, useBookmarkActions } from '../components/Bookmarks'
 import { CalendarSuggest } from '../components/CalendarSuggest'
 import { EventDialog, type EventDraft } from '../components/EventDialog'
 import { Player, type PlayerHandle } from '../components/Player'
@@ -57,9 +58,25 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   const [summary, setSummary] = useState('')
   const [picker, setPicker] = useState<PickerTarget | null>(null)
   const [eventDraft, setEventDraft] = useState<EventDraft | null>(null)
+  const [focusMark, setFocusMark] = useState<number | null>(null)
+  const marks = useBookmarkActions(id)
 
   useEffect(() => { setCurrentRecord(id); return () => setCurrentRecord(null) }, [id, setCurrentRecord])
-  useEffect(() => { setEditing(false); setPicker(null) }, [id])
+  useEffect(() => { setEditing(false); setPicker(null); setFocusMark(null) }, [id])
+  // клавиша B ставит закладку на текущем месте записи (не во время набора текста)
+  const posRef = useRef(0)
+  posRef.current = pos
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyB' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
+      e.preventDefault()
+      void marks.add(posRef.current).then(sec => { if (sec != null) setFocusMark(sec) })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [id])
   const ready = m && m.id === id
   useEffect(() => { if (ready && t != null) player.current?.seek(t) }, [ready, id, t])
 
@@ -103,6 +120,13 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
 
   const activeIndex = playing || pos > 0
     ? m.transcript.reduce((acc, l, i) => (pos >= l.sec ? i : acc), -1) : -1
+  // закладка отмечает реплику, которая звучит в этот момент
+  const markedLines = new Map<number, string>()
+  for (const b of m.bookmarks ?? []) {
+    let at = -1
+    m.transcript.forEach((l, i) => { if (l.sec <= b.sec) at = i })
+    if (at >= 0 && !markedLines.has(at)) markedLines.set(at, b.color)
+  }
   const when = `${dayLabel(m.date)}, ${m.time}${m.durationSec != null ? ' · ' + fmt(m.durationSec) : ''}`
 
   return (
@@ -151,6 +175,8 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
         ? <Player ref={player} key={id} meetingId={id} audioUrl={m.audioUrl} duration={dur} onTime={(p, pl) => { setPos(p); setPlaying(pl) }} />
         : <div className="player-note">Аудио недоступно — файл удалён по сроку хранения или перенесён. Текст и стенограмма сохранены.</div>}
 
+      <BookmarksPanel meeting={m} pos={pos} onJump={sec => jump(sec)} focusSec={focusMark} />
+
       <Segmented small className="tabs" items={tabs} value={view} onChange={setView} />
 
       {view === 'overview' && (
@@ -195,7 +221,8 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
               const turnStart = !!l.speaker && l.speaker !== m.transcript[i - 1]?.speaker
               const hasSpeakers = m.speakers.length > 0
               return (
-                <div key={l.i} role="button" tabIndex={0} className={'line' + (i === activeIndex ? ' act' : '')}
+                <div key={l.i} role="button" tabIndex={0} className={'line' + (i === activeIndex ? ' act' : '') + (markedLines.has(i) ? ' marked' : '')}
+                  style={markedLines.has(i) ? { boxShadow: `inset 3px 0 0 ${colorHex(markedLines.get(i) as string)}` } : undefined}
                   onClick={() => jump(l.sec)} onKeyDown={e => { if (e.key === 'Enter') jump(l.sec) }}>
                   <span className="ts mono">{tc(l.sec)}</span>
                   <span>
@@ -206,6 +233,8 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
                     <span className="tx">{l.text}</span>
                     {l.overlap && <span className="overlap" title="Похоже, здесь говорят двое сразу. Метка говорящего оставлена прежней, проверьте на слух">наложение голосов?</span>}
                   </span>
+                  <button className="bm-line-add" title="Поставить закладку здесь" aria-label={`Закладка на ${tc(l.sec)}`}
+                    onClick={e => { e.stopPropagation(); void marks.add(l.sec).then(sec => { if (sec != null) setFocusMark(sec) }) }}>＋</button>
                   {!turnStart && (hasSpeakers || l.speaker) && (
                     <button className="who-edit" title="Сменить говорящего у этой реплики"
                       onClick={e => { e.stopPropagation(); setPicker(openPicker(e.currentTarget, l.speaker, l.i, 'one')) }}>

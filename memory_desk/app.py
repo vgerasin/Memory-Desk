@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, bookmarks, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -473,6 +473,43 @@ def create_app() -> FastAPI:
     @app.get("/api/meetings/{meeting_id}/rebuild")
     def rebuild_status(meeting_id: str):
         return rebuild.status(meeting_id)
+
+    # ------------------------------------------------------------------ закладки
+    class BookmarkBody(BaseModel):
+        sec: int = Field(..., ge=0)
+        text: str = Field("", max_length=1000)
+        color: str = "yellow"
+
+    class BookmarkPatch(BaseModel):
+        text: str | None = Field(None, max_length=1000)
+        color: str | None = None
+
+    def bookmark_call(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except bookmarks.BookmarkError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось записать заметку: {exc}") from exc
+
+    @app.get("/api/meetings/{meeting_id}/bookmarks")
+    def list_bookmarks(meeting_id: str):
+        meeting = get_meeting(meeting_id)
+        return {"items": services.bookmark_dtos(meeting, knowledge.transcript_segments(meeting))}
+
+    @app.post("/api/meetings/{meeting_id}/bookmarks")
+    def add_bookmark(meeting_id: str, body: BookmarkBody):
+        return bookmark_call(bookmarks.add, core, meeting_id, body.sec, body.text, body.color)
+
+    @app.patch("/api/meetings/{meeting_id}/bookmarks/{sec}")
+    def update_bookmark(meeting_id: str, sec: int, body: BookmarkPatch):
+        return bookmark_call(bookmarks.update, core, meeting_id, sec, body.text, body.color)
+
+    @app.delete("/api/meetings/{meeting_id}/bookmarks/{sec}")
+    def delete_bookmark(meeting_id: str, sec: int):
+        if not bookmark_call(bookmarks.remove, core, meeting_id, sec):
+            raise HTTPException(404, "Такой закладки нет")
+        return {"ok": True}
 
     # ------------------------------------------------------------------ взгляды на запись
     class ViewBody(BaseModel):

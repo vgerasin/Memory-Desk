@@ -554,6 +554,10 @@ def sections(meeting: Meeting) -> list[dict]:
         if not body or heading.strip() == "Карта встречи":
             continue
         paragraphs = [p.strip() for p in body.split("\n\n") if p.strip() and not p.startswith("```")]
+        if heading.strip() == "Закладки":   # у каждой закладки свой таймкод: ищется и открывается по отдельности
+            for line in storage.bullet_lines(body):
+                chunks.append(make_chunk(meeting, "Закладки", "Закладка: " + line))
+            continue
         buffer = ""
         for paragraph in paragraphs:
             candidate = f"{buffer}\n\n{paragraph}".strip()

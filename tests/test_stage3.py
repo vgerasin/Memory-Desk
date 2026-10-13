@@ -24,10 +24,10 @@ TRANSCRIPT = (
 def _modules(fixture_dir):
     # модули приложения читают окружение при импорте, поэтому импортируем их только после `fixture_dir`
     sys.path.insert(0, str(ROOT))
-    import meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views, memory_desk.followups  # noqa: F401
+    import meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views, memory_desk.followups, memory_desk.bookmarks  # noqa: F401
     g = globals()
-    g["mp"], g["knowledge"], g["storage"], g["templates"], g["views"], g["followups"] = (
-        meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views, memory_desk.followups)
+    g["mp"], g["knowledge"], g["storage"], g["templates"], g["views"], g["followups"], g["bookmarks"] = (
+        meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views, memory_desk.followups, memory_desk.bookmarks)
 
 
 @pytest.fixture()
@@ -962,3 +962,121 @@ def test_chat_reply_carries_suggestions(client, note):
     assert 1 <= len(data["suggestions"]) <= 3 and "Что решили про единый справочник?" not in data["suggestions"]
     empty = client.post("/api/chat", json={"question": "Совсем не по теме абракадабра", "scope": {"kind": "all"}}).json()
     assert 1 <= len(empty["suggestions"]) <= 3
+
+
+# --------------------------------------------------------------------------- 3.5 закладки на стенограмме
+
+def mark(client, note, sec, **body):
+    response = client.post(f"/api/meetings/{note.id}/bookmarks", json={"sec": sec, **body})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_bookmark_add_update_delete_keeps_note_byte_identical(client, note):
+    before = note.path.read_text(encoding="utf-8")
+    created = mark(client, note, 90, text="Важный момент", color="red")
+    assert created == {"sec": 90, "t": "00:01:30", "text": "Важный момент", "color": "red", "created": True}
+    text = note.path.read_text(encoding="utf-8")
+    assert "## Закладки\n\n- 🔴 `⏱ 00:01:30` — Важный момент" in text
+    assert text.index("## Закладки") < text.index("## Стенограмма")
+    detail = client.get(f"/api/meetings/{note.id}").json()
+    assert [(b["sec"], b["text"], b["color"]) for b in detail["bookmarks"]] == [(90, "Важный момент", "red")]
+    assert detail["bookmarks"][0]["context"].startswith("Нет единого справочника")   # реплика в этот момент (не хранится в заметке)
+    assert all(s["title"] != "Закладки" for s in detail["extraSections"])
+    changed = client.patch(f"/api/meetings/{note.id}/bookmarks/90", json={"text": "Уточнённый текст", "color": "green"}).json()
+    assert changed["text"] == "Уточнённый текст" and changed["color"] == "green"
+    assert client.delete(f"/api/meetings/{note.id}/bookmarks/90").status_code == 200
+    assert note.path.read_text(encoding="utf-8") == before      # раздела нет, остальное до байта прежнее
+    assert client.delete(f"/api/meetings/{note.id}/bookmarks/90").status_code == 404
+    assert client.get(f"/api/meetings/{note.id}").json()["bookmarks"] == []
+
+
+def test_bookmarks_sorted_and_same_second_is_not_duplicated(client, note):
+    mark(client, note, 120, text="Конец")
+    mark(client, note, 20)
+    again = mark(client, note, 20, text="Начало")
+    assert again["created"] is False and again["text"] == "Начало"
+    items = client.get(f"/api/meetings/{note.id}/bookmarks").json()["items"]
+    assert [(i["sec"], i["text"]) for i in items] == [(20, "Начало"), (120, "Конец")]
+    assert note.path.read_text(encoding="utf-8").count("`⏱ 00:00:20`") == 1
+
+
+def test_bookmark_validation(client, note):
+    post = lambda **b: client.post(f"/api/meetings/{note.id}/bookmarks", json=b)   # noqa: E731
+    assert post(sec=-1).status_code == 422
+    assert post(sec=20, color="розовый").status_code == 400
+    assert post(sec=5000).status_code == 400          # запись длится 2:05
+    assert client.post("/api/meetings/нет/bookmarks", json={"sec": 5}).status_code == 404
+    assert client.patch(f"/api/meetings/{note.id}/bookmarks/77", json={"text": "x"}).status_code == 404
+    long = mark(client, note, 30, text="слово " * 100)
+    assert len(long["text"]) <= 300
+    multi = mark(client, note, 31, text="первая строка\n- вторая\n## не заголовок")
+    assert "\n" not in multi["text"]
+    assert note.path.read_text(encoding="utf-8").count("\n## Закладки") == 1
+
+
+def test_manual_lines_in_bookmark_section_survive_edits(client, note):
+    mark(client, note, 40, text="Моя")
+    text = note.path.read_text(encoding="utf-8")
+    note.path.write_text(text.replace("## Закладки\n\n", "## Закладки\n\n- Просто пометка от руки\n"), encoding="utf-8")
+    client.app.state.core.reload(force=True)
+    mark(client, note, 10, text="Ещё")
+    after = note.path.read_text(encoding="utf-8")
+    assert "- Просто пометка от руки" in after and after.index("`⏱ 00:00:10`") < after.index("`⏱ 00:00:40`")
+    client.delete(f"/api/meetings/{note.id}/bookmarks/10")
+    client.delete(f"/api/meetings/{note.id}/bookmarks/40")
+    assert "- Просто пометка от руки" in note.path.read_text(encoding="utf-8")   # раздел не исчезает, пока в нём что-то есть
+
+
+def test_bookmarks_survive_reindex_database_loss_and_rebuild(client, note, monkeypatch):
+    mark(client, note, 90, text="Пережить всё", color="blue")
+    core = client.app.state.core
+    # «Переиндексировать» и потеря базы: заметки перечитываются, закладки на месте
+    from memory_desk import storage as st
+    with st.connect() as db:
+        db.execute("DELETE FROM tasks"); db.execute("DELETE FROM decisions")
+    core.reload(force=True)
+    assert [b["text"] for b in client.get(f"/api/meetings/{note.id}").json()["bookmarks"]] == ["Пережить всё"]
+    # пересборка по другому шаблону
+    fake_model(monkeypatch)
+    assert client.post(f"/api/meetings/{note.id}/rebuild", json={"templateId": "lecture"}).status_code == 200
+    assert wait_rebuild(client, note.id)["state"] == "done"
+    after = note.path.read_text(encoding="utf-8")
+    assert "- 🔵 `⏱ 00:01:30` — Пережить всё" in after and after.count("## Закладки") == 1
+    assert after.index("## Закладки") < after.index("## Стенограмма")
+
+
+def test_bookmark_not_shifted_by_transcript_edits(client, note):
+    mark(client, note, 90, text="Привязка ко времени")
+    before = [(b["sec"], b["t"]) for b in client.get(f"/api/meetings/{note.id}").json()["bookmarks"]]
+    transcript = knowledge.transcript_file(client.app.state.core.by_id[note.id])
+    raw = transcript.read_text(encoding="utf-8")
+    transcript.write_text(raw.replace("Нет единого справочника", "Нет общего справочника, и ещё очень длинная вставка " * 3), encoding="utf-8")
+    client.app.state.core.reload(force=True)
+    detail = client.get(f"/api/meetings/{note.id}").json()
+    assert [(b["sec"], b["t"]) for b in detail["bookmarks"]] == before
+    assert "общего справочника" in detail["bookmarks"][0]["context"]       # контекст берётся из актуальной стенограммы
+
+
+def test_bookmarks_in_search_prep_and_protocol(client, note, monkeypatch):
+    mark(client, note, 90, text="Проверить выгрузку клиентов")
+    mark(client, note, 120, text="Решение по справочнику")
+    meeting = client.app.state.core.by_id[note.id]
+    chunks = [c for c in knowledge.sections(meeting) if c["section"] == "Закладки"]
+    assert [c["timestamp"] for c in chunks] == ["00:01:30", "00:02:00"] and "Проверить выгрузку" in chunks[0]["text"]
+    brief = client.get("/api/prep", params={"meeting": note.id}).json()
+    section = next(s for s in brief["sections"] if s["key"] == "bookmarks")
+    assert [i["text"] for i in section["items"]] == ["Проверить выгрузку клиентов", "Решение по справочнику"]
+    assert section["items"][0]["tSec"] == 90 and section["items"][0]["meetingId"] == note.id
+    from memory_desk import digest
+    monkeypatch.setattr(digest, "generate", lambda *a, **k: "")
+    protocol = client.post(f"/api/meetings/{note.id}/protocol").json()["markdown"]
+    assert "## Отмечено на записи" in protocol and "`⏱ 00:01:30` — Проверить выгрузку клиентов" in protocol
+
+
+def test_bookmark_roundtrip_parser():
+    parsed = bookmarks.parse_body("- 🟣 `⏱ 00:12:30` — с тире — внутри\n- ⏱ 1:02:03\n- `⏱ 00:00:05` — без цвета\nлишняя строка\n")
+    assert [(i["sec"], i["color"], i["text"]) for i in parsed.items] == [
+        (5, "yellow", "без цвета"), (750, "purple", "с тире — внутри"), (3723, "yellow", "")]
+    assert parsed.extras == ["лишняя строка"]
+    assert "- 🟣 `⏱ 00:12:30` — с тире — внутри" in bookmarks.render(parsed)
