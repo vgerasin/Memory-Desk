@@ -50,6 +50,7 @@ export function Project() {
           <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', projectId: p.id, title: p.title })}>Презентация</button>
           <button className="btn s34" onClick={() => setMaterial({ kind: 'map', projectId: p.id, title: p.title })}>Карта</button>
           <DocMenu scope={{ projectId: p.id, title: p.title }} />
+          <button className="btn s34" onClick={() => setMaterial({ kind: 'digest', projectId: p.id, title: p.title })}>Дайджест</button>
           <button className="btn accent s34" onClick={() => setPrep({ projectId: p.id, title: p.title })}>Подготовка к встрече</button>
         </div>
       </div>

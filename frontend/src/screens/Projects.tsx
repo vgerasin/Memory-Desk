@@ -24,7 +24,12 @@ export function Projects() {
     <>
       <div className="page-head">
         <div className="titles"><DirectoryTabs current="projects" /><h1 className="h1">Проекты</h1></div>
-        {!adding && <button className="btn s34" onClick={() => setAdding(true)}>Новый проект</button>}
+        {!adding && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn s34" onClick={() => setMaterial({ kind: 'digest', title: 'Все проекты' })}>Дайджест</button>
+            <button className="btn s34" onClick={() => setAdding(true)}>Новый проект</button>
+          </div>
+        )}
       </div>
       {adding && (
         <div className="inline-form">

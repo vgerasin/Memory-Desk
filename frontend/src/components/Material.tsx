@@ -9,8 +9,9 @@ import { ExportMenu, MAP_FORMATS } from './ExportMenu'
 
 const TITLES: Record<MaterialKind, string> = {
   protocol: 'Протокол встречи', map: 'Карта', deck: 'Презентация',
-  memo: 'Служебная записка', brief: 'Бриф', followup: 'Письмо участникам (черновик)',
+  memo: 'Служебная записка', brief: 'Бриф', followup: 'Письмо участникам (черновик)', digest: 'Дайджест по проектам',
 }
+const DIGEST_PERIODS = [{ key: 'this_week', label: 'Эта неделя' }, { key: 'last_week', label: 'Прошлая неделя' }, { key: 'this_month', label: 'Этот месяц' }, { key: 'last_month', label: 'Прошлый месяц' }]
 const isArtifact = (kind: MaterialKind): kind is ArtifactKind => kind === 'memo' || kind === 'brief' || kind === 'followup'
 
 interface TimeLink { id: string; t: string; sec: number; text: string }
@@ -53,6 +54,7 @@ const pause = (ms: number) => new Promise(resolve => window.setTimeout(resolve, 
 
 function endpoint(target: MaterialTarget, days: string, addressee: string): { path: string; body?: object } {
   const scope = { meetingId: target.meetingId, projectId: target.projectId, personId: target.personId, days: Number(days) }
+  if (target.kind === 'digest') return { path: '/api/materials/digest', body: { period: days, projectId: target.projectId } }
   if (isArtifact(target.kind)) return { path: '/api/materials/artifact', body: { ...scope, kind: target.kind, addressee } }
   if (target.kind === 'protocol') return { path: `/api/meetings/${encodeURIComponent(target.meetingId ?? '')}/protocol` }
   return { path: target.kind === 'map' ? '/api/materials/mindmap' : '/api/materials/deck', body: scope }
@@ -63,6 +65,8 @@ export function MaterialModal() {
   const { material, setMaterial, showToast } = useApp()
   const [days, setDays] = useState('30')
   const [addressee, setAddressee] = useState('')
+  const [deck, setDeck] = useState<{ url: string; slides: number } | null>(null)
+  const [deckBusy, setDeckBusy] = useState(false)
   const [result, setResult] = useState<MaterialResult | null>(null)
   const [text, setText] = useState('')
   const [error, setError] = useState('')
@@ -78,7 +82,7 @@ export function MaterialModal() {
 
   const generate = useCallback(async (target: MaterialTarget, period: string, to = '') => {
     const mine = ++seq.current
-    setBusy(true); setError(''); setResult(null); setSaved(null); setProgress(null)
+    setBusy(true); setError(''); setResult(null); setSaved(null); setProgress(null); setDeck(null)
     try {
       if (target.kind === 'protocol' && target.meetingId) {
         // Протокол составляется в фоне: показываем этап и процент, пока модель пишет текст
@@ -110,9 +114,12 @@ export function MaterialModal() {
   // Протокол и материалы по одной записи строятся сразу; для проекта и человека сначала выбирают период.
   useEffect(() => {
     seq.current++
-    setResult(null); setError(''); setSaved(null); setBusy(false); setProgress(null)
+    setResult(null); setError(''); setSaved(null); setBusy(false); setProgress(null); setDeck(null)
+    if (material?.kind === 'digest') setDays(d => (DIGEST_PERIODS.some(p => p.key === d) ? d : 'this_week'))
+    else setDays(d => (/^\d+$/.test(d) ? d : '30'))
     if (material?.result) { applyResult(material.result); return }
-    if (material && (material.kind === 'protocol' || material.meetingId)) void generate(material, days, addressee)
+    if (material?.kind === 'digest') void generate(material, DIGEST_PERIODS.some(p => p.key === days) ? days : 'this_week')
+    else if (material && (material.kind === 'protocol' || material.meetingId)) void generate(material, days, addressee)
   }, [material]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -124,7 +131,7 @@ export function MaterialModal() {
 
   if (!material) return null
   const kind = material.kind
-  const artifact = isArtifact(kind)
+  const artifact = isArtifact(kind) || kind === 'digest'
   const needsPeriod = kind !== 'protocol' && !material.meetingId
   const links = result && artifact ? timeLinks(text, result.refs ?? []) : []
   const fileName = result?.fileName ?? `${kind === 'map' ? 'Карта — ' : ''}${result?.title ?? material.title}.md`
@@ -132,6 +139,13 @@ export function MaterialModal() {
   const copy = async () => {
     try { await navigator.clipboard.writeText(kind === 'map' && result?.mermaid ? result.mermaid : text); showToast(kind === 'map' ? 'Код карты скопирован' : 'Текст скопирован') }
     catch { showToast('Не удалось скопировать — выделите текст вручную') }
+  }
+  const makeDeck = async () => {
+    setDeckBusy(true)
+    try {
+      const out = await api.post<{ url: string; slides: number }>('/api/materials/digest/deck', { period: days, projectId: material.projectId })
+      setDeck(out)
+    } catch (e) { showToast(errorText(e)) } finally { setDeckBusy(false) }
   }
   const save = async () => {
     try {
@@ -155,7 +169,7 @@ export function MaterialModal() {
 
         {(needsPeriod || (kind === 'memo' && !!material.meetingId)) && (
           <div className="material-period">
-            {needsPeriod && <Segmented small items={PERIODS} value={days} onChange={v => setDays(v)} />}
+            {needsPeriod && <Segmented small items={kind === 'digest' ? DIGEST_PERIODS : PERIODS} value={days} onChange={v => { setDays(v); if (kind === 'digest') void generate(material, v) }} />}
             {kind === 'memo' && (
               <input className="material-to" value={addressee} maxLength={200} onChange={e => setAddressee(e.target.value)}
                 placeholder="Кому: должность, ФИО" aria-label="Адресат записки" />
@@ -194,8 +208,9 @@ export function MaterialModal() {
           <>
             <textarea className="material-text" value={text} onChange={e => setText(e.target.value)} aria-label={TITLES[kind]} spellCheck={false} />
             <div className="muted-text" style={{ fontSize: 13 }}>
-              Каждый пункт взят из решений, задач и вопросов записи и помечен таймкодом места в записи.{' '}
-              {result.mode === 'model' ? 'Вводную фразу написала локальная модель — проверьте её.' : 'Документ собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'}
+              Каждый пункт взят из решений, задач и вопросов записей и помечен таймкодом места в записи.{' '}
+              {result.mode === 'model' ? 'Вводный абзац написала локальная модель — проверьте его.' : 'Документ собран из извлечённых фактов без модели (Ollama не запущена или недоступна).'}
+              {kind === 'digest' && ' «Закрыто за период» — задачи, отмеченные выполненными в этом периоде; «Требует внимания» — просроченные, в том числе из прежних записей.'}
               {kind === 'followup' && ' Это черновик: письмо не отправляется, скопируйте его или скачайте.'}
               {' '}Текст можно править здесь.
             </div>
@@ -236,6 +251,12 @@ export function MaterialModal() {
             <div className="muted-text" style={{ fontSize: 13 }}>Файл открывается в Keynote, PowerPoint и Google Slides. Копия лежит в папке «presentations» кабинета.</div>
           </div>
         )}
+        {deck && (
+          <div className="material-saved">
+            Презентация готова: {plural(deck.slides, 'слайд', 'слайда', 'слайдов')}.
+            <a href={deck.url} download style={{ marginLeft: 8 }}>Скачать .pptx</a>
+          </div>
+        )}
         {saved && (
           <div className="material-saved">
             Сохранено: <code>{saved.path}</code>
@@ -251,6 +272,9 @@ export function MaterialModal() {
                 ? <ExportMenu endpoint="/api/export/map" formats={MAP_FORMATS} label="Скачать карту" up body={() => ({ title: result.title, tree: result.tree })} />
                 : <ExportMenu endpoint="/api/export" up body={() => ({ title: result.title, markdown: text, name: fileName.replace(/\.md$/i, '') })} />}
               <button className="btn s34" onClick={() => void save()}>В Obsidian</button>
+              {kind === 'digest' && (
+                <button className="btn s34" disabled={deckBusy} onClick={() => void makeDeck()}>{deckBusy ? 'Собираю…' : 'Презентация'}</button>
+              )}
             </>
           )}
           <button className="btn accent s34" onClick={() => setMaterial(null)}>Закрыть</button>

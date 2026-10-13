@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, bookmarks, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, bookmarks, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -748,6 +748,27 @@ def create_app() -> FastAPI:
                 result["obsidianUrl"] = knowledge.obsidian_url(path)
             return result
         return material_errors(run)
+
+    class DigestBody(BaseModel):
+        period: str = Field("last_week", max_length=20)
+        projectId: str | None = None
+        save: bool = False
+
+    @app.post("/api/materials/digest")
+    def material_digest(body: DigestBody):
+        """Дайджест по проектам за неделю или месяц: текст с таймкодами записей."""
+        def run():
+            result = projectdigest.build(core, body.period, services.meeting_date, project_id=body.projectId)
+            if body.save:
+                path = materials.save_text("digest", result["fileName"], result["markdown"])
+                result["savedAs"] = knowledge.note_relative_path(path)
+                result["obsidianUrl"] = knowledge.obsidian_url(path)
+            return result
+        return material_errors(run)
+
+    @app.post("/api/materials/digest/deck")
+    def material_digest_deck(body: DigestBody):
+        return material_errors(lambda: projectdigest.build_deck(core, body.period, services.meeting_date, project_id=body.projectId))
 
     @app.post("/api/materials/deck")
     def material_deck(body: MaterialScope):

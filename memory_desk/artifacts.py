@@ -46,6 +46,7 @@ class Item:
     overdue: bool = False
     draft: bool = False
     replaced: bool = False
+    updated: str = ""              # дата последней правки задачи (для «закрыто за период»)
 
 
 @dataclass
@@ -62,27 +63,39 @@ def _stems(text: str) -> set[str]:
 
 
 class _Recording:
-    """Реплики и границы одной записи: по ним проверяются и ищутся таймкоды."""
+    """Реплики и границы одной записи: по ним проверяются и ищутся таймкоды. Стенограмма читается только когда она нужна."""
 
     def __init__(self, meeting) -> None:
-        self.segments = [s for s in knowledge.transcript_segments(meeting) if s.get("t")]
-        for s in self.segments:
-            s["stems"] = _stems(s["text"])
-        duration = knowledge.to_seconds(meeting.duration) if meeting.duration else None
+        self.meeting = meeting
+        self._segments: list[dict] | None = None
+        self.duration = knowledge.to_seconds(meeting.duration) if meeting.duration else None
+
+    @property
+    def segments(self) -> list[dict]:
+        if self._segments is None:
+            self._segments = [s for s in knowledge.transcript_segments(self.meeting) if s.get("t")]
+            for s in self._segments:
+                s["stems"] = _stems(s["text"])
+        return self._segments
+
+    @property
+    def bound(self) -> int | None:
         last = max((s["sec"] for s in self.segments), default=None)
-        if duration is not None:
-            self.bound: int | None = max(duration, last or 0)
-        else:
-            self.bound = last + 120 if last is not None else None
+        if self.duration is not None:
+            return max(self.duration, last or 0)
+        return last + 120 if last is not None else None
 
     def valid(self, stamp: str) -> int | None:
         """Секунды, если таймкод оформлен как ЧЧ:ММ:СС и попадает внутрь записи."""
         if not re.fullmatch(r"\d{1,2}:\d{2}:\d{2}", stamp or ""):
             return None
         sec = knowledge.to_seconds(stamp)
-        if sec is None or (self.bound is not None and sec > self.bound + TOLERANCE):
+        if sec is None:
             return None
-        return sec
+        if self.duration is not None and sec <= self.duration + TOLERANCE:
+            return sec     # внутри длительности записи: стенограмма не нужна
+        bound = self.bound
+        return None if bound is not None and sec > bound + TOLERANCE else sec
 
     def locate(self, text: str) -> int | None:
         """Место в записи по совпадению слов: лучшая реплика или пара соседних."""
@@ -110,8 +123,12 @@ class _Recording:
         return best[1] if best else None
 
 
-def gather(meetings: list, date_of: Callable, today: date | None = None) -> Gathered:
-    """Решения, задачи, риски, вопросы и резюме записей; у каждого пункта проверенный таймкод."""
+def gather(meetings: list, date_of: Callable, today: date | None = None, *, kinds: set[str] | None = None,
+           task_status: tuple[str, ...] = ("draft", "open")) -> Gathered:
+    """Решения, задачи, риски, вопросы и резюме записей; у каждого пункта проверенный таймкод.
+    `kinds` ограничивает набор видов пунктов; `task_status` — какие задачи брать (по умолчанию в работе и черновики;
+    ("done",) даёт выполненные, у них `kind == "done"`)."""
+    want = lambda kind: kinds is None or kind in kinds  # noqa: E731
     today_iso = (today or date.today()).isoformat()
     out = Gathered()
     ids = [m.id for m in meetings]
@@ -119,10 +136,13 @@ def gather(meetings: list, date_of: Callable, today: date | None = None) -> Gath
     tasks: dict[str, list] = {}
     if ids:
         marks = ",".join("?" * len(ids))
-        for r in storage.rows(f"SELECT * FROM decisions WHERE meeting_id IN ({marks}) AND status!='rejected' ORDER BY rowid", tuple(ids)):
-            decisions.setdefault(r["meeting_id"], []).append(r)
-        for r in storage.rows(f"SELECT * FROM tasks WHERE meeting_id IN ({marks}) AND status IN ('draft','open') ORDER BY rowid", tuple(ids)):
-            tasks.setdefault(r["meeting_id"], []).append(r)
+        if want("decision"):
+            for r in storage.rows(f"SELECT * FROM decisions WHERE meeting_id IN ({marks}) AND status!='rejected' ORDER BY rowid", tuple(ids)):
+                decisions.setdefault(r["meeting_id"], []).append(r)
+        if want("task") or want("done"):
+            states = ",".join("?" * len(task_status))
+            for r in storage.rows(f"SELECT * FROM tasks WHERE meeting_id IN ({marks}) AND status IN ({states}) ORDER BY rowid", tuple(ids) + tuple(task_status)):
+                tasks.setdefault(r["meeting_id"], []).append(r)
     for meeting in meetings:
         recording = _Recording(meeting)
         day = date_of(meeting) or ""
@@ -147,20 +167,27 @@ def gather(meetings: list, date_of: Callable, today: date | None = None) -> Gath
                 continue  # заменённое решение уже не действует
             add("decision", r["text"], r["evidence_time"] or "", draft=r["status"] == "draft")
         for r in tasks.get(meeting.id, []):
+            finished = r["status"] == "done"
+            if not want("done" if finished else "task"):
+                continue
             owner = (r["owner"] or "").strip()
             owner = "" if owner.casefold() in {"не указано", "не указан"} else owner
             deadline = (r["deadline"] or "").strip()
             iso = deadline if re.fullmatch(r"\d{4}-\d{2}-\d{2}", deadline) else ""
-            add("task", r["text"], r["evidence_time"] or "", owner=owner, due=iso,
+            add("done" if finished else "task", r["text"], r["evidence_time"] or "", owner=owner, due=iso,
                 due_text="" if iso or deadline.casefold() in {"", "не указан", "не указано"} else deadline,
-                overdue=bool(iso) and iso < today_iso, draft=r["status"] == "draft")
-        for line in knowledge.summary_bullets(meeting, 6):
-            fact = storage.parse_fact(line)
-            add("summary", fact["text"], fact["evidence_time"])
-        for fact in knowledge.fact_items(meeting, "Риски")[:4]:
-            add("risk", fact["text"], fact["evidence_time"])
-        for fact in knowledge.fact_items(meeting, "Открытые вопросы")[:4]:
-            add("question", fact["text"], fact["evidence_time"])
+                overdue=bool(iso) and iso < today_iso and not finished, draft=r["status"] == "draft",
+                updated=str(r.get("updated_at") or "")[:10])
+        if want("summary"):
+            for line in knowledge.summary_bullets(meeting, 6):
+                fact = storage.parse_fact(line)
+                add("summary", fact["text"], fact["evidence_time"])
+        if want("risk"):
+            for fact in knowledge.fact_items(meeting, "Риски")[:4]:
+                add("risk", fact["text"], fact["evidence_time"])
+        if want("question"):
+            for fact in knowledge.fact_items(meeting, "Открытые вопросы")[:4]:
+                add("question", fact["text"], fact["evidence_time"])
     return out
 
 
@@ -388,11 +415,18 @@ BUILDERS = {"memo": _memo, "brief": _brief, "followup": _followup}
 # --------------------------------------------------------------------------- вход
 
 def untimed(markdown: str) -> list[str]:
-    """Пункты списков и строки таблиц без таймкода. В готовом документе их нет (используется проверками и тестами)."""
+    """Пункты списков и строки таблиц без таймкода. В готовом документе их нет (используется проверками и тестами).
+    Исключение — сводная таблица дайджеста (`| Проект | …`): в ней только числа, а не факты из записей."""
     bad = []
+    counts_table = False
     for raw in markdown.splitlines():
         line = raw.strip()
-        if STAMP.search(line):
+        if not line:
+            counts_table = False
+            continue
+        if line.startswith("| Проект |"):
+            counts_table = True
+        if counts_table or STAMP.search(line):
             continue
         if re.match(r"(?:[-*]|\d+\.)\s+\S", line):
             if re.fullmatch(r"- \*\*[^*]+\*\* — \d+ \w+", line):

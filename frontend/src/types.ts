@@ -150,7 +150,7 @@ export interface StorageUsage {
 export interface PrepTarget { projectId?: string; meetingId?: string; title?: string }
 
 export type ArtifactKind = 'memo' | 'brief' | 'followup'
-export type MaterialKind = 'protocol' | 'map' | 'deck' | ArtifactKind
+export type MaterialKind = 'protocol' | 'map' | 'deck' | 'digest' | ArtifactKind
 /** Материал по запросу: протокол записи, карта или презентация по записи, проекту или человеку */
 export interface MaterialTarget { kind: MaterialKind; meetingId?: string; projectId?: string; personId?: string; title: string; result?: MaterialResult }
 export interface MapNode { text: string; children: MapNode[] }

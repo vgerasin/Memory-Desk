@@ -236,7 +236,7 @@ def safe_name(value: str, limit: int = 80) -> str:
     return cleaned or "Материал"
 
 
-FOLDERS = {"protocol": "Протоколы", "map": "Карты", "memo": "Служебные записки", "brief": "Брифы", "followup": "Письма"}
+FOLDERS = {"protocol": "Протоколы", "map": "Карты", "memo": "Служебные записки", "brief": "Брифы", "followup": "Письма", "digest": "Дайджесты"}
 
 
 def save_text(kind: str, file_name: str, content: str) -> Path:
@@ -383,26 +383,21 @@ def _highlights(sc: Scope, facts: list[digest.MeetingFacts], st: dict) -> tuple[
     return (numbers + points, "model") if points else (numbers + latest, "structured")
 
 
-def build_deck(core, scope: dict, date_of: Callable, today: date | None = None) -> dict:
-    from pptx import Presentation  # noqa: PLC0415 — тяжёлый импорт нужен только здесь
-    from pptx.dml.color import RGBColor  # noqa: PLC0415
-    from pptx.util import Inches, Pt  # noqa: PLC0415
+class Slides:
+    """Оформление презентаций Memory Desk (16:9, синяя полоса, номер слайда): общее для презентации по области и дайджеста."""
 
-    today = today or date.today()
-    sc = resolve(core, scope, date_of, today)
-    if not sc.meetings:
-        raise ValueError("За выбранный период записей нет")
-    facts = digest.gather(sc.meetings, date_of, today)
-    st = digest.stats(facts)
-    highlights, mode = _highlights(sc, facts, st)
-    multi = not sc.single and (sc.intent is None or sc.intent.project is None)
+    def __init__(self, today: date) -> None:
+        from pptx import Presentation  # noqa: PLC0415 — тяжёлый импорт нужен только здесь
+        from pptx.util import Inches  # noqa: PLC0415
+        self.today = today
+        self.prs = Presentation()
+        self.prs.slide_width, self.prs.slide_height = Inches(13.333), Inches(7.5)
+        self.blank = self.prs.slide_layouts[6]
+        self.n = 0
 
-    prs = Presentation()
-    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
-    blank = prs.slide_layouts[6]
-    counter = {"n": 0}
-
-    def textbox(slide, left, top, width, height, text, size, bold=False, color=INK):
+    def textbox(self, slide, left, top, width, height, text, size, bold=False, color=INK):
+        from pptx.dml.color import RGBColor  # noqa: PLC0415
+        from pptx.util import Inches, Pt  # noqa: PLC0415
         box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
         frame = box.text_frame
         frame.word_wrap = True
@@ -412,48 +407,89 @@ def build_deck(core, scope: dict, date_of: Callable, today: date | None = None) 
         run.font.size, run.font.bold, run.font.color.rgb = Pt(size), bold, RGBColor(*color)
         return frame
 
-    def new_slide(title: str, subtitle: str = ""):
-        counter["n"] += 1
-        slide = prs.slides.add_slide(blank)
-        bar = slide.shapes.add_shape(1, 0, 0, prs.slide_width, Inches(0.18))
+    def new_slide(self, title: str, subtitle: str = ""):
+        from pptx.dml.color import RGBColor  # noqa: PLC0415
+        from pptx.util import Inches  # noqa: PLC0415
+        self.n += 1
+        slide = self.prs.slides.add_slide(self.blank)
+        bar = slide.shapes.add_shape(1, 0, 0, self.prs.slide_width, Inches(0.18))
         bar.fill.solid(); bar.fill.fore_color.rgb = RGBColor(*ACCENT); bar.line.fill.background()
-        textbox(slide, 0.7, 0.5, 11.9, 0.9, title, 32, True)
+        self.textbox(slide, 0.7, 0.5, 11.9, 0.9, title, 32, True)
         if subtitle:
-            textbox(slide, 0.7, 1.25, 11.9, 0.5, subtitle, 16, False, MUTED)
-        textbox(slide, 0.7, 6.95, 9, 0.4, f"Memory Desk · {_ru_date(today.isoformat())}", 11, False, MUTED)
-        textbox(slide, 11.9, 6.95, 0.8, 0.4, str(counter["n"]), 11, False, MUTED)
+            self.textbox(slide, 0.7, 1.25, 11.9, 0.5, subtitle, 16, False, MUTED)
+        self.textbox(slide, 0.7, 6.95, 9, 0.4, f"Memory Desk · {_ru_date(self.today.isoformat())}", 11, False, MUTED)
+        self.textbox(slide, 11.9, 6.95, 0.8, 0.4, str(self.n), 11, False, MUTED)
         return slide
 
-    def bullets_slides(title: str, items: list[str], per: int = 6, subtitle: str = ""):
+    def cover(self, head: str, sub: str, stats: str) -> None:
+        from pptx.dml.color import RGBColor  # noqa: PLC0415
+        from pptx.util import Inches  # noqa: PLC0415
+        self.n += 1
+        slide = self.prs.slides.add_slide(self.blank)
+        band = slide.shapes.add_shape(1, 0, 0, self.prs.slide_width, Inches(7.5))
+        band.fill.solid(); band.fill.fore_color.rgb = RGBColor(*ACCENT); band.line.fill.background()
+        white = (255, 255, 255)
+        self.textbox(slide, 0.9, 1.5, 11.5, 2.6, _clip(head, 110), 40 if len(head) <= 45 else 30, True, white)
+        self.textbox(slide, 0.9, 4.3, 11.5, 0.6, sub, 22, False, white)
+        self.textbox(slide, 0.9, 5.1, 11.5, 1.0, stats, 18, False, white)
+        self.textbox(slide, 0.9, 6.6, 11.5, 0.5, f"Подготовлено в Memory Desk · {_ru_date(self.today.isoformat())}", 14, False, white)
+
+    def bullets(self, title: str, items: list[str], per: int = 6, subtitle: str = "") -> None:
         pages = [items[i:i + per] for i in range(0, len(items), per)] or [[]]
         for index, page in enumerate(pages, 1):
-            slide = new_slide(title + (f" ({index}/{len(pages)})" if len(pages) > 1 else ""), subtitle)
+            slide = self.new_slide(title + (f" ({index}/{len(pages)})" if len(pages) > 1 else ""), subtitle)
             top = 1.9
             for text in page:
-                textbox(slide, 0.9, top, 11.6, 0.8, "•  " + _clip(text, 150), 20)
+                self.textbox(slide, 0.9, top, 11.6, 0.8, "•  " + _clip(text, 150), 20)
                 top += 0.82
 
-    # титульный слайд
-    counter["n"] += 1
-    cover = prs.slides.add_slide(blank)
-    band = cover.shapes.add_shape(1, 0, 0, prs.slide_width, Inches(7.5))
-    band.fill.solid(); band.fill.fore_color.rgb = RGBColor(*ACCENT); band.line.fill.background()
+    def table(self, title: str, headers: tuple[str, ...], rows: list[tuple[str, ...]], widths: tuple[float, ...], per: int = 7) -> None:
+        from pptx.util import Inches, Pt  # noqa: PLC0415
+        pages = max(1, (len(rows) + per - 1) // per)
+        for index in range(0, max(len(rows), 1), per):
+            page = rows[index:index + per]
+            slide = self.new_slide(title + (f" ({index // per + 1}/{pages})" if pages > 1 else ""))
+            table = slide.shapes.add_table(len(page) + 1, len(headers), Inches(0.7), Inches(1.7), Inches(11.9), Inches(0.5 * (len(page) + 1))).table
+            for col, width in enumerate(widths):
+                table.columns[col].width = Inches(width)
+            for col, head in enumerate(headers):
+                cell = table.cell(0, col)
+                cell.text = head
+                cell.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
+            for row, values in enumerate(page, 1):
+                for col, value in enumerate(values):
+                    cell = table.cell(row, col)
+                    cell.text = value
+                    cell.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
+
+    def save(self, path: Path) -> int:
+        self.prs.save(path)
+        return len(self.prs.slides)
+
+
+def build_deck(core, scope: dict, date_of: Callable, today: date | None = None) -> dict:
+    today = today or date.today()
+    sc = resolve(core, scope, date_of, today)
+    if not sc.meetings:
+        raise ValueError("За выбранный период записей нет")
+    facts = digest.gather(sc.meetings, date_of, today)
+    st = digest.stats(facts)
+    highlights, mode = _highlights(sc, facts, st)
+    multi = not sc.single and (sc.intent is None or sc.intent.project is None)
+    deck = Slides(today)
+
     if sc.intent is not None:
         head = " · ".join(x for x in (sc.intent.project["title"] if sc.intent.project else "", sc.intent.person["name"] if sc.intent.person else "") if x) or "Все проекты"
         sub = f"{sc.intent.label} ({digest.short(sc.intent.since.isoformat())} – {digest.short(sc.intent.until.isoformat())})"
     else:
         head, sub = sc.title, _ru_date(sc.label)
-    textbox(cover, 0.9, 1.5, 11.5, 2.6, _clip(head, 110), 40 if len(head) <= 45 else 30, True, (255, 255, 255))
-    textbox(cover, 0.9, 4.3, 11.5, 0.6, sub, 22, False, (255, 255, 255))
-    textbox(cover, 0.9, 5.1, 11.5, 1.0, digest.stats_line(st) + ".", 18, False, (255, 255, 255))
-    textbox(cover, 0.9, 6.6, 11.5, 0.5, f"Подготовлено в Memory Desk · {_ru_date(today.isoformat())}", 14, False, (255, 255, 255))
-
-    bullets_slides("Главное", highlights, 7)
+    deck.cover(head, sub, digest.stats_line(st) + ".")
+    deck.bullets("Главное", highlights, 7)
 
     where = (lambda f: f" ({digest.short(f.date)}{', ' + f.project if multi and f.project else ''})")
     decisions = [d["text"] + (" — не подтверждено" if d["draft"] else "") + where(f) for f in facts for d in f.decisions if not d.get("replaced")]
     if decisions:
-        bullets_slides("Решения", decisions)
+        deck.bullets("Решения", decisions)
 
     open_rows = []
     for f in facts:
@@ -461,41 +497,26 @@ def build_deck(core, scope: dict, date_of: Callable, today: date | None = None) 
             status = "просрочено" if t["overdue"] else ("черновик" if t["draft"] else "в работе")
             open_rows.append((_clip(t["text"], 90), t["owner"] or "не указан", _due(t), status))
     open_rows.sort(key=lambda r: (r[3] != "просрочено", r[2]))
-    for index in range(0, len(open_rows), 7):
-        page = open_rows[index:index + 7]
-        pages = (len(open_rows) + 6) // 7
-        slide = new_slide("Задачи в работе" + (f" ({index // 7 + 1}/{pages})" if pages > 1 else ""))
-        table = slide.shapes.add_table(len(page) + 1, 4, Inches(0.7), Inches(1.7), Inches(11.9), Inches(0.5 * (len(page) + 1))).table
-        for col, width in enumerate((6.2, 2.4, 1.7, 1.6)):
-            table.columns[col].width = Inches(width)
-        for col, head in enumerate(("Задача", "Ответственный", "Срок", "Статус")):
-            cell = table.cell(0, col)
-            cell.text = head
-            cell.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
-        for row, values in enumerate(page, 1):
-            for col, value in enumerate(values):
-                cell = table.cell(row, col)
-                cell.text = value
-                cell.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
+    if open_rows:
+        deck.table("Задачи в работе", ("Задача", "Ответственный", "Срок", "Статус"), open_rows, (6.2, 2.4, 1.7, 1.6))
 
     done = [t["text"] + (f" — {t['owner']}" if t["owner"] else "") + where(f) for f in facts for t in f.done]
     if done:
-        bullets_slides("Выполнено", done)
+        deck.bullets("Выполнено", done)
 
     risks = [r + where(f) for f in facts for r in f.risks]
     questions = [q + where(f) for f in facts for q in f.questions]
     if risks:
-        bullets_slides("Риски", risks)
+        deck.bullets("Риски", risks)
     if questions:
-        bullets_slides("Открытые вопросы", questions)
+        deck.bullets("Открытые вопросы", questions)
 
     timeline = [f"{digest.short(f.date)} — {f.title}" + (f" ({f.project})" if multi and f.project else "") for f in facts]
-    bullets_slides("Хронология встреч", timeline, 8, f"Всего записей: {len(facts)}")
+    deck.bullets("Хронология встреч", timeline, 8, f"Всего записей: {len(facts)}")
 
     name = safe_name(f"{sc.title} — {today.isoformat()}", 90) + ".pptx"
-    path = _presentations_dir() / name
-    prs.save(path)
-    return {"name": name, "title": sc.title, "period": sc.label, "slides": len(prs.slides), "records": len(facts), "mode": mode, "stats": st,
+    slides = deck.save(_presentations_dir() / name)
+    return {"name": name, "title": sc.title, "period": sc.label, "slides": slides, "records": len(facts), "mode": mode, "stats": st,
             "url": deck_url(name)}
 
 
@@ -514,6 +535,8 @@ def request_kind(question: str) -> str | None:
     """Просит ли вопрос создать материал («сделай презентацию по проекту…», «составь протокол»)."""
     if not VERBS.search(question):
         return None
+    if re.search(r"дайджест", question, re.IGNORECASE):
+        return "digest"
     return next((kind for kind, pattern in KINDS if pattern.search(question)), None)
 
 
@@ -551,7 +574,19 @@ def from_chat(core, question: str, scope: dict, date_of: Callable, today: date |
     else:
         payload["days"] = 3650 if (project or person) else 30
     try:
-        if kind in ("memo", "brief", "followup"):
+        if kind == "digest":
+            from . import projectdigest
+            key = projectdigest.period_from_text(question, today)
+            project_id = project["id"] if project else None
+            if re.search(r"презентац|слайд|pptx|keynote|powerpoint", question, re.IGNORECASE):
+                result = projectdigest.build_deck(core, key, date_of, today, project_id)
+                kind = "deck"
+                answer = (f"Презентация-дайджест готова: {result['slides']} слайдов, «{result['period']}».\n\n"
+                          f"{'Вводный абзац написала локальная модель.' if result['mode'] == 'model' else 'Вводный абзац собран из цифр без модели.'}")
+            else:
+                result = projectdigest.build(core, key, date_of, today, project_id)
+                answer = chat_markdown(result["markdown"])
+        elif kind in ("memo", "brief", "followup"):
             from . import artifacts
             payload["meetingId"] = scope.get("id") if scope.get("kind") == "record" else None
             if not payload["meetingId"] and not (project or person or period):
