@@ -577,7 +577,7 @@ def test_storage_usage_and_clean(client, fixture_dir):
     assert client.post("/api/storage/clean", json={"category": "archive_audio", "days": -1}).status_code == 400
     for _ in range(5):
         client.post("/api/system/backup")
-    assert client.post("/api/storage/clean", json={"category": "backups"}).json()["usage"]["categories"][3]["count"] == 3
+    assert client.post("/api/storage/clean", json={"category": "backups"}).json()["usage"]["categories"][3]["count"] == 7
 
 
 # --------------------------------------------------------------------------- голоса (подмена кодировщика и звука)

@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, apple, config, housekeeping, integrations, jobs, knowledge, materials, services, speakers, storage, voice, waveform
+from . import __version__, apple, config, dictionary, housekeeping, integrations, jobs, knowledge, materials, services, speakers, storage, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -46,7 +46,9 @@ class Watcher:
             core.jobs_version += 1
         self.queue = queue
         if self._was_active and not queue["active"]:
+            before = {m.id for m in core.meetings}
             core.reload(force=True)  # задание завершилось — подхватываем новые заметки сразу
+            self._notify_done(before)
         self._was_active = queue["active"]
         if self._tick % 3 == 0:
             core.reload()
@@ -54,14 +56,42 @@ class Watcher:
             self._auto_process(queue)
         if core.cfg.get("reminders_enabled") and self._tick % 13 == 0:
             integrations.schedule_sync(core.cfg)
-        if time.time() - self._last_backup_check > 3600:
-            self._last_backup_check = time.time()
-            backups = storage.list_backups()
-            if not backups or time.time() - backups[0].stat().st_mtime > 86400:
-                try:
-                    storage.create_backup()
-                except OSError:
-                    pass
+        self.backup_if_due()
+
+    def backup_if_due(self, now: float | None = None) -> bool:
+        """Копия базы по расписанию из настроек; после каждой копии лишние старые удаляются."""
+        cfg = self.core.cfg
+        now = time.time() if now is None else now
+        if not cfg.get("backup_auto", True) or now - self._last_backup_check < 600:
+            return False
+        self._last_backup_check = now
+        backups = storage.list_backups()
+        interval = max(1, int(cfg.get("backup_interval_hours", 24))) * 3600
+        made = False
+        if not backups or now - backups[0].stat().st_mtime >= interval:
+            try:
+                storage.create_backup()
+                made = True
+            except (OSError, sqlite3.Error):
+                pass
+        storage.prune_backups(int(cfg.get("backup_keep", 7)))
+        return made
+
+    def _notify_done(self, before: set[str]) -> None:
+        """Уведомление macOS: «запись готова, проверьте N задач» по записям, появившимся после обработки."""
+        if not self.core.cfg.get("notify", True):
+            return
+        fresh = [m for m in self.core.meetings if m.id not in before]
+        if not fresh:
+            return
+        drafts = storage.one(
+            "SELECT COUNT(*) n FROM tasks WHERE status='draft' AND meeting_id IN (%s)" % ",".join("?" * len(fresh)),
+            tuple(m.id for m in fresh))
+        count = int(drafts["n"]) if drafts else 0
+        title = fresh[0].title if len(fresh) == 1 else f"Готово записей: {len(fresh)}"
+        message = (f"Запись готова, проверьте {_plural(count, 'задачу', 'задачи', 'задач')}" if count
+                   else ("Запись готова" if len(fresh) == 1 else "Записи готовы"))
+        apple.notify(title or "Memory Desk", message)
 
     def _auto_process(self, queue: dict) -> None:
         # Только новые файлы (не упавшие ранее) и не раньше, чем через 10 секунд после последней записи в файл.
@@ -77,6 +107,11 @@ class Watcher:
                 continue
         if fresh:
             jobs.start(self.core.cfg, fresh)
+
+
+def _plural(n: int, one: str, few: str, many: str) -> str:
+    word = one if n % 10 == 1 and n % 100 != 11 else few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
+    return f"{n} {word}"
 
 
 def _snapshot(core: Core, watcher: Watcher) -> dict:
@@ -289,6 +324,10 @@ def create_app() -> FastAPI:
         reminders_list: str = "Memory Desk"
         reminders_scope: str = "mine"
         my_name: str = ""
+        notify: bool = True
+        backup_auto: bool = True
+        backup_interval_hours: int = 24
+        backup_keep: int = 7
 
     @app.get("/api/settings")
     def get_settings():
@@ -308,6 +347,34 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {**saved, "message": "Настройки сохранены"}
+
+    # ------------------------------------------------------------------ словарь терминов
+    def dictionary_view(warnings: list[str] | None = None) -> dict:
+        text = dictionary.read_text()
+        entries, found = dictionary.parse(text)
+        return {"text": text, "count": len(entries), "warnings": warnings if warnings is not None else found,
+                "path": str(dictionary.path())}
+
+    @app.get("/api/dictionary")
+    def get_dictionary():
+        return dictionary_view()
+
+    @app.put("/api/dictionary")
+    def put_dictionary(body: dict = Body(...)):
+        text = body.get("text")
+        if not isinstance(text, str):
+            raise HTTPException(400, "Нужен текст словаря")
+        try:
+            entries, warnings = dictionary.save_text(text)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить словарь: {exc}") from exc
+        return {**dictionary_view(warnings), "message": f"Словарь сохранён: слов {len(entries)}"}
+
+    @app.post("/api/dictionary/apply")
+    def apply_dictionary():
+        return services.apply_dictionary(core)
 
     # ------------------------------------------------------------------ SSE
     @app.get("/api/stream")

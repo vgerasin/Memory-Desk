@@ -11,7 +11,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from . import config, storage
+from . import config, dictionary, storage
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".mp4"}
 # Аудио/видео-форматы, которые пайплайн не принимает: показываем их в очереди как ошибку с подсказкой.
@@ -425,7 +425,8 @@ def start(cfg: dict, files: list[Path] | None = None) -> dict:
     output = paths["output"].open("a", encoding="utf-8")
     try:
         env = {**os.environ, "PLAUD_DIARIZE": "1" if cfg.get("diarize", True) else "0",
-               "PLAUD_VOICE": "1" if cfg.get("voice_enabled") else "0"}
+               "PLAUD_VOICE": "1" if cfg.get("voice_enabled") else "0",
+               "PLAUD_DICTIONARY": str(dictionary.path())}
         process = subprocess.Popen(command, cwd=config.PROJECT_ROOT, stdin=subprocess.DEVNULL, stdout=output,
                                    stderr=subprocess.STDOUT, start_new_session=True, env=env)
     finally:

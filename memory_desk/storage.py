@@ -301,6 +301,18 @@ def list_backups() -> list[Path]:
     return sorted(backup_dir().glob("*.db"), key=lambda p: (p.stat().st_mtime_ns, p.name), reverse=True) if backup_dir().exists() else []
 
 
+def prune_backups(keep: int) -> int:
+    """Оставляет `keep` последних копий, остальные удаляет. Возвращает число удалённых."""
+    removed = 0
+    for old in list_backups()[max(1, int(keep)):]:
+        try:
+            old.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
 def restore_backup(path: Path) -> None:
     path = Path(path)
     if path.parent != backup_dir() or not path.exists():

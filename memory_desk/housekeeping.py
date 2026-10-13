@@ -53,7 +53,15 @@ def _logs() -> list[Path]:
     return [p for p in _walk_files(config.LOGS_DIR) if p.suffix == ".log"]
 
 
+def _backup_keep(cfg: dict) -> int:
+    try:
+        return max(1, int(cfg.get("backup_keep", 7)))
+    except (TypeError, ValueError):
+        return 7
+
+
 def usage(cfg: dict) -> dict:
+    keep = _backup_keep(cfg)
     wavs = _work_wavs()
     results = _work_results()
     audio = _archive_audio(cfg)
@@ -77,7 +85,7 @@ def usage(cfg: dict) -> dict:
          "hint": "Обработанные записи ждут здесь срока хранения (сейчас " + str(cfg.get("retention_days", 14)) + " дн.). Текст, заметка и поиск остаются, но запись нельзя будет прослушать.",
          "clean": "Удалить старше…", "days": True, "danger": True, "oldest": oldest},
         {"key": "backups", "title": "Резервные копии базы", "bytes": sum(_size(p) for p in backups), "count": len(backups),
-         "hint": "Остаются три последние копии.", "clean": "Оставить 3", "days": False, "danger": False},
+         "hint": f"Остаются {keep} последних копий (число задаётся в настройках).", "clean": f"Оставить {keep}", "days": False, "danger": False},
         {"key": "logs", "title": "Журналы работы", "bytes": sum(_size(p) for p in logs), "count": len(logs),
          "hint": "Текстовые журналы сервера и обработки. История обработки (processing.jsonl) не затрагивается.",
          "clean": "Очистить", "days": False, "danger": False},
@@ -127,7 +135,7 @@ def clean(cfg: dict, category: str, days: int | None = None) -> dict:
             except OSError:
                 pass
     elif category == "backups":
-        drop(storage.list_backups()[3:])
+        drop(storage.list_backups()[_backup_keep(cfg):])
     elif category == "logs":
         for path in _logs():
             size = _size(path)

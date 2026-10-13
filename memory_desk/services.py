@@ -8,7 +8,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import config, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, voice
+from . import config, dictionary, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -723,3 +723,32 @@ def system_status(core: Core) -> dict:
     order = {"ok": 0, "warn": 1, "bad": 2}
     overall = max((r["state"] for r in rows), key=lambda s: order[s])
     return {"rows": rows, "overall": overall, "indexState": index.state, "indexError": index.error}
+
+
+def apply_dictionary(core: Core) -> dict:
+    """Применяет словарь терминов к уже готовым стенограммам. Таймкоды и метки говорящих не меняются."""
+    entries = dictionary.load()
+    if not entries:
+        return {"meetings": 0, "replacements": 0, "message": "Словарь пуст: добавьте хотя бы одно слово"}
+    changed = replaced = 0
+    for meeting in list(core.meetings):
+        try:
+            path, heading = knowledge._transcript_target(meeting)
+            text = path.read_text(encoding="utf-8")
+        except (ValueError, OSError):
+            continue
+        head, sep, body = text.partition(heading)
+        if not sep:
+            continue
+        fixed, count = dictionary.apply_transcript(body, entries)
+        if not count:
+            continue
+        temp = path.with_name(path.name + ".tmp")
+        temp.write_text(head + sep + fixed, encoding="utf-8")
+        temp.replace(path)
+        changed += 1
+        replaced += count
+    if changed:
+        core.reload(force=True)
+    message = (f"Исправлено слов: {replaced} в {changed} записях" if changed else "Исправлять нечего: все слова уже написаны верно")
+    return {"meetings": changed, "replacements": replaced, "message": message}

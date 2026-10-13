@@ -339,3 +339,29 @@ def to_date(value: str | None) -> date | None:
     except ValueError:
         return None
 
+
+
+# --------------------------------------------------------------------------- уведомления
+
+sent_notifications: list[tuple[str, str]] = []  # для тестов и демо-режима: что было бы показано
+
+
+def _applescript_text(value: str) -> str:
+    cleaned = " ".join(str(value).replace("\\", " ").replace('"', "'").split())
+    return cleaned[:200]
+
+
+def notify(title: str, message: str) -> bool:
+    """Системное уведомление macOS. Вне macOS и в демо-режиме ничего не показывает; ошибки не пробрасывает."""
+    if os.environ.get("MEMORY_DESK_FAKE_APPLE"):
+        sent_notifications.append((title, message))
+        return True
+    if sys.platform != "darwin":
+        return False
+    import subprocess
+    script = f'display notification "{_applescript_text(message)}" with title "{_applescript_text(title)}"'
+    try:
+        subprocess.run(["osascript", "-e", script], check=True, timeout=10, capture_output=True)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False

@@ -20,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+from memory_desk import dictionary  # noqa: E402
 from memory_desk.whisper_filter import clean_result  # noqa: E402
 from memory_desk.diarize import detect_speakers, parse as parse_transcript, relabel  # noqa: E402
 from memory_desk.llm import ollama_json  # noqa: E402
@@ -121,15 +122,20 @@ def normalize_audio(source: Path, target: Path) -> None:
     ])
 
 
-def transcribe(audio: Path) -> dict:
+def transcribe(audio: Path, terms: list | None = None) -> dict:
     import mlx_whisper
 
+    extra = {}
+    prompt = dictionary.hint(terms or [])
+    if prompt:
+        extra["initial_prompt"] = prompt  # Whisper учитывает подсказку в начале записи; остальное исправит замена по словарю
     return mlx_whisper.transcribe(
         str(audio),
         path_or_hf_repo=WHISPER_MODEL,
         language="ru",
         word_timestamps=False,
         verbose=False,
+        **extra,
         # Без опоры на предыдущий текст модель не зацикливается на музыке и шуме; пороги — защита от выдумок на тишине.
         condition_on_previous_text=False,
         compression_ratio_threshold=2.4,
@@ -630,8 +636,12 @@ def process_file(source: Path, vault: Path, archive_dir: Path | None, force_rean
         log_event("progress", source, "Подготавливаю звук для распознавания", stage="preparing_audio", percent=6)
         normalize_audio(source, normalized)
         log_event("progress", source, "Расшифровываю запись локально", stage="transcribing", percent=10)
-        result = transcribe(normalized)
+        terms = dictionary.load()
+        result = transcribe(normalized, terms)
         result, dropped = clean_result(result)
+        result, replaced = dictionary.apply_result(result, terms)
+        if replaced:
+            log_event("progress", source, f"Исправлено слов по словарю терминов: {replaced}", stage="transcribing", percent=40)
         if dropped:
             log_event("progress", source, f"Убрано выдуманных или повторяющихся реплик: {len(dropped)}", stage="transcribing", percent=40)
             result["dropped_segments"] = dropped

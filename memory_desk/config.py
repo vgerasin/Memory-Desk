@@ -46,6 +46,10 @@ def defaults() -> dict:
         "reminders_list": "Memory Desk",
         "reminders_scope": "mine",
         "my_name": "",
+        "notify": True,
+        "backup_auto": True,
+        "backup_interval_hours": 24,
+        "backup_keep": 7,
     }
 
 
@@ -77,6 +81,13 @@ def save_config(values: dict) -> dict:
     normalized["reminders_list"] = " ".join(str(normalized.get("reminders_list") or "").split()) or "Memory Desk"
     normalized["reminders_scope"] = "all" if normalized.get("reminders_scope") == "all" else "mine"
     normalized["my_name"] = " ".join(str(normalized.get("my_name") or "").split())
+    normalized["notify"] = bool(normalized["notify"])
+    normalized["backup_auto"] = bool(normalized["backup_auto"])
+    try:
+        normalized["backup_interval_hours"] = min(24 * 30, max(1, int(normalized["backup_interval_hours"])))
+        normalized["backup_keep"] = min(60, max(1, int(normalized["backup_keep"])))
+    except (TypeError, ValueError):
+        raise ValueError("Частота и число резервных копий должны быть числами")
     for key in ("recordings_dir", "obsidian_dir", "archive_dir"):
         text = str(normalized[key]).strip()
         if not text:

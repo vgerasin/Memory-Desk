@@ -3,6 +3,7 @@ import { api, errorText } from '../api'
 import { useApp } from '../store'
 import { fmtBytes } from '../format'
 import type { AppleStatus, BackupItem, Settings } from '../types'
+import { DictionarySettings } from './DictionarySettings'
 import { VoiceSettings } from './VoiceSettings'
 
 export function SettingsModal() {
@@ -37,6 +38,8 @@ export function SettingsModal() {
         retention_days: Number(form.retention_days) || 14, auto_process: form.auto_process, diarize: form.diarize, voice_enabled: form.voice_enabled, calendar_source: form.calendar_source,
         apple_calendar: form.apple_calendar, reminders_enabled: form.reminders_enabled,
         reminders_list: form.reminders_list, reminders_scope: form.reminders_scope, my_name: form.my_name,
+        notify: form.notify, backup_auto: form.backup_auto,
+        backup_interval_hours: Number(form.backup_interval_hours) || 24, backup_keep: Number(form.backup_keep) || 7,
       })
       showToast('Настройки сохранены')
       invalidate()
@@ -116,6 +119,15 @@ export function SettingsModal() {
               <button className={'switch' + (form.auto_process ? ' on' : '')} role="switch" aria-checked={form.auto_process}
                 onClick={() => set('auto_process', !form.auto_process)}><i /></button>
             </div>
+            <div className="switch-row">
+              <div className="field" style={{ gap: 2 }}>
+                <label>Уведомлять, когда запись готова</label>
+                <span className="hint">Системное уведомление macOS: «Запись готова, проверьте 3 задачи»</span>
+              </div>
+              <button className={'switch' + (form.notify ? ' on' : '')} role="switch" aria-checked={form.notify}
+                onClick={() => set('notify', !form.notify)}><i /></button>
+            </div>
+            <DictionarySettings />
             <div className="apple-box">
               <div className="field" style={{ gap: 2 }}>
                 <label>Календарь и Напоминания (macOS)</label>
@@ -190,7 +202,26 @@ export function SettingsModal() {
             <VoiceSettings enabled={form.voice_enabled} onToggle={v => set('voice_enabled', v)} />
             <div className="field">
               <label>Резервные копии базы</label>
-              {backups.length === 0 && <span className="hint">Копий пока нет. Создайте первую в окне «Состояние системы».</span>}
+              <div className="switch-row">
+                <span className="hint">Делать копии автоматически</span>
+                <button className={'switch' + (form.backup_auto ? ' on' : '')} role="switch" aria-checked={form.backup_auto}
+                  onClick={() => set('backup_auto', !form.backup_auto)}><i /></button>
+              </div>
+              {form.backup_auto && (
+                <div className="backup-plan">
+                  <label htmlFor="backup-interval">Раз в</label>
+                  <select id="backup-interval" value={form.backup_interval_hours} onChange={e => set('backup_interval_hours', Number(e.target.value))}>
+                    {[[6, '6 часов'], [12, '12 часов'], [24, 'сутки'], [72, '3 дня'], [168, 'неделю']].map(([v, label]) =>
+                      <option key={v} value={v}>{label}</option>)}
+                    {![6, 12, 24, 72, 168].includes(form.backup_interval_hours) && <option value={form.backup_interval_hours}>{form.backup_interval_hours} ч</option>}
+                  </select>
+                  <label htmlFor="backup-keep">хранить</label>
+                  <input id="backup-keep" type="number" min={1} max={60} value={form.backup_keep}
+                    onChange={e => set('backup_keep', Number(e.target.value))} />
+                  <span className="hint">копий</span>
+                </div>
+              )}
+              {backups.length === 0 && <span className="hint">Копий пока нет. Первая появится автоматически или создайте её в окне «Состояние системы».</span>}
               {backups.slice(0, 5).map(b => (
                 <div className="backup-row" key={b.name}>
                   <span className="backup-name">

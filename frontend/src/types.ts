@@ -99,6 +99,7 @@ export interface Settings {
   recordings_dir: string; obsidian_dir: string; archive_dir: string
   retention_days: number; auto_process: boolean; diarize: boolean; voice_enabled: boolean; calendar_source: string
   apple_calendar: boolean; reminders_enabled: boolean; reminders_list: string; reminders_scope: 'mine' | 'all'; my_name: string
+  notify: boolean; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
   exists?: Record<string, boolean>
 }
 
