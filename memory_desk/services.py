@@ -759,6 +759,7 @@ def system_status(core: Core) -> dict:
     except OSError:
         free_gb = 0
     backups = storage.list_backups()
+    db_ok, db_message = storage.check_integrity()
     index = core.index
     if index.state == "ready":
         index_value, index_state = ("Qdrant · " + str(len(core.meetings)) + " записей"
@@ -777,6 +778,8 @@ def system_status(core: Core) -> dict:
         {"key": "vault", "name": "Obsidian Vault", "value": "доступ есть" if vault.exists() else "не найден",
          "state": "ok" if vault.exists() else "bad"},
         {"key": "disk", "name": "Свободное место", "value": f"{free_gb:.0f} ГБ", "state": "ok" if free_gb > 20 else "warn"},
+        {"key": "database", "name": "База кабинета", "value": "цела" if db_ok else "повреждена: восстановите из копии",
+         "state": "ok" if db_ok else "bad", "detail": db_message},
         {"key": "backup", "name": "Резервная копия",
          "value": datetime.fromtimestamp(backups[0].stat().st_mtime).strftime("%d.%m, %H:%M") if backups else "нет копии",
          "state": "ok" if backups else "warn"},

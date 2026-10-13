@@ -14,12 +14,13 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, bookmarks, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, bookmarks, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
                ".flac": "audio/flac", ".ogg": "audio/ogg", ".mp4": "video/mp4"}
 HEADER = "x-memory-desk"
+CHANGE_BACKUP_GAP = 15 * 60   # копия «после изменений» не чаще, чем раз в 15 минут
 
 
 # --------------------------------------------------------------------------- фоновый наблюдатель
@@ -34,6 +35,8 @@ class Watcher:
         self.state_version = 0
         self._tick = 0
         self._last_backup_check = 0.0
+        self._backup_version = core.data_version
+        self._mirror_version = -1
         self._was_active = False
 
     def tick(self) -> None:
@@ -57,6 +60,7 @@ class Watcher:
         if core.cfg.get("reminders_enabled") and self._tick % 13 == 0:
             integrations.schedule_sync(core.cfg)
         self.backup_if_due()
+        self.mirror_if_changed()
         if self._tick % 40 == 0:  # раз в минуту
             self._morning()
 
@@ -65,6 +69,17 @@ class Watcher:
             daily.send_morning_notification(self.core)
         except Exception:  # noqa: BLE001 — сводка не должна ронять наблюдателя
             pass
+
+    def mirror_if_changed(self) -> bool:
+        """Сводки «Задачи» и «Решения» в Obsidian обновляются, когда в кабинете что-то изменилось (файл переписывается только при изменении текста)."""
+        core = self.core
+        if not core.cfg.get("mirror_enabled", True) or core.data_version == self._mirror_version:
+            return False
+        self._mirror_version = core.data_version
+        try:
+            return bool(mirror.refresh()["written"])
+        except (OSError, sqlite3.Error):
+            return False
 
     def backup_if_due(self, now: float | None = None) -> bool:
         """Копия базы по расписанию из настроек; после каждой копии лишние старые удаляются."""
@@ -76,9 +91,12 @@ class Watcher:
         backups = storage.list_backups()
         interval = max(1, int(cfg.get("backup_interval_hours", 24))) * 3600
         made = False
-        if not backups or now - backups[0].stat().st_mtime >= interval:
+        changed = cfg.get("backup_on_change", True) and self.core.data_version != self._backup_version \
+            and (not backups or now - backups[0].stat().st_mtime >= CHANGE_BACKUP_GAP)
+        if not backups or now - backups[0].stat().st_mtime >= interval or changed:
             try:
                 storage.create_backup()
+                self._backup_version = self.core.data_version
                 made = True
             except (OSError, sqlite3.Error):
                 pass
@@ -198,6 +216,14 @@ def create_app() -> FastAPI:
     def backup():
         path = storage.create_backup()
         return {"path": path.name, "message": "Резервная копия создана"}
+
+    @app.post("/api/system/mirror")
+    def refresh_mirror():
+        """Сводки «Задачи» и «Решения» в Obsidian: обновить сейчас."""
+        try:
+            return mirror.refresh()
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось записать сводки: {exc}") from exc
 
     @app.get("/api/system/backups")
     def backups():
@@ -338,6 +364,9 @@ def create_app() -> FastAPI:
         backup_auto: bool = True
         backup_interval_hours: int = 24
         backup_keep: int = 7
+        backup_on_change: bool = True
+        note_writeback: bool = False
+        mirror_enabled: bool = True
         default_template: str = "meeting"
 
     @app.get("/api/settings")
@@ -1160,11 +1189,13 @@ def create_app() -> FastAPI:
         if table == "tasks" and not quiet:
             integrations.schedule_sync(core.cfg)
         row = storage.one(f"SELECT x.*, m.title mt, m.meeting_date md, m.path mpath FROM {table} x JOIN meetings m ON m.id=x.meeting_id WHERE x.id=?", (item_id,))
-        note_state = "missing"
-        try:  # правка попадает и в строку заметки Obsidian; сбой записи не отменяет правку в кабинете
-            note_state = knowledge.update_item_line(Path(row["mpath"]), table, before, row)
-        except OSError:
-            pass
+        note_state = "off"      # заметка записи не затрагивается: состояние живёт в базе, а в Obsidian уходит в сводные файлы
+        if core.cfg.get("note_writeback"):
+            note_state = "missing"
+            try:  # по желанию правка попадает и в строку заметки Obsidian; сбой записи не отменяет правку в кабинете
+                note_state = knowledge.update_item_line(Path(row["mpath"]), table, before, row)
+            except OSError:
+                pass
         if note_state == "updated" and not quiet:
             core.reload(force=True)
         dto = (services._task_dto if table == "tasks" else services._decision_dto)(row, row["mt"], row["md"])

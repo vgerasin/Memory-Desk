@@ -282,6 +282,22 @@ def set_setting(key: str, value: str) -> None:
                    (key, value))
 
 
+def check_integrity(path: Path | None = None) -> tuple[bool, str]:
+    """Проверка файла базы (`PRAGMA integrity_check`). Возвращает (цела ли, сообщение)."""
+    target = Path(path) if path else db_path()
+    if not target.exists():
+        return True, "базы ещё нет"
+    try:
+        db = sqlite3.connect(f"file:{target}?mode=ro", uri=True, timeout=15)
+        try:
+            result = db.execute("PRAGMA integrity_check").fetchone()
+        finally:
+            db.close()
+    except sqlite3.Error as exc:
+        return False, f"не открывается: {exc}"
+    return (True, "цела") if result and result[0] == "ok" else (False, str(result[0] if result else "нет ответа")[:200])
+
+
 def create_backup() -> Path:
     initialize()
     backup_dir().mkdir(parents=True, exist_ok=True)

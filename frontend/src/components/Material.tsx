@@ -118,8 +118,7 @@ export function MaterialModal() {
     if (material?.kind === 'digest') setDays(d => (DIGEST_PERIODS.some(p => p.key === d) ? d : 'this_week'))
     else setDays(d => (/^\d+$/.test(d) ? d : '30'))
     if (material?.result) { applyResult(material.result); return }
-    if (material?.kind === 'digest') void generate(material, DIGEST_PERIODS.some(p => p.key === days) ? days : 'this_week')
-    else if (material && (material.kind === 'protocol' || material.meetingId)) void generate(material, days, addressee)
+    if (material && (material.kind === 'protocol' || material.meetingId)) void generate(material, days, addressee)
   }, [material]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -169,7 +168,7 @@ export function MaterialModal() {
 
         {(needsPeriod || (kind === 'memo' && !!material.meetingId)) && (
           <div className="material-period">
-            {needsPeriod && <Segmented small items={kind === 'digest' ? DIGEST_PERIODS : PERIODS} value={days} onChange={v => { setDays(v); if (kind === 'digest') void generate(material, v) }} />}
+            {needsPeriod && <Segmented small items={kind === 'digest' ? DIGEST_PERIODS : PERIODS} value={days} onChange={v => setDays(v)} />}
             {kind === 'memo' && (
               <input className="material-to" value={addressee} maxLength={200} onChange={e => setAddressee(e.target.value)}
                 placeholder="Кому: должность, ФИО" aria-label="Адресат записки" />
@@ -178,6 +177,9 @@ export function MaterialModal() {
               {busy ? 'Собираю…' : result ? (kind === 'memo' && !needsPeriod ? 'Подставить адресата' : 'Собрать заново') : kind === 'deck' ? 'Создать презентацию' : artifact ? 'Составить' : 'Построить карту'}
             </button>
           </div>
+        )}
+        {needsPeriod && artifact && !result && !busy && !error && (
+          <div className="muted-text">Выберите период и нажмите «Составить».</div>
         )}
         {!needsPeriod && busy && kind === 'protocol' && (
           <div className="proto-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress?.percent ?? 0} aria-label="Составление протокола">

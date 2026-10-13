@@ -238,7 +238,7 @@ def test_scan_cancel_retry_dismiss(client):
 
 def test_system_and_settings(client, fixture_dir):
     s = client.get("/api/system").json()
-    assert [r["key"] for r in s["rows"]] == ["whisper", "ollama", "index", "recordings", "vault", "disk", "backup"]
+    assert [r["key"] for r in s["rows"]] == ["whisper", "ollama", "index", "recordings", "vault", "disk", "database", "backup"]
     assert next(r for r in s["rows"] if r["key"] == "ollama")["state"] == "warn"
     assert next(r for r in s["rows"] if r["key"] == "index")["state"] == "ok"
     cfg = client.get("/api/settings").json()
@@ -946,10 +946,16 @@ def _note_of(meeting_id: str):
     return next(f for f in root.rglob("*.md") if f'meeting_id: "{meeting_id}"' in f.read_text(encoding="utf-8"))
 
 
-def test_item_edits_are_written_back_to_note(client, items):
-    """Правка задачи или решения меняет строку в заметке Obsidian, остальной текст остаётся прежним."""
+def test_item_edits_are_written_back_to_note(client, items, monkeypatch):
+    """При включённой записи в заметки правка задачи или решения меняет строку заметки Obsidian, остальной текст остаётся прежним."""
+    monkeypatch.setitem(client.app.state.core.cfg, "note_writeback", True)
     details = [client.get(f"/api/meetings/{m['id']}").json() for m in items.values()]
-    detail = next(d for d in details if len(d["tasks"]) >= 1 and d["decisions"])
+    def in_note(d):  # другие тесты правят задачи и решения только в базе, поэтому нужна запись, где строки ещё совпадают с базой
+        lines = [l.strip() for l in _note_of(d["id"]).read_text(encoding="utf-8").splitlines()]
+        return (any(("- [ ] " + d["tasks"][0]["text"]) in l or ("- [x] " + d["tasks"][0]["text"]) in l for l in lines)
+                and any(l.startswith("- " + x["text"]) for x in d["decisions"] for l in lines))
+
+    detail = next(d for d in details if len(d["tasks"]) >= 1 and d["decisions"] and in_note(d))
     mid = detail["id"]
     note = _note_of(mid)
     original = note.read_text(encoding="utf-8")
@@ -975,8 +981,9 @@ def test_item_edits_are_written_back_to_note(client, items):
     restored = note.read_text(encoding="utf-8")
     assert "- [ ] Новая формулировка задачи —" in restored and "~~" not in restored
 
-    # решение: текст и отклонение
-    decision = detail["decisions"][0]
+    # решение: текст и отклонение (берём решение, строка которого ещё есть в заметке: раньше другие тесты правили решения только в базе)
+    lines = [l.strip() for l in note.read_text(encoding="utf-8").splitlines()]
+    decision = next(d for d in detail["decisions"] if any(l.startswith("- " + d["text"]) for l in lines))
     r = client.patch(f"/api/decisions/{decision['id']}", json={"text": "Решение в новой редакции"})
     assert r.json()["noteSynced"] is True and "- Решение в новой редакции" in note.read_text(encoding="utf-8")
     client.patch(f"/api/decisions/{decision['id']}", json={"status": "rejected"})
@@ -1010,7 +1017,8 @@ def test_pagination_keeps_totals(client):
         assert [i["id"] for i in page["items"]] == [i["id"] for i in full["items"][:3]]
 
 
-def test_bulk_items_and_meetings(client, items):
+def test_bulk_items_and_meetings(client, items, monkeypatch):
+    monkeypatch.setitem(client.app.state.core.cfg, "note_writeback", True)
     registry = client.get("/api/tasks").json()["items"]
     drafts = [t for t in registry if t["draft"]][:3]
     assert len(drafts) >= 2

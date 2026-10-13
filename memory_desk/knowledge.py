@@ -450,12 +450,12 @@ def meeting_audio(meeting: Meeting) -> Path | None:
 
 
 def obsidian_url(path: str | Path) -> str:
-    path = Path(str(path))
-    try:
-        relative = path.relative_to(OBSIDIAN_VAULT_ROOT).with_suffix("")
-    except ValueError:
-        relative = path.with_suffix("")
-    query = urllib.parse.urlencode({"vault": OBSIDIAN_VAULT_NAME, "file": relative.as_posix()})
+    """Ссылка по абсолютному пути файла: Obsidian сам находит хранилище, в котором он лежит.
+    Имя папки хранилища не годится: Obsidian ищет зарегистрированное имя, и оно может не совпасть."""
+    path = Path(str(path)).expanduser()
+    if not path.is_absolute():
+        path = (OBSIDIAN_VAULT_ROOT / path).resolve()
+    query = urllib.parse.urlencode({"path": path.as_posix()}, quote_via=urllib.parse.quote)
     return f"obsidian://open?{query}"
 
 

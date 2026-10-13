@@ -103,6 +103,7 @@ export interface Settings {
   retention_days: number; auto_process: boolean; diarize: boolean; voice_enabled: boolean; calendar_source: string
   apple_calendar: boolean; reminders_enabled: boolean; reminders_list: string; reminders_scope: 'mine' | 'all'; my_name: string
   notify: boolean; morning_brief: boolean; morning_hour: number; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
+  backup_on_change: boolean; note_writeback: boolean; mirror_enabled: boolean
   default_template: string
   exists?: Record<string, boolean>
 }

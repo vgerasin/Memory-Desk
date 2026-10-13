@@ -281,8 +281,10 @@ def _due(task: dict) -> date | None:
     return apple.to_date(task.get("deadline") or "") if (task.get("deadline") or "")[:4].isdigit() else None
 
 
-def _note_follows(task: dict, status: str) -> None:
-    """Галочка в заметке следует за статусом задачи (в том числе когда задачу закрыли в Напоминаниях)."""
+def _note_follows(cfg: dict, task: dict, status: str) -> None:
+    """Если включена запись в заметки, галочка в заметке следует за статусом задачи (в том числе когда задачу закрыли в Напоминаниях)."""
+    if not cfg.get("note_writeback"):
+        return
     row = storage.one("SELECT path FROM meetings WHERE id=?", (task["meeting_id"],))
     if not row:
         return
@@ -337,7 +339,7 @@ def sync_reminders(cfg: dict) -> dict:
                 if task["status"] in ("open", "done"):
                     new_status = "done" if state["completed"] else "open"
                     storage.update_item("tasks", task["id"], status=new_status)
-                    _note_follows(task, new_status)
+                    _note_follows(cfg, task, new_status)
                     summary["completedInReminders"] += 1
                 _set_link(task["id"], task_done=int(state["completed"]), reminder_done=int(state["completed"]))
             elif task_done != bool(link["task_done"]):  # изменено в приложении

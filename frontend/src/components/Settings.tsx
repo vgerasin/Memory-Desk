@@ -42,6 +42,7 @@ export function SettingsModal() {
         reminders_list: form.reminders_list, reminders_scope: form.reminders_scope, my_name: form.my_name,
         notify: form.notify, morning_brief: form.morning_brief, morning_hour: Number(form.morning_hour) || 0, backup_auto: form.backup_auto,
         backup_interval_hours: Number(form.backup_interval_hours) || 24, backup_keep: Number(form.backup_keep) || 7,
+        backup_on_change: form.backup_on_change, note_writeback: form.note_writeback, mirror_enabled: form.mirror_enabled,
       })
       showToast('Настройки сохранены')
       invalidate()
@@ -221,12 +222,32 @@ export function SettingsModal() {
             </div>
             <VoiceSettings enabled={form.voice_enabled} onToggle={v => set('voice_enabled', v)} />
             <div className="field">
+              <label>Задачи и решения в Obsidian</label>
+              <div className="switch-row">
+                <span className="hint">Сводки «Задачи» и «Решения» по проектам в папке «Сводки» (обновляются сами, править их не нужно)</span>
+                <button className={'switch' + (form.mirror_enabled ? ' on' : '')} role="switch" aria-checked={form.mirror_enabled}
+                  onClick={() => set('mirror_enabled', !form.mirror_enabled)}><i /></button>
+              </div>
+              <div className="switch-row">
+                <span className="hint">Дополнительно менять строки в самих заметках записей (статус, срок, ответственный). По умолчанию выключено: рабочее состояние хранится в базе, заметки остаются как извлечено</span>
+                <button className={'switch' + (form.note_writeback ? ' on' : '')} role="switch" aria-checked={form.note_writeback}
+                  onClick={() => set('note_writeback', !form.note_writeback)}><i /></button>
+              </div>
+            </div>
+            <div className="field">
               <label>Резервные копии базы</label>
               <div className="switch-row">
                 <span className="hint">Делать копии автоматически</span>
                 <button className={'switch' + (form.backup_auto ? ' on' : '')} role="switch" aria-checked={form.backup_auto}
                   onClick={() => set('backup_auto', !form.backup_auto)}><i /></button>
               </div>
+              {form.backup_auto && (
+                <div className="switch-row">
+                  <span className="hint">Ещё и после изменений: не чаще раза в 15 минут</span>
+                  <button className={'switch' + (form.backup_on_change ? ' on' : '')} role="switch" aria-checked={form.backup_on_change}
+                    onClick={() => set('backup_on_change', !form.backup_on_change)}><i /></button>
+                </div>
+              )}
               {form.backup_auto && (
                 <div className="backup-plan">
                   <label htmlFor="backup-interval">Раз в</label>

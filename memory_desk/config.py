@@ -52,6 +52,9 @@ def defaults() -> dict:
         "backup_auto": True,
         "backup_interval_hours": 24,
         "backup_keep": 7,
+        "backup_on_change": True,
+        "note_writeback": False,
+        "mirror_enabled": True,
         "default_template": "meeting",
     }
 
@@ -86,6 +89,9 @@ def save_config(values: dict) -> dict:
     normalized["my_name"] = " ".join(str(normalized.get("my_name") or "").split())
     normalized["notify"] = bool(normalized["notify"])
     normalized["backup_auto"] = bool(normalized["backup_auto"])
+    normalized["backup_on_change"] = bool(normalized["backup_on_change"])
+    normalized["note_writeback"] = bool(normalized["note_writeback"])
+    normalized["mirror_enabled"] = bool(normalized["mirror_enabled"])
     normalized["morning_brief"] = bool(normalized["morning_brief"])
     try:
         normalized["morning_hour"] = min(23, max(0, int(normalized["morning_hour"])))
