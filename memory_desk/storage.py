@@ -27,9 +27,10 @@ def backup_dir() -> Path:
 
 
 @contextmanager
-def connect() -> Iterator[sqlite3.Connection]:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(db_path(), timeout=15)
+def connect(path: Path | None = None) -> Iterator[sqlite3.Connection]:
+    path = path or db_path()      # путь читается один раз: папка данных не должна смениться между созданием и открытием
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(path, timeout=15)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
     db.execute("PRAGMA journal_mode = WAL")
@@ -43,9 +44,10 @@ def connect() -> Iterator[sqlite3.Connection]:
 def initialize() -> None:
     global _initialized_for
     with _init_lock:
-        if _initialized_for == db_path():
+        target = db_path()
+        if _initialized_for == target:
             return
-        with connect() as db:
+        with connect(target) as db:
             db.executescript("""
             CREATE TABLE IF NOT EXISTS meetings (
                 id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, title TEXT NOT NULL,
@@ -114,7 +116,7 @@ def initialize() -> None:
                                 ("calendar_dismissed", "INTEGER NOT NULL DEFAULT 0")):
                 if column not in columns:
                     db.execute(f"ALTER TABLE meetings ADD COLUMN {column} {ddl}")
-        _initialized_for = db_path()
+        _initialized_for = target
 
 
 def now_iso() -> str:

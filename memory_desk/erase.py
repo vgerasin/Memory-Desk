@@ -305,19 +305,22 @@ def apply(core, meeting_id: str, confirm: str, *, scrub_backups: bool = True, no
         # файл не удалился (занят, нет прав): запись в базе и заметку не трогаем, чтобы стирание можно было повторить
         result["interrupted"] = True
         return result
-    try:
-        result["registry"] = _scrub_registry(meeting_id, names)
-    except sqlite3.Error as exc:
-        result["problems"].append(f"registry: {exc}")
-    core.index.delete_meeting(meeting_id)
-    result["index"] = 1
-    if scrub_backups:
-        result["backups"] = sum(1 for p in _backups_with_record(meeting_id) if _scrub_backup(p, meeting_id))
-    step("note", lambda: _unlink(meeting.path))
-    for folder in (meeting.path.parent / "Транскрипты", meeting.path.parent):
-        if folder != knowledge.VAULT:
-            _drop_empty(folder, knowledge.VAULT)
-    core.reload(force=True)
+    # Фоновое перечитывание заметок вставило бы строки записи обратно, пока заметка ещё лежит на диске:
+    # от удаления строк до перечитывания без заметки фоновый поток ждёт.
+    with core.lock:
+        try:
+            result["registry"] = _scrub_registry(meeting_id, names)
+        except sqlite3.Error as exc:
+            result["problems"].append(f"registry: {exc}")
+        core.index.delete_meeting(meeting_id)
+        result["index"] = 1
+        if scrub_backups:
+            result["backups"] = sum(1 for p in _backups_with_record(meeting_id) if _scrub_backup(p, meeting_id))
+        step("note", lambda: _unlink(meeting.path))
+        for folder in (meeting.path.parent / "Транскрипты", meeting.path.parent):
+            if folder != knowledge.VAULT:
+                _drop_empty(folder, knowledge.VAULT)
+        core.reload(force=True)
     try:
         from . import mirror
         mirror.refresh()
