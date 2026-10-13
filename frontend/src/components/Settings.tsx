@@ -5,6 +5,7 @@ import { fmtBytes } from '../format'
 import type { AppleStatus, BackupItem, Settings } from '../types'
 import { AppearanceSettings } from './AppearanceSettings'
 import { DictionarySettings } from './DictionarySettings'
+import { TemplateSettings } from './TemplateSettings'
 import { VoiceSettings } from './VoiceSettings'
 
 export function SettingsModal() {
@@ -145,6 +146,7 @@ export function SettingsModal() {
                 </select>
               </div>
             )}
+            <TemplateSettings value={form.default_template} onChange={id => set('default_template', id)} />
             <DictionarySettings />
             <div className="apple-box">
               <div className="field" style={{ gap: 2 }}>

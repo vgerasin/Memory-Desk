@@ -11,7 +11,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from . import config, dictionary, storage
+from . import config, dictionary, storage, templates
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".mp4"}
 # Аудио/видео-форматы, которые пайплайн не принимает: показываем их в очереди как ошибку с подсказкой.
@@ -184,6 +184,34 @@ def unignore_file(name: str) -> None:
     storage.set_setting("ignored_files", json.dumps(sorted(ignored_files() - {name}), ensure_ascii=False))
 
 
+def file_templates() -> dict[str, str]:
+    """Выбранные для файлов в очереди шаблоны: имя файла → id шаблона."""
+    try:
+        value = json.loads(storage.get_setting("file_templates", "{}"))
+    except json.JSONDecodeError:
+        return {}
+    return {str(k): str(v) for k, v in value.items()} if isinstance(value, dict) else {}
+
+
+def set_file_template(name: str, template_id: str) -> None:
+    """Запоминает шаблон для файла; пустой id возвращает шаблон по умолчанию."""
+    chosen = file_templates()
+    if template_id:
+        chosen[name] = template_id
+    else:
+        chosen.pop(name, None)
+    storage.set_setting("file_templates", json.dumps(chosen, ensure_ascii=False))
+
+
+def template_for(name: str, cfg: dict) -> str:
+    """Шаблон, по которому будет обработан файл: выбранный вручную, иначе из настроек (если он ещё существует)."""
+    known, _ = templates.load_all()
+    for candidate in (file_templates().get(name), cfg.get("default_template")):
+        if candidate and candidate in known:
+            return candidate
+    return templates.DEFAULT_ID
+
+
 # --------------------------------------------------------------------------- ошибки
 
 ERROR_RULES = [
@@ -302,7 +330,7 @@ def build_queue(cfg: dict, now: datetime | None = None) -> dict:
             "stage_index": STAGE_INDEX[stage], "stage_label": STAGES[STAGE_INDEX[stage] - 1][1],
             "percent": 0, "started_at": job.get("started_at") if state == "running" else None,
             "eta": None, "last_message": (event or {}).get("detail", ""), "runner": STAGES[STAGE_INDEX[stage] - 1][3],
-            "error": error,
+            "error": error, "templateId": template_for(name, cfg),
         }
         if state == "running":
             started = _parse_time((event or {}).get("created_at")) if event else None
@@ -424,9 +452,14 @@ def start(cfg: dict, files: list[Path] | None = None) -> dict:
                "--job-id", job_id]
     output = paths["output"].open("a", encoding="utf-8")
     try:
+        map_path = config.RUNTIME_DIR / "templates-map.json"
+        map_path.write_text(json.dumps({p.name: template_for(p.name, cfg) for p in files}, ensure_ascii=False),
+                            encoding="utf-8")
         env = {**os.environ, "PLAUD_DIARIZE": "1" if cfg.get("diarize", True) else "0",
                "PLAUD_VOICE": "1" if cfg.get("voice_enabled") else "0",
-               "PLAUD_DICTIONARY": str(dictionary.path())}
+               "PLAUD_DICTIONARY": str(dictionary.path()),
+               "PLAUD_TEMPLATES_DIR": str(templates.user_dir()),
+               "PLAUD_TEMPLATE_MAP": str(map_path)}
         process = subprocess.Popen(command, cwd=config.PROJECT_ROOT, stdin=subprocess.DEVNULL, stdout=output,
                                    stderr=subprocess.STDOUT, start_new_session=True, env=env)
     finally:

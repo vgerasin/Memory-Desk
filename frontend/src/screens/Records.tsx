@@ -11,6 +11,7 @@ import { AvatarStack, Checkbox, Dropdown, IconArchive, IconChevron, IconEdit, Ic
 import { BulkBar, MoreButton, PAGE, useBulk } from '../components/Bulk'
 import { DecisionRow, TaskRow } from '../components/Items'
 import { RecordMenus } from '../components/RecordMenus'
+import { RebuildPanel } from '../components/RebuildPanel'
 import { CalendarSuggest } from '../components/CalendarSuggest'
 import { EventDialog, type EventDraft } from '../components/EventDialog'
 import { Player, type PlayerHandle } from '../components/Player'
@@ -162,7 +163,20 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
               {m.summary.map((p, i) => <li key={i}><i /><span>{p}</span></li>)}
             </ul>
           )}
+          {!editing && (m.extraSections ?? []).map(sec => (
+            <div className="extra-section" key={sec.title}>
+              <div className="label-caps">{sec.title}</div>
+              {sec.items.length === 0 && <div className="muted-text">Не выявлено</div>}
+              {sec.items.map((it, i) => (
+                <div className="extra-item" key={i}>
+                  <span>{it.text}</span>
+                  {it.tSec != null && <button className="link-btn mono" onClick={() => jump(it.tSec)}>{tc(it.tSec)}</button>}
+                </div>
+              ))}
+            </div>
+          ))}
           {!editing && <SeriesPanel meetingId={id} />}
+          {!editing && !m.archived && <RebuildPanel meeting={m} />}
           <div className="note-path mono">{m.status === 'completed' ? 'Опубликовано · ' : 'Ещё не опубликовано · '}{m.notePath}</div>
         </>
       )}

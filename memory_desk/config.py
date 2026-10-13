@@ -52,6 +52,7 @@ def defaults() -> dict:
         "backup_auto": True,
         "backup_interval_hours": 24,
         "backup_keep": 7,
+        "default_template": "meeting",
     }
 
 
@@ -95,6 +96,7 @@ def save_config(values: dict) -> dict:
         normalized["backup_keep"] = min(60, max(1, int(normalized["backup_keep"])))
     except (TypeError, ValueError):
         raise ValueError("Частота и число резервных копий должны быть числами")
+    normalized["default_template"] = str(normalized.get("default_template") or "meeting").strip() or "meeting"
     for key in ("recordings_dir", "obsidian_dir", "archive_dir"):
         text = str(normalized[key]).strip()
         if not text:

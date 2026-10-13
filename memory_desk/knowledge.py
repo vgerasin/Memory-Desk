@@ -228,6 +228,7 @@ class Meeting:
     source_audio: str
     participants: list[str]
     content: str = field(repr=False)
+    template: str = ""
 
 
 def load_meetings() -> list[Meeting]:
@@ -259,7 +260,7 @@ def load_meetings() -> list[Meeting]:
             record_type=str(meta.get("record_type", meta.get("type", "meeting"))),
             source_audio=source_audio,
             participants=list(meta.get("participants", [])) if isinstance(meta.get("participants"), list) else [],
-            content=body,
+            content=body, template=str(meta.get("template", "")),
         ))
     return meetings
 

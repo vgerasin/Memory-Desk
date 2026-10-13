@@ -8,7 +8,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import config, daily, dictionary, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, voice
+from . import config, daily, dictionary, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, templates, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -148,6 +148,21 @@ def list_meetings(core: Core, *, q: str = "", project: str = "", person: str = "
                                        "noProject": sum(1 for m in total_live if project_dto(m) is None)}}
 
 
+_KNOWN_SECTIONS = {t.casefold() for t in templates.STANDARD.values()} | {"краткое резюме", "стенограмма", "полная стенограмма"}
+
+
+def extra_sections(m: knowledge.Meeting) -> list[dict]:
+    """Свои разделы шаблона (всё, что кабинет не читает как стандартное), с пунктами и таймкодами."""
+    result = []
+    for title, body in knowledge.note_sections(m).items():
+        if title.casefold() in _KNOWN_SECTIONS:
+            continue
+        items = [{"text": f["text"], "t": f["evidence_time"], "tSec": clock_seconds(f["evidence_time"])}
+                 for f in (storage.parse_fact(line) for line in storage.bullet_lines(body)) if f["text"]]
+        result.append({"title": title, "items": items})
+    return result
+
+
 def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
     rows = {r["id"]: r for r in storage.rows("SELECT * FROM meetings WHERE id=?", (m.id,))}
     item = meeting_item(core, m, rows, storage.people_by_meeting())
@@ -161,6 +176,7 @@ def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
 
     audio = knowledge.meeting_audio(m)
     transcript = knowledge.transcript_segments(m)
+    template = templates.get(m.template or None)
     overlaps = voice.meeting_overlaps(m.id)
     if overlaps:
         transcript = [{**seg, "overlap": True} if float(seg["sec"]) in overlaps else seg for seg in transcript]
@@ -176,6 +192,9 @@ def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
         "topics": [f["text"] for f in knowledge.fact_items(m, "Основные темы")],
         "decisions": decisions, "tasks": tasks,
         "risks": facts("Риски"), "questions": facts("Открытые вопросы"), "nextSteps": facts("Следующие шаги"),
+        "template": {"id": template.id if m.template else "", "name": template.name if m.template else "",
+                     "suggestedId": templates.suggest(m.record_type).id},
+        "extraSections": extra_sections(m),
         "transcript": transcript, "speakers": speaker_list, "diarization": speakers_mod.status(m.id),
         "obsidianUrl": knowledge.obsidian_url(m.path), "notePath": knowledge.note_relative_path(m.path),
         "hasAudio": audio is not None, "audioUrl": f"/api/meetings/{m.id}/audio" if audio else None,

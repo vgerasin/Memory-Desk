@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from memory_desk import dictionary  # noqa: E402
+from memory_desk import dictionary, templates  # noqa: E402
 from memory_desk.whisper_filter import clean_result  # noqa: E402
 from memory_desk.diarize import detect_speakers, parse as parse_transcript, relabel  # noqa: E402
 from memory_desk.llm import ollama_json  # noqa: E402
@@ -165,8 +165,10 @@ def ollama_chat(prompt: str) -> dict:
     )
 
 
-def analysis_prompt(transcript: str, partial: bool = False) -> str:
+def analysis_prompt(transcript: str, partial: bool = False, template: "templates.Template | None" = None) -> str:
     scope = "фрагмента стенограммы" if partial else "полной стенограммы встречи"
+    schema, notes = templates.prompt_lines(template or templates.standard())
+    notes_block = f"\nОсобенности этой записи:\n{notes}\n" if notes else ""
     return f"""
 Ты — аккуратный секретарь. Проанализируй текст {scope} на русском языке.
 Не придумывай факты, имена, решения, сроки или ответственных. Если сведений нет,
@@ -184,18 +186,10 @@ def analysis_prompt(transcript: str, partial: bool = False) -> str:
 - Для каждого предложения укажи статус: accepted, rejected или discussed. Не считай предложение принятым без явного согласия.
 - Срок задачи записывай как YYYY-MM-DD только при явно названной календарной дате; иначе «не указан».
 - Сохраняй смысл исходного текста, даже если это художественный диалог, лекция или запись не является деловой встречей.
-
+{notes_block}
 Верни только JSON со структурой:
 {{
-  "title": "короткое предметное название",
-  "summary": ["3-7 основных тезисов"],
-  "topics": ["основные темы"],
-  "proposals": [{{"text": "предложенный вариант", "status": "accepted|rejected|discussed", "evidence_time": "HH:MM:SS"}}],
-  "decisions": [{{"text": "принятое решение", "evidence_time": "HH:MM:SS"}}],
-  "tasks": [{{"task": "действие", "owner": "имя или не указано", "deadline": "срок или не указан", "evidence_time": "HH:MM:SS"}}],
-  "risks": [{{"text": "явно обсуждавшийся риск", "evidence_time": "HH:MM:SS"}}],
-  "open_questions": [{{"text": "нерешённый вопрос", "evidence_time": "HH:MM:SS"}}],
-  "next_steps": [{{"text": "явно согласованное действие", "evidence_time": "HH:MM:SS"}}]
+{schema}
 }}
 
 Для каждого факта evidence_time должен совпадать с ближайшей меткой времени в исходном тексте.
@@ -224,15 +218,16 @@ def split_transcript(transcript: str, limit: int = CHUNK_CHARS) -> list[str]:
     return chunks
 
 
-def merge_partials(partials: list[dict]) -> dict:
+def merge_partials(partials: list[dict], extra_keys: tuple[str, ...] = ()) -> dict:
     merged: dict = {"title": "", "summary": [], "topics": []}
-    for key in ("proposals", "decisions", "tasks", "risks", "open_questions", "next_steps"):
+    fact_keys = ("proposals", "decisions", "tasks", "risks", "open_questions", "next_steps") + tuple(extra_keys)
+    for key in fact_keys:
         merged[key] = []
     seen: set = set()
     for part in partials:
         if not merged["title"]:
             merged["title"] = str(part.get("title") or "").strip()
-        for key in ("summary", "topics", "proposals", "decisions", "tasks", "risks", "open_questions", "next_steps"):
+        for key in ("summary", "topics") + fact_keys:
             values = part.get(key)
             if not isinstance(values, list):
                 continue
@@ -258,13 +253,13 @@ def summarize_parts(partials: list[dict]) -> dict:
     return ollama_chat(prompt[:12000])
 
 
-def analyze(transcript: str) -> dict:
+def analyze(transcript: str, template: "templates.Template | None" = None) -> dict:
     chunks = split_transcript(transcript)
     if len(chunks) <= 1:
-        return ollama_chat(analysis_prompt(transcript))
+        return ollama_chat(analysis_prompt(transcript, template=template))
 
-    partials = [ollama_chat(analysis_prompt(chunk, partial=True)) for chunk in chunks]
-    merged = merge_partials(partials)
+    partials = [ollama_chat(analysis_prompt(chunk, partial=True, template=template)) for chunk in chunks]
+    merged = merge_partials(partials, tuple(s.data_key for s in template.free_sections) if template else ())
     try:
         head = summarize_parts(partials)
         if isinstance(head.get("summary"), list) and head["summary"]:
@@ -278,6 +273,27 @@ def analyze(transcript: str) -> dict:
             raise
     merged["summary"] = merged["summary"][:7]
     return merged
+
+
+def analyze_with_template(transcript: str, template: "templates.Template") -> tuple[dict, "templates.Template", str]:
+    """Анализ по шаблону: (данные, фактически применённый шаблон, причина отката или пустая строка).
+
+    Малая модель хуже держит нестандартную структуру. Если ответ по шаблону пуст или не разобран, запись
+    разбирается стандартным шаблоном: заметка в любом случае получает разделы, которые читает кабинет."""
+    default = templates.standard()
+    if template.sections == default.sections and not template.focus:
+        return normalize_analysis(analyze(transcript, template), transcript, template), template, ""
+    reason = ""
+    try:
+        data = normalize_analysis(analyze(transcript, template), transcript, template)
+        reason = "; ".join(templates.problems_in(data, template))
+        if not reason:
+            return data, template, ""
+    except RuntimeError as exc:
+        if "не отвечает" in str(exc):
+            raise
+        reason = str(exc)
+    return normalize_analysis(analyze(transcript, default), transcript, default), default, reason
 
 
 def evidence_time(value: object, transcript: str) -> str:
@@ -307,7 +323,7 @@ def normalize_facts(values: object, transcript: str, text_key: str = "text") -> 
     return normalized
 
 
-def normalize_analysis(data: dict, transcript: str) -> dict:
+def normalize_analysis(data: dict, transcript: str, template: "templates.Template | None" = None) -> dict:
     for key in ("summary", "topics"):
         if not isinstance(data.get(key), list):
             data[key] = []
@@ -333,6 +349,9 @@ def normalize_analysis(data: dict, transcript: str) -> dict:
             context = " ".join(blocks[max(0, position - 4):position + 5]).casefold() if position >= 0 else ""
             if owner.casefold() not in context:
                 task["owner"] = "не указано"
+    if template is not None:
+        templates.normalize_free(data, template, lambda value: evidence_time(value, transcript))
+        data["_template"] = template.id
     data["_analysis_version"] = ANALYSIS_VERSION
     return data
 
@@ -462,13 +481,54 @@ meeting_note: "{meeting_name}"
 """
 
 
-def render_note(source: Path, recorded: datetime, duration: float, data: dict, transcript_name: str) -> str:
+def render_sections(data: dict, template: "templates.Template | None" = None) -> str:
+    """Разделы заметки по шаблону, от «Кратко» до последнего раздела шаблона."""
+    template = template or templates.standard()
+    blocks = []
+    for section in template.sections:
+        key, title = section.key, section.title
+        if key == "summary":
+            body = bullets(data.get("summary"))
+        elif key == "map":
+            body = mindmap(data)
+        elif key == "flow":
+            body = decision_flow(data)
+            title = title if body else ""
+        elif key == "plan":
+            body = gantt(data)
+            title = title if body else ""
+        elif key == "topics":
+            body = bullets(data.get("topics"))
+        elif key == "decisions":
+            body = fact_bullets(data.get("decisions"))
+        elif key == "tasks":
+            body = tasks_markdown(data.get("tasks"))
+        elif key == "risks":
+            body = fact_bullets(data.get("risks"))
+        elif key == "open_questions":
+            body = fact_bullets(data.get("open_questions"))
+        elif key == "next_steps":
+            body = fact_bullets(data.get("next_steps"), empty="Явно согласованные следующие шаги не зафиксированы.")
+        else:
+            body = fact_bullets(data.get(section.data_key))
+        if title:
+            blocks.append(f"## {title}\n\n{body}")
+    return "\n\n".join(blocks)
+
+
+def render_note(
+    source: Path, recorded: datetime, duration: float, data: dict, transcript_name: str,
+    template: "templates.Template | None" = None, requested: "templates.Template | None" = None, fallback: str = "",
+) -> str:
+    """Заметка по шаблону. `requested` и `fallback` — если выбранный шаблон не получился и применён стандартный."""
+    template = template or templates.standard()
     title = slug(str(data.get("title", "")))
     meeting_id = uuid.uuid5(uuid.NAMESPACE_URL, f"plaud-local:{recorded.isoformat()}|{source.name}")
-    flow = decision_flow(data)
-    flow_section = f"\n## Схема решений\n\n{flow}\n" if flow else ""
-    gantt_chart = gantt(data)
-    gantt_section = f"\n## План по срокам\n\n{gantt_chart}\n" if gantt_chart else ""
+    note_lines = ""
+    if requested is not None and requested.id != template.id:
+        note_lines = (f"\n> [!note] Шаблон «{requested.name}» не получился\n"
+                      f"> Заметка составлена по стандартному шаблону «{template.name}». Причина: {fallback or 'ответ модели не подошёл'}.\n")
+    signature = f"\n_{template.signature}_\n" if template.signature else ""
     return f"""---
 date: {recorded:%Y-%m-%d}
 meeting_id: "{meeting_id}"
@@ -476,6 +536,7 @@ recorded_at: {recorded:%Y-%m-%dT%H:%M:%S}
 time: "{recorded:%H:%M}"
 type: meeting
 record_type: meeting
+template: "{template.id}"
 source: PLAUD
 source_type: Не указан
 project_id: ""
@@ -498,45 +559,14 @@ analysis_version: {ANALYSIS_VERSION}
 
 > [!warning] Черновик AI-анализа
 > Темы, решения, задачи и ответственные сформированы локальной моделью. Проверяйте важные выводы по указанным таймкодам и полной стенограмме.
-
-## Кратко
-
-{bullets(data.get('summary'))}
-
-## Карта встречи
-
-{mindmap(data)}
-{flow_section}{gantt_section}
-
-## Основные темы
-
-{bullets(data.get('topics'))}
-
-## Предполагаемые решения и договорённости
-
-{fact_bullets(data.get('decisions'))}
-
-## Задачи
-
-{tasks_markdown(data.get('tasks'))}
-
-## Открытые вопросы
-
-{fact_bullets(data.get('open_questions'))}
-
-## Риски
-
-{fact_bullets(data.get('risks'))}
-
-## Следующие шаги
-
-{fact_bullets(data.get('next_steps'), empty='Явно согласованные следующие шаги не зафиксированы.')}
+{note_lines}
+{render_sections(data, template)}
 
 ## Стенограмма
 
 > [!quote]- Открыть связанную стенограмму
 > [[Транскрипты/{transcript_name}|Полная стенограмма с таймкодами]]
-"""
+{signature}"""
 
 
 def cleanup_archive(archive_dir: Path, retention_days: int) -> int:
@@ -617,7 +647,22 @@ def diarize_step(source: Path, job: Path, transcript: str, transcript_json: Path
     return relabel(transcript, labels) if labels else transcript
 
 
-def process_file(source: Path, vault: Path, archive_dir: Path | None, force_reanalyze: bool = False) -> Path:
+def choose_template(source: Path, override: str = "") -> "templates.Template":
+    """Шаблон для записи: явный выбор (--template), затем выбор по файлу из очереди, затем шаблон по умолчанию."""
+    wanted = override
+    if not wanted:
+        map_path = os.environ.get("PLAUD_TEMPLATE_MAP")
+        if map_path:
+            try:
+                wanted = str(json.loads(Path(map_path).read_text(encoding="utf-8")).get(source.name) or "")
+            except (OSError, json.JSONDecodeError, AttributeError):
+                wanted = ""
+    wanted = wanted or os.environ.get("PLAUD_TEMPLATE_DEFAULT", "")
+    return templates.get(wanted or templates.DEFAULT_ID)
+
+
+def process_file(source: Path, vault: Path, archive_dir: Path | None, force_reanalyze: bool = False,
+                 template_id: str = "") -> Path:
     job = ROOT / "work" / slug(source.stem)
     job.mkdir(parents=True, exist_ok=True)
     state_path = job / "state.json"
@@ -658,8 +703,11 @@ def process_file(source: Path, vault: Path, archive_dir: Path | None, force_rean
     data = {}
     if analysis_json.exists():
         data = json.loads(analysis_json.read_text(encoding="utf-8"))
-    if force_reanalyze or data.get("_analysis_version") != ANALYSIS_VERSION:
-        log_event("progress", source, "Выделяю темы, решения и задачи", stage="analyzing", percent=50)
+    wanted = choose_template(source, template_id)
+    changed_template = bool(data) and data.get("_template_requested", templates.DEFAULT_ID) != wanted.id
+    if force_reanalyze or changed_template or data.get("_analysis_version") != ANALYSIS_VERSION:
+        log_event("progress", source, "Выделяю темы, решения и задачи" if wanted.id == templates.DEFAULT_ID
+                  else f"Выделяю главное по шаблону «{wanted.name}»", stage="analyzing", percent=50)
         if analysis_json.exists():
             old_version = data.get("_analysis_version", 1)
             backup = job / (
@@ -668,7 +716,12 @@ def process_file(source: Path, vault: Path, archive_dir: Path | None, force_rean
             )
             if not backup.exists():
                 shutil.copy2(analysis_json, backup)
-        data = normalize_analysis(analyze(transcript), transcript)
+        data, used, fallback = analyze_with_template(transcript, wanted)
+        data["_template_requested"] = wanted.id
+        if fallback:
+            data["_template_fallback"] = fallback
+            log_event("progress", source, f"Шаблон «{wanted.name}» не получился ({fallback}): использован стандартный",
+                      stage="analyzing", percent=80)
         analysis_json.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     log_event("progress", source, "Создаю заметку и стенограмму", stage="writing_note", percent=84)
@@ -693,7 +746,10 @@ def process_file(source: Path, vault: Path, archive_dir: Path | None, force_rean
         source, recorded, duration, slug(str(data.get("title") or source.stem)), note_path.name, transcript
     )
     transcript_path.write_text(transcript_note, encoding="utf-8")
-    note = render_note(source, recorded, duration, data, transcript_name)
+    used = templates.get(data.get("_template") or templates.DEFAULT_ID)
+    requested = templates.get(data.get("_template_requested") or used.id)
+    note = render_note(source, recorded, duration, data, transcript_name, used, requested,
+                       str(data.get("_template_fallback") or ""))
     note_path.write_text(note, encoding="utf-8")
     if note_path.stat().st_size < 200 or transcript_path.stat().st_size < 200 or "## Стенограмма" not in note:
         raise RuntimeError("Проверка готовой заметки не пройдена.")
@@ -726,6 +782,7 @@ def main() -> int:
     parser.add_argument("--cleanup-only", action="store_true", help="Только очистить архив по сроку хранения")
     parser.add_argument("--reanalyze", action="store_true", help="Повторно выполнить AI-анализ")
     parser.add_argument("--job-id", default="", help="Идентификатор фонового задания")
+    parser.add_argument("--template", default="", help="Идентификатор шаблона заметки (по умолчанию — из настроек)")
     args = parser.parse_args()
     CURRENT_JOB_ID = args.job_id
 
@@ -753,7 +810,7 @@ def main() -> int:
                 continue
             print(f"Обрабатываю: {source.name}", flush=True)
             log_event("started", source, "Начинаю обработку", stage="checking", percent=1)
-            note = process_file(source.resolve(), args.vault.expanduser().resolve(), archive_dir, args.reanalyze)
+            note = process_file(source.resolve(), args.vault.expanduser().resolve(), archive_dir, args.reanalyze, args.template)
             print(f"Готово: {note}")
             log_event("completed", source, "Запись готова", note=note, stage="completed", percent=100)
         except Exception as exc:

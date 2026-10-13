@@ -42,6 +42,7 @@ export interface MeetingDetail extends MeetingItem {
   risks: Fact[]; questions: Fact[]; nextSteps: Fact[]; transcript: Segment[]
   speakers: SpeakerInfo[]; diarization: DiarizationStatus | null
   obsidianUrl: string | null; notePath: string; hasAudio: boolean; audioUrl: string | null
+  template?: { id: string; name: string; suggestedId: string }; extraSections?: { title: string; items: Fact[] }[]
 }
 
 export interface MeetingsResponse { items: MeetingItem[]; total: number; counts: { total: number; needsReview: number; noProject: number } }
@@ -86,7 +87,7 @@ export interface Job {
   state: 'queued' | 'running' | 'failed'
   stage: string; stage_index: number; stage_label: string; percent: number
   started_at: string | null; eta: number | null; last_message: string; runner: string
-  error: JobError | null
+  error: JobError | null; templateId?: string
 }
 export interface AppState {
   queue: Job[]; running: Job | null; inboxCount: number
@@ -101,6 +102,7 @@ export interface Settings {
   retention_days: number; auto_process: boolean; diarize: boolean; voice_enabled: boolean; calendar_source: string
   apple_calendar: boolean; reminders_enabled: boolean; reminders_list: string; reminders_scope: 'mine' | 'all'; my_name: string
   notify: boolean; morning_brief: boolean; morning_hour: number; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
+  default_template: string
   exists?: Record<string, boolean>
 }
 
@@ -222,3 +224,14 @@ export interface SeriesInfo {
 
 export interface ConflictPair { key: string; similarity: number; project: string; old: DecisionDto; new: DecisionDto }
 export interface ConflictVerdict { relation: 'replaces' | 'contradicts' | 'consistent' | 'unrelated'; reason: string }
+
+export interface TemplateSection { key: string; title: string; instruction: string; free: boolean }
+export interface TemplateDto {
+  id: string; name: string; description: string; builtin: boolean; overridesBundled: boolean; recordTypes: string[]; focus: string; signature: string
+  sections: TemplateSection[]
+}
+export interface TemplatesResponse { items: TemplateDto[]; problems: string[]; default: string; dir: string; message?: string }
+export interface RebuildState {
+  state: 'idle' | 'running' | 'done' | 'error'; templateId?: string; requestedId?: string; fallback?: string
+  keptTasks?: number; keptDecisions?: number; message?: string
+}

@@ -1,0 +1,15 @@
+# Стандартная структура кабинета. Если файл удалить или испортить, программа использует такую же встроенную.
+name: Совещание с решениями
+description: Тезисы, решения, задачи, вопросы и риски — то, что читают реестр задач и дерево решений.
+record_types: [meeting, offline_meeting, zoom, phone_call]
+sections:
+  - key: summary
+  - key: map
+  - key: flow
+  - key: plan
+  - key: topics
+  - key: decisions
+  - key: tasks
+  - key: open_questions
+  - key: risks
+  - key: next_steps

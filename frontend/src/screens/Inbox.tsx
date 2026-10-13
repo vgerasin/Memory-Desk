@@ -5,7 +5,7 @@ import { useApi } from '../useApi'
 import { useApp } from '../store'
 import { useActions } from '../actions'
 import { clockOf, dayLabel, etaLabel, fmt } from '../format'
-import type { Job, MeetingsResponse } from '../types'
+import type { Job, MeetingsResponse, TemplateDto } from '../types'
 import { RecordMenus } from '../components/RecordMenus'
 
 const STATUS = {
@@ -24,7 +24,7 @@ function useNow(active: boolean) {
   return now
 }
 
-function JobCard({ job, now }: { job: Job; now: number }) {
+function JobCard({ job, now, templates }: { job: Job; now: number; templates: TemplateDto[] }) {
   const { showToast, invalidate } = useApp()
   const [log, setLog] = useState<string | null>(null)
   const running = job.state === 'running', failed = job.state === 'failed'
@@ -71,6 +71,12 @@ function JobCard({ job, now }: { job: Job; now: number }) {
             <button className="btn s28" onClick={toggleLog}>Журнал</button>
             <button className="btn s28 muted" onClick={() => call('/api/jobs/dismiss', { file: job.file })}>Убрать</button>
           </>}
+          {job.state === 'queued' && templates.length > 1 && (
+            <select className="job-template" aria-label="Шаблон заметки" value={job.templateId ?? 'meeting'}
+              onChange={e => void call('/api/jobs/template', { file: job.file, templateId: e.target.value })}>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
           {job.state === 'queued' && <button className="btn s28 muted" onClick={() => call('/api/jobs/dismiss', { file: job.file })}>Убрать</button>}
         </div>
       </div>
@@ -113,6 +119,7 @@ export function Inbox() {
   const actions = useActions()
   const { data: reviews } = useApi<MeetingsResponse>('/api/meetings?status=needs_review')
   const { data: settings } = useApi<{ recordings_dir: string; auto_process: boolean }>('/api/settings')
+  const { data: tpl } = useApi<{ items: TemplateDto[] }>('/api/templates')
   const folder = settings?.recordings_dir?.replace(/^\/Users\/[^/]+/, '~') ?? ''
   const list = reviews?.items ?? []
 
@@ -128,7 +135,7 @@ export function Inbox() {
       <h3 className="h3" style={{ margin: '40px 0 14px' }}>Очередь обработки</h3>
       <div className="jobs">
         {state.queue.length === 0 && <div className="empty">Новых файлов нет. Положите запись в папку или нажмите «Обработать новые».</div>}
-        {state.queue.map(job => <JobCard key={job.id} job={job} now={now} />)}
+        {state.queue.map(job => <JobCard key={job.id} job={job} now={now} templates={tpl?.items ?? []} />)}
       </div>
 
       <h3 className="h3" style={{ margin: '44px 0 14px' }}>Требуют проверки</h3>

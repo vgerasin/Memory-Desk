@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, materials, series, services, speakers, storage, voice, waveform
+from . import __version__, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -338,6 +338,7 @@ def create_app() -> FastAPI:
         backup_auto: bool = True
         backup_interval_hours: int = 24
         backup_keep: int = 7
+        default_template: str = "meeting"
 
     @app.get("/api/settings")
     def get_settings():
@@ -352,6 +353,8 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, f"Папка {label} не найдена: {value}")
         if not 1 <= body.retention_days <= 3650:
             raise HTTPException(400, "Срок хранения записей — от 1 до 3650 дней")
+        if body.default_template not in templates.load_all()[0]:
+            raise HTTPException(400, "Такого шаблона заметки нет")
         try:
             saved = core.apply_settings(body.model_dump())
         except ValueError as exc:
@@ -385,6 +388,91 @@ def create_app() -> FastAPI:
     @app.post("/api/dictionary/apply")
     def apply_dictionary():
         return services.apply_dictionary(core)
+
+    # ------------------------------------------------------------------ шаблоны заметок
+    def templates_view() -> dict:
+        found, problems = templates.load_all()
+        return {"items": [templates.public(t) for t in templates.listing()], "problems": problems,
+                "default": core.cfg.get("default_template") if core.cfg.get("default_template") in found else templates.DEFAULT_ID,
+                "dir": str(templates.user_dir())}
+
+    @app.get("/api/templates")
+    def get_templates():
+        return templates_view()
+
+    @app.get("/api/templates/{template_id}")
+    def get_template(template_id: str):
+        found, _ = templates.load_all()
+        template = found.get(template_id)
+        if not template:
+            raise HTTPException(404, "Шаблон не найден")
+        text = Path(template.path).read_text(encoding="utf-8") if template.path else templates.dump_yaml(template)
+        return {**templates.public(template), "text": text}
+
+    @app.put("/api/templates/{template_id}")
+    def put_template(template_id: str, body: dict = Body(...)):
+        text = body.get("text")
+        if not isinstance(text, str) or len(text) > 50_000:
+            raise HTTPException(400, "Нужен текст шаблона")
+        try:
+            saved = templates.save_user(template_id, text)
+        except templates.TemplateError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить шаблон: {exc}") from exc
+        return {**templates_view(), "saved": templates.public(saved), "message": f"Шаблон «{saved.name}» сохранён"}
+
+    @app.delete("/api/templates/{template_id}")
+    def delete_template(template_id: str):
+        found, _ = templates.load_all()
+        if template_id not in found:
+            raise HTTPException(404, "Шаблон не найден")
+        if not templates.delete_user(template_id):
+            raise HTTPException(400, "Поставляемый шаблон удалить нельзя: можно сохранить свой с тем же именем или выбрать другой")
+        if core.cfg.get("default_template") == template_id and template_id not in templates.load_all()[0]:
+            core.apply_settings({**core.cfg, "default_template": templates.DEFAULT_ID})
+        return {**templates_view(), "message": "Шаблон удалён"}
+
+    @app.post("/api/templates/draft")
+    def draft_template(body: dict = Body(...)):
+        """Шаблон по описанию: модель предлагает структуру, пользователь смотрит и правит её до сохранения."""
+        def ask(prompt: str) -> dict:
+            return llm.ollama_json(prompt, model=config.OLLAMA_MODEL, url=config.OLLAMA_URL, num_predict=1200,
+                                   attempts=2, timeout=180)
+        try:
+            template = templates.draft_from_model(str(body.get("description") or ""), ask)
+        except templates.TemplateError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {**templates.public(template), "text": templates.dump_yaml(template)}
+
+    class FileTemplateBody(BaseModel):
+        file: str
+        templateId: str = ""
+
+    @app.post("/api/jobs/template")
+    def set_file_template(body: FileTemplateBody):
+        recording_path(body.file)
+        if body.templateId and body.templateId not in templates.load_all()[0]:
+            raise HTTPException(404, "Шаблон не найден")
+        jobs.set_file_template(body.file, body.templateId)
+        watcher.tick()
+        return {"file": body.file, "templateId": jobs.template_for(body.file, core.cfg)}
+
+    class RebuildBody(BaseModel):
+        templateId: str
+
+    @app.post("/api/meetings/{meeting_id}/rebuild")
+    def rebuild_note(meeting_id: str, body: RebuildBody):
+        try:
+            return rebuild.start(core, meeting_id, body.templateId)
+        except rebuild.RebuildError as exc:
+            raise HTTPException(409 if "уже" in str(exc) else 404 if "не найден" in str(exc) else 400, str(exc)) from exc
+
+    @app.get("/api/meetings/{meeting_id}/rebuild")
+    def rebuild_status(meeting_id: str):
+        return rebuild.status(meeting_id)
 
     # ------------------------------------------------------------------ SSE
     @app.get("/api/stream")
