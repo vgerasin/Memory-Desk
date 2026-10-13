@@ -767,3 +767,11 @@ ul { padding: 0; list-style: none; }
 .extra-item:first-of-type { border-top: none; }
 .extra-item .link-btn { flex-shrink: 0; font-size: 12px; }
 @media (max-width: 640px) { .tpl-row { flex-direction: column; } .tpl-actions { justify-content: flex-start; } }
+
+/* прогресс составления протокола */
+.proto-progress { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 14px; background: var(--fill); }
+.proto-line { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 14px; }
+.proto-line .num { font-weight: 600; color: var(--accent); }
+.proto-progress .track { height: 8px; border-radius: 4px; }
+.proto-progress .track > i { border-radius: 4px; transition: width .5s ease-out; }
+.proto-sub { font-size: 12px; color: var(--text2); }

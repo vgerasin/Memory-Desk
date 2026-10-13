@@ -565,3 +565,56 @@ def test_rebuild_without_registry_sections_drops_drafts_but_keeps_confirmed(clie
     assert detail["decisions"] == []                                                  # черновик решения удалён
     sections = knowledge.parse_note_sections(note.path.read_text(encoding="utf-8"))
     assert "Задачи" not in sections and "Яркие цитаты" in sections
+
+
+# --------------------------------------------------------------------------- ход составления протокола
+
+def test_protocol_progress_reports_stages_and_result(client, items, monkeypatch):
+    from memory_desk import digest, materials
+    import threading
+    gate, entered = threading.Event(), threading.Event()
+
+    def slow(prompt, num_predict=700):
+        entered.set()
+        assert gate.wait(5)
+        return "Обсудили архитектуру и договорились о сроках."
+    monkeypatch.setattr(digest, "generate", slow)
+    detail = next(d for d in (client.get(f"/api/meetings/{m['id']}").json() for m in items.values()) if d["tasks"] and d["summary"])
+    mid = detail["id"]
+    assert client.get(f"/api/meetings/{mid}/protocol/progress").json() == {"state": "idle"}
+    started = client.post(f"/api/meetings/{mid}/protocol/start").json()
+    assert started["state"] == "running" and started["steps"] == 4 and 0 < started["percent"] < 100
+    assert entered.wait(5)
+    mid_run = client.get(f"/api/meetings/{mid}/protocol/progress").json()
+    assert mid_run["state"] == "running" and mid_run["step"] == 2 and "модель" in mid_run["label"] and "result" not in mid_run
+    assert 15 <= mid_run["percent"] < 87
+    again = client.post(f"/api/meetings/{mid}/protocol/start").json()   # повторный запуск не плодит задания
+    assert again["state"] == "running"
+    gate.set()
+    for _ in range(100):
+        done = client.get(f"/api/meetings/{mid}/protocol/progress").json()
+        if done["state"] != "running":
+            break
+        time.sleep(0.05)
+    assert done["state"] == "done" and done["percent"] == 100
+    assert done["result"]["mode"] == "model" and "Обсудили архитектуру" in done["result"]["markdown"]
+    assert done["result"] == client.post(f"/api/meetings/{mid}/protocol").json()   # тот же протокол, что и без индикатора
+    assert client.post("/api/meetings/нет/protocol/start").status_code == 404
+    assert client.get("/api/meetings/нет/protocol/progress").json() == {"state": "idle"}
+
+
+def test_protocol_progress_without_model_and_percent_curve(client, items, monkeypatch):
+    from memory_desk import digest, materials
+    monkeypatch.setattr(digest, "generate", lambda *a, **k: (_ for _ in ()).throw(OSError("нет связи")))
+    mid = next(d for d in (client.get(f"/api/meetings/{m['id']}").json() for m in items.values()) if d["summary"])["id"]
+    client.post(f"/api/meetings/{mid}/protocol/start")
+    for _ in range(100):
+        state = client.get(f"/api/meetings/{mid}/protocol/progress").json()
+        if state["state"] != "running":
+            break
+        time.sleep(0.05)
+    assert state["state"] == "done" and state["result"]["mode"] == "structured"
+    # процент растёт по ходу ответа модели, но не достигает конца этапа
+    job = {"state": "running", "base": 15, "span": 72, "tau": 14, "stageStarted": 100.0}
+    values = [materials._percent(job, 100 + t) for t in (0, 5, 15, 40, 600)]
+    assert values == sorted(values) and values[0] == 15 and values[-1] <= 87

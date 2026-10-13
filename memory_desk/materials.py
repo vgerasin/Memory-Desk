@@ -5,7 +5,10 @@
 («Ход обсуждения» в протоколе, слайд «Главное» в презентации); при её недоступности материал остаётся полным."""
 from __future__ import annotations
 
+import math
 import re
+import threading
+import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -91,10 +94,15 @@ def _due(task: dict) -> str:
 
 # --------------------------------------------------------------------------- протокол
 
-def protocol(core, meeting_id: str, date_of: Callable, today: date | None = None) -> dict:
+def protocol(core, meeting_id: str, date_of: Callable, today: date | None = None,
+             progress: Callable[..., None] | None = None) -> dict:
+    """Протокол записи. `progress(этап, подпись, процент, запас, постоянная)` сообщает ход работы: пока идёт запрос
+    к модели, процент плавно растёт от `процент` на `запас` пунктов (время ответа модели заранее неизвестно)."""
+    note = progress or (lambda *a, **k: None)
     meeting = core.by_id.get(meeting_id)
     if not meeting:
         raise KeyError("Запись не найдена")
+    note(1, "Собираю факты записи", 5)
     f = digest.gather([meeting], date_of, today)[0]
     people = [p["name"] for p in storage.people_by_meeting().get(meeting.id, [])]
     topics = [x["text"] for x in knowledge.fact_items(meeting, "Основные темы")] or []
@@ -112,6 +120,7 @@ def protocol(core, meeting_id: str, date_of: Callable, today: date | None = None
     discussion = ""
     summary = list(dict.fromkeys(f.summary))  # повторяющиеся пункты резюме не нужны ни модели, ни читателю
     if summary:
+        note(2, "Локальная модель пишет ход обсуждения", 15, 72, 14)
         body = "\n".join("- " + s for s in summary)
         prompt = ("Ты помощник по протоколам встреч. Напиши ход обсуждения в 3–5 предложениях, только по пунктам ниже, "
                   "ничего не выдумывай, без вступлений и списков. По-русски.\n\nПункты:\n" + body + "\n\nХОД ОБСУЖДЕНИЯ:\n")
@@ -120,7 +129,9 @@ def protocol(core, meeting_id: str, date_of: Callable, today: date | None = None
             mode = "model" if discussion else "structured"
         except OSError:
             discussion = ""
+            note(2, "Модель недоступна: ход обсуждения берётся из резюме", 87)
     lines += ["", "## Ход обсуждения", ""]
+    note(3, "Оформляю решения, поручения, риски и вопросы", 90)
     if discussion:
         lines.append(discussion)
     elif summary:
@@ -147,8 +158,72 @@ def protocol(core, meeting_id: str, date_of: Callable, today: date | None = None
     if f.questions:
         lines += ["", "## Открытые вопросы", ""] + [f"- {q}" for q in f.questions]
     lines += ["", f"_Составлено автоматически из записи «{meeting.title}» ({digest.short(f.date)}); проверьте перед рассылкой._"]
+    note(4, "Проверяю текст", 97)
     return {"title": f"Протокол: {meeting.title}", "markdown": "\n".join(lines) + "\n", "mode": mode, "meetingId": meeting.id,
             "date": f.date, "fileName": safe_name(f"{f.date} — {meeting.title} — протокол") + ".md"}
+
+
+# --------------------------------------------------------------------------- ход составления протокола
+
+PROTOCOL_STEPS = 4
+PROTOCOL_JOBS: dict[str, dict] = {}
+_jobs_lock = threading.Lock()
+
+
+def _percent(job: dict, now: float) -> int:
+    if job["state"] == "done":
+        return 100
+    value = job["base"]
+    if job["span"] and job["tau"]:
+        value += job["span"] * (1 - math.exp(-max(0.0, now - job["stageStarted"]) / job["tau"]))
+    return min(99, int(value))
+
+
+def protocol_progress(meeting_id: str) -> dict:
+    """Состояние составления протокола для интерфейса: этап, процент, прошедшее время; по готовности — сам протокол."""
+    job = PROTOCOL_JOBS.get(meeting_id)
+    if not job:
+        return {"state": "idle"}
+    now = time.time()
+    view = {"state": job["state"], "step": job["step"], "steps": PROTOCOL_STEPS, "label": job["label"],
+            "percent": _percent(job, now), "elapsed": int((job.get("finishedAt") or now) - job["startedAt"])}
+    if job["state"] == "done":
+        view["result"] = job["result"]
+    if job["state"] == "error":
+        view["message"] = job["message"]
+        view["status"] = job.get("status", 500)
+    return view
+
+
+def start_protocol(core, meeting_id: str, date_of: Callable, today: date | None = None) -> dict:
+    """Запускает составление протокола в фоне. Уже идущее для этой записи повторно не запускается."""
+    if meeting_id not in core.by_id:
+        raise KeyError("Запись не найдена")
+    with _jobs_lock:
+        current = PROTOCOL_JOBS.get(meeting_id)
+        if current and current["state"] == "running":
+            return protocol_progress(meeting_id)
+        now = time.time()
+        job = {"state": "running", "step": 1, "label": "Начинаю", "base": 2, "span": 0, "tau": 0,
+               "stageStarted": now, "startedAt": now}
+        PROTOCOL_JOBS[meeting_id] = job
+
+    def note(step: int, label: str, base: float, span: float = 0, tau: float = 0) -> None:
+        job.update(step=step, label=label, base=base, span=span, tau=tau, stageStarted=time.time())
+
+    def work() -> None:
+        try:
+            job["result"] = protocol(core, meeting_id, date_of, today, progress=note)
+            job["state"] = "done"
+        except KeyError as exc:
+            job.update(state="error", message=str(exc.args[0]), status=404)
+        except Exception as exc:  # noqa: BLE001 — причину должен увидеть пользователь
+            job.update(state="error", message=f"Не удалось составить протокол: {exc}", status=500)
+        finally:
+            job["finishedAt"] = time.time()
+
+    threading.Thread(target=work, name="protocol", daemon=True).start()
+    return protocol_progress(meeting_id)
 
 
 def safe_name(value: str, limit: int = 80) -> str:

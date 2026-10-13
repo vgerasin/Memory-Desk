@@ -626,6 +626,16 @@ def create_app() -> FastAPI:
             return result
         return material_errors(run)
 
+    @app.post("/api/meetings/{meeting_id}/protocol/start")
+    def protocol_start(meeting_id: str):
+        """Составление протокола в фоне с ходом работы: интерфейс опрашивает `GET …/protocol/progress`."""
+        get_meeting(meeting_id)
+        return material_errors(lambda: materials.start_protocol(core, meeting_id, services.meeting_date))
+
+    @app.get("/api/meetings/{meeting_id}/protocol/progress")
+    def protocol_progress(meeting_id: str):
+        return materials.protocol_progress(meeting_id)
+
     @app.post("/api/materials/mindmap")
     def material_mindmap(body: MaterialScope):
         def run():

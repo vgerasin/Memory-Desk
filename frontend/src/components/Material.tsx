@@ -25,6 +25,13 @@ function Tree({ node, depth = 0 }: { node: MapNode; depth?: number }) {
   )
 }
 
+interface ProtocolProgress {
+  state: 'idle' | 'running' | 'done' | 'error'; step: number; steps: number; label: string; percent: number; elapsed: number
+  result?: MaterialResult; message?: string
+}
+
+const pause = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
+
 function endpoint(target: MaterialTarget, days: string): { path: string; body?: object } {
   const scope = { meetingId: target.meetingId, projectId: target.projectId, personId: target.personId, days: Number(days) }
   if (target.kind === 'protocol') return { path: `/api/meetings/${encodeURIComponent(target.meetingId ?? '')}/protocol` }
@@ -39,6 +46,7 @@ export function MaterialModal() {
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<ProtocolProgress | null>(null)
   const [saved, setSaved] = useState<{ path: string; url?: string } | null>(null)
   const seq = useRef(0)
 
@@ -49,8 +57,24 @@ export function MaterialModal() {
 
   const generate = useCallback(async (target: MaterialTarget, period: string) => {
     const mine = ++seq.current
-    setBusy(true); setError(''); setResult(null); setSaved(null)
+    setBusy(true); setError(''); setResult(null); setSaved(null); setProgress(null)
     try {
+      if (target.kind === 'protocol' && target.meetingId) {
+        // Протокол составляется в фоне: показываем этап и процент, пока модель пишет текст
+        const base = `/api/meetings/${encodeURIComponent(target.meetingId)}/protocol`
+        let state = await api.post<ProtocolProgress>(`${base}/start`)
+        while (state.state === 'running') {
+          if (mine !== seq.current) return
+          setProgress(state)
+          await pause(600)
+          state = await api.get<ProtocolProgress>(`${base}/progress`)
+        }
+        if (mine !== seq.current) return
+        if (state.state === 'error' || !state.result) throw new Error(state.message ?? 'Не удалось составить протокол')
+        setProgress({ ...state, percent: 100 })
+        applyResult(state.result)
+        return
+      }
       const { path, body } = endpoint(target, period)
       const data = await api.post<MaterialResult>(path, body)
       if (mine !== seq.current) return
@@ -65,7 +89,7 @@ export function MaterialModal() {
   // Протокол и материалы по одной записи строятся сразу; для проекта и человека сначала выбирают период.
   useEffect(() => {
     seq.current++
-    setResult(null); setError(''); setSaved(null); setBusy(false)
+    setResult(null); setError(''); setSaved(null); setBusy(false); setProgress(null)
     if (material?.result) { applyResult(material.result); return }
     if (material && (material.kind === 'protocol' || material.meetingId)) void generate(material, days)
   }, [material]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -113,7 +137,20 @@ export function MaterialModal() {
             </button>
           </div>
         )}
-        {!needsPeriod && busy && <div className="muted-text">{kind === 'protocol' ? 'Составляю протокол… с моделью это может занять до минуты' : 'Собираю…'}</div>}
+        {!needsPeriod && busy && kind === 'protocol' && (
+          <div className="proto-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress?.percent ?? 0} aria-label="Составление протокола">
+            <div className="proto-line">
+              <b>{progress?.label ?? 'Запускаю…'}</b>
+              <span className="num">{progress?.percent ?? 0}%</span>
+            </div>
+            <div className="track"><i style={{ width: (progress?.percent ?? 0) + '%' }} /></div>
+            <div className="proto-sub">
+              {progress ? `Шаг ${progress.step} из ${progress.steps} · прошло ${progress.elapsed} с` : 'Подготовка'}
+              {progress && progress.step === 2 && ' · с локальной моделью этот шаг занимает от нескольких секунд до минуты'}
+            </div>
+          </div>
+        )}
+        {!needsPeriod && busy && kind !== 'protocol' && <div className="muted-text">Собираю…</div>}
         {error && <div className="error-box" style={{ marginTop: 0 }}>{error}</div>}
 
         {result && kind === 'protocol' && (
