@@ -105,6 +105,7 @@ export interface Settings {
   notify: boolean; morning_brief: boolean; morning_hour: number; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
   backup_on_change: boolean; note_writeback: boolean; mirror_enabled: boolean
   default_template: string
+  lock_timeout_min?: number
   exists?: Record<string, boolean>
 }
 
@@ -291,4 +292,29 @@ export interface ProjectDossier {
 export interface AttachmentDto {
   id: string; name: string; kind: 'image' | 'text'; text: string; engine: string; draft: boolean
   path: string; exists: boolean; size: number; url: string | null; already?: boolean; warning?: string
+}
+
+// --- этап 6: блокировка, журнал действий, стирание записи
+export interface LockStatus {
+  enabled: boolean; locked: boolean; timeoutMin: number; timeouts: number[]; retryAfter: number
+  minLength: number; maxLength: number; storage: '' | 'keychain' | 'file'
+}
+
+export interface AuditRow {
+  n: number; ts: string; actor: string; actorLabel: string; action: string; label: string
+  target: string; id: string; object: string; result: 'ok' | 'error' | 'denied'; detail: string
+}
+export interface AuditPage {
+  total: number; items: AuditRow[]; chain: { ok: boolean; count: number; badLine: number | null; message: string }
+  actors: Record<string, string>; results: Record<string, string>
+}
+
+export interface ErasePlan {
+  meetingId: string; title: string; date: string; confirmWord: string; busy: boolean; warnings: string[]
+  items: { key: string; label: string; count: number; names?: string[]; detail?: string; empty?: string; optional?: boolean }[]
+  documents: { id: string; name: string; folder: string }[]
+}
+export interface EraseResult {
+  ok: boolean; interrupted?: boolean; problems: string[]
+  audio?: number; attachments?: number; registry?: number; backups?: number; documents?: number
 }

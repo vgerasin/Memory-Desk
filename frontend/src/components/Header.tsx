@@ -3,7 +3,8 @@ import { api, ApiError, errorText } from '../api'
 import { navigate, useRoute } from '../router'
 import { useApp } from '../store'
 import type { ReindexStatus, SystemStatus } from '../types'
-import { IconGear, IconRefresh, IconSearch, Segmented } from './ui'
+import { useLock } from '../lock'
+import { IconGear, IconLock, IconRefresh, IconSearch, Segmented } from './ui'
 
 const TABS = [
   { key: '/', label: 'Сегодня' }, { key: '/records', label: 'Записи' },
@@ -99,6 +100,7 @@ function SystemPopover({ status }: { status: SystemStatus | null }) {
 export function Header() {
   const route = useRoute()
   const { state, wide, openMenu, setOpenMenu, chat, showToast, invalidate, version } = useApp()
+  const lock = useLock()
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [scanning, setScanning] = useState(false)
   const sysOpen = openMenu === 'sys'
@@ -146,6 +148,11 @@ export function Header() {
             <IconRefresh />
             {wide && <span>Обработать новые</span>}
           </button>
+          {lock.status.enabled && (
+            <button className="hbtn icon" onClick={() => void lock.lockNow()} title="Заблокировать сейчас" aria-label="Заблокировать">
+              <IconLock />
+            </button>
+          )}
           <div className={'dd' + (sysOpen ? ' open' : '')}>
             <button className="hbtn icon" onClick={() => setOpenMenu(sysOpen ? null : 'sys')} title="Состояние системы" aria-label="Состояние системы">
               <IconGear />

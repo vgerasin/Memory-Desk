@@ -51,7 +51,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   const { data: raw, error } = useApi<MeetingDetail>(`/api/meetings/${id}`)
   // сервер прежней версии не присылает говорящих: показываем стенограмму без них, а не пустой экран
   const m = useMemo(() => (raw ? { ...raw, speakers: raw.speakers ?? [], diarization: raw.diarization ?? null } : raw), [raw])
-  const { chat, setMaterial, showToast, setCurrentRecord, invalidate, meta, version } = useApp()
+  const { chat, setMaterial, setEraseId, showToast, setCurrentRecord, invalidate, meta, version } = useApp()
   const actions = useActions()
   const player = useRef<PlayerHandle>(null)
   const [pos, setPos] = useState(0)
@@ -166,6 +166,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
             {editing ? 'Отмена' : <IconEdit />}
           </button>
           <button className="tbtn sq" onClick={archive} title="В архив" aria-label="В архив"><IconArchive /></button>
+          <button className="tbtn" onClick={() => setEraseId(id)} title="Стереть запись, аудио и все её следы" style={{ color: 'var(--danger)' }}>Стереть…</button>
         </div>
       </div>
       {editing

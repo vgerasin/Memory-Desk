@@ -1,6 +1,22 @@
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) { super(message); this.status = status }
+  /** разобранное тело ответа с ошибкой (например, `retryAfter` у неверного PIN) */
+  data: Record<string, unknown>
+  constructor(status: number, message: string, data: Record<string, unknown> = {}) { super(message); this.status = status; this.data = data }
+}
+
+/** Сервер ответил 423: приложение заблокировано PIN. Экран блокировки слушает это событие и закрывает содержимое. */
+export const LOCKED_EVENT = 'md-locked'
+
+async function fail(response: Response): Promise<never> {
+  let detail = response.statusText
+  let data: Record<string, unknown> = {}
+  try {
+    data = await response.json()
+    detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+  } catch { /* ответ без JSON */ }
+  if (response.status === 423) window.dispatchEvent(new Event(LOCKED_EVENT))
+  throw new ApiError(response.status, detail, data)
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -12,14 +28,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch {
     throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
   }
-  if (!response.ok) {
-    let detail = response.statusText
-    try {
-      const data = await response.json()
-      detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
-    } catch { /* ответ без JSON */ }
-    throw new ApiError(response.status, detail)
-  }
+  if (!response.ok) return fail(response)
   return (response.status === 204 ? undefined : await response.json()) as T
 }
 
@@ -31,11 +40,7 @@ export async function downloadFile(path: string, body: unknown): Promise<string>
   } catch {
     throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
   }
-  if (!response.ok) {
-    let detail = response.statusText
-    try { const data = await response.json(); detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail) } catch { /* без JSON */ }
-    throw new ApiError(response.status, detail)
-  }
+  if (!response.ok) return fail(response)
   const header = response.headers.get('Content-Disposition') ?? ''
   const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1]
   const name = encoded ? decodeURIComponent(encoded) : (/filename="([^"]+)"/i.exec(header)?.[1] ?? 'document')
@@ -55,11 +60,7 @@ async function upload<T>(path: string, file: Blob, name: string): Promise<T> {
   } catch {
     throw new ApiError(0, 'Нет связи с Memory Desk. Проверьте, что приложение запущено.')
   }
-  if (!response.ok) {
-    let detail = response.statusText
-    try { const data = await response.json(); detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail) } catch { /* без JSON */ }
-    throw new ApiError(response.status, detail)
-  }
+  if (!response.ok) return fail(response)
   return await response.json() as T
 }
 

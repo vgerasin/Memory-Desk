@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { LockGate } from './lock'
 import { AppProvider } from './store'
 import './styles.css'
 import { applyPalette, findPalette } from './themes'
@@ -14,8 +15,10 @@ try {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppProvider>
-      <App />
-    </AppProvider>
+    <LockGate>
+      <AppProvider>
+        <App />
+      </AppProvider>
+    </LockGate>
   </StrictMode>,
 )

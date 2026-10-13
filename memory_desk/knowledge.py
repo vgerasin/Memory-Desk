@@ -769,6 +769,19 @@ class SearchIndex:
             path.write_text(signature)
             return True
 
+    def delete_meeting(self, meeting_id: str) -> None:
+        """Убирает из индекса все фрагменты записи сразу, не дожидаясь перестройки."""
+        from qdrant_client import models
+        with self.lock:
+            if self.client is None:
+                return
+            try:
+                if self.client.collection_exists(COLLECTION):
+                    self.client.delete(COLLECTION, wait=True, points_selector=models.FilterSelector(filter=models.Filter(
+                        must=[models.FieldCondition(key="meeting_id", match=models.MatchValue(value=meeting_id))])))
+            except Exception:  # noqa: BLE001 — перестройка индекса после стирания всё равно уберёт фрагменты
+                pass
+
     def collection_ready(self) -> bool:
         with self.lock:
             try:

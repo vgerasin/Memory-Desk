@@ -43,6 +43,12 @@ interface Ctx {
   setSettingsOpen: (v: boolean) => void
   storageOpen: boolean
   setStorageOpen: (v: boolean) => void
+  /** журнал действий */
+  auditOpen: boolean
+  setAuditOpen: (v: boolean) => void
+  /** запись, для которой открыто окно «Стереть запись целиком» */
+  eraseId: string | null
+  setEraseId: (v: string | null) => void
   /** окно «Подготовка к встрече»: по проекту или по одной записи */
   prep: PrepTarget | null
   setPrep: (v: PrepTarget | null) => void
@@ -93,6 +99,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentRecord, setCurrentRecord] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [storageOpen, setStorageOpen] = useState(false)
+  const [auditOpen, setAuditOpen] = useState(false)
+  const [eraseId, setEraseId] = useState<string | null>(null)
   const [prep, setPrep] = useState<PrepTarget | null>(null)
   const [material, setMaterial] = useState<MaterialTarget | null>(null)
   const toastTimer = useRef<number>()
@@ -251,7 +259,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setChatOpen(true); setOpenMenu(null) }
-      if (e.key === 'Escape') { setOpenMenu(null); setChatOpen(false); setSettingsOpen(false); setStorageOpen(false) }
+      if (e.key === 'Escape') { setOpenMenu(null); setChatOpen(false); setSettingsOpen(false); setStorageOpen(false); setAuditOpen(false); setEraseId(null) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -263,9 +271,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       open: chatOpen, scope, messages, busy, openChat, closeChat: () => setChatOpen(false),
       setScope, send, clear: () => setMessages([]), saveAnswer, answerPayload,
     },
-    currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, prep, setPrep, material, setMaterial,
+    currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, auditOpen, setAuditOpen, eraseId, setEraseId, prep, setPrep, material, setMaterial,
   }), [state, live, meta, version, invalidate, theme, toggleTheme, appearance, palette, wide, toast, showToast, hideToast, openMenu,
-    chatOpen, scope, messages, busy, openChat, send, saveAnswer, answerPayload, currentRecord, settingsOpen, storageOpen, prep, material])
+    chatOpen, scope, messages, busy, openChat, send, saveAnswer, answerPayload, currentRecord, settingsOpen, storageOpen, auditOpen, eraseId, prep, material])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

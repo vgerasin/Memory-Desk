@@ -56,6 +56,7 @@ def defaults() -> dict:
         "note_writeback": False,
         "mirror_enabled": True,
         "default_template": "meeting",
+        "lock_timeout_min": 15,
     }
 
 
@@ -102,6 +103,12 @@ def save_config(values: dict) -> dict:
         normalized["backup_keep"] = min(60, max(1, int(normalized["backup_keep"])))
     except (TypeError, ValueError):
         raise ValueError("Частота и число резервных копий должны быть числами")
+    try:
+        normalized["lock_timeout_min"] = int(normalized["lock_timeout_min"])
+    except (TypeError, ValueError):
+        normalized["lock_timeout_min"] = 15
+    if normalized["lock_timeout_min"] not in (1, 5, 15, 30, 60):
+        normalized["lock_timeout_min"] = 15
     normalized["default_template"] = str(normalized.get("default_template") or "meeting").strip() or "meeting"
     for key in ("recordings_dir", "obsidian_dir", "archive_dir"):
         text = str(normalized[key]).strip()

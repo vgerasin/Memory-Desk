@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import time
+import urllib.parse
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -14,13 +15,14 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, attachments, bookmarks, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
                ".flac": "audio/flac", ".ogg": "audio/ogg", ".mp4": "video/mp4"}
 HEADER = "x-memory-desk"
-CHANGE_BACKUP_GAP = 15 * 60   # копия «после изменений» не чаще, чем раз в 15 минут
+LOCK_EXEMPT = {"/api/health", "/api/lock/status", "/api/lock/unlock"}   # доступны и под замком
+CHANGE_BACKUP_GAP = 15 * 60  # копия «после изменений» не чаще, чем раз в 15 минут
 
 
 # --------------------------------------------------------------------------- фоновый наблюдатель
@@ -51,6 +53,8 @@ class Watcher:
         if self._was_active and not queue["active"]:
             before = {m.id for m in core.meetings}
             core.reload(force=True)  # задание завершилось — подхватываем новые заметки сразу
+            for fresh_id in sorted({m.id for m in core.meetings} - before):
+                audit.record("system", "record.processed", target="meeting", target_id=fresh_id)
             self._notify_done(before)
         self._was_active = queue["active"]
         if self._tick % 3 == 0:
@@ -98,6 +102,7 @@ class Watcher:
                 storage.create_backup()
                 self._backup_version = self.core.data_version
                 made = True
+                audit.record("system", "backup.auto", target="system")
             except (OSError, sqlite3.Error):
                 pass
         storage.prune_backups(int(cfg.get("backup_keep", 7)))
@@ -177,6 +182,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Memory Desk", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.core = core
     app.state.watcher = watcher
+    app.state.lock = lock.Lock(core)
 
     # --- безопасность: приложение слушает только 127.0.0.1, но браузер любого сайта может обратиться к нему.
     allowed_hosts = {f"127.0.0.1:{config.PORT}", f"localhost:{config.PORT}", "127.0.0.1", "localhost"}
@@ -187,14 +193,116 @@ def create_app() -> FastAPI:
             return JSONResponse({"detail": "Недопустимый адрес"}, status_code=403)
         if request.method not in {"GET", "HEAD", "OPTIONS"} and request.headers.get(HEADER) != "1":
             return JSONResponse({"detail": "Запрос отклонён"}, status_code=403)
+        path = request.url.path
+        if path.startswith("/api") and path not in LOCK_EXEMPT and app.state.lock.enabled:
+            token = request.cookies.get(lock.COOKIE)
+            acting = request.method not in {"GET", "HEAD", "OPTIONS"}
+            if not (app.state.lock.touch(token) if acting else app.state.lock.valid(token)):
+                if acting:
+                    audit.record("cabinet", "lock.blocked", target="system", result="denied", detail=f"{request.method} {path}")
+                return JSONResponse({"detail": "Заблокировано: введите PIN", "locked": True}, status_code=423,
+                                    headers={"Cache-Control": "no-store"})
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api") else response.headers.get("Cache-Control", "no-cache")
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and request.url.path.startswith("/api"):
+            log_action(request, response.status_code)
         return response
+
+    def log_action(request: Request, status: int) -> None:
+        """Строка журнала на каждый запрос, который меняет данные; тело запроса в журнал не попадает."""
+        route = request.scope.get("route")
+        template = getattr(route, "path", "")
+        key = (request.method, template)
+        if key in audit.READ_ONLY:
+            return
+        spec = audit.ACTIONS.get(key)
+        params = dict(request.scope.get("path_params") or {})
+        id_param = ""
+        if spec:
+            code, _label, kind, id_param = spec
+            ident = str(params.get(id_param, "")) if id_param else ""
+        else:   # запрос не из каталога (или маршрута нет): записываем как есть, чтобы ничто не прошло молча
+            code, kind, ident = "other." + request.method.lower(), "", ""
+        extra = [f"{k}={v}" for k, v in params.items() if k != id_param and len(str(v)) < 60]
+        note = getattr(request.state, "audit_detail", "")
+        text = "; ".join(part for part in [note] + extra + ([] if spec else [request.url.path]) if part)
+        audit.record("cabinet", code, target=kind, target_id=ident, result=audit.result_of(status), detail=text)
 
     # ------------------------------------------------------------------ служебное
     @app.get("/api/health")
     def health():
         return {"ok": True, "version": __version__, "indexState": core.index.state}
+
+    # ------------------------------------------------------------------ блокировка PIN
+    class PinBody(BaseModel):
+        pin: str = ""
+        current: str = ""
+
+    def lock_fail(exc: lock.LockError) -> JSONResponse:
+        headers = {"Retry-After": str(exc.retry)} if exc.retry else {}
+        return JSONResponse({"detail": str(exc), "retryAfter": exc.retry}, status_code=exc.status, headers=headers)
+
+    def with_session(payload: dict, token: str | None) -> JSONResponse:
+        response = JSONResponse(payload)
+        if token:
+            response.set_cookie(lock.COOKIE, token, httponly=True, samesite="strict", path="/", max_age=lock.MAX_SESSION)
+        return response
+
+    @app.get("/api/lock/status")
+    def lock_status(request: Request):
+        return app.state.lock.status(request.cookies.get(lock.COOKIE))
+
+    @app.post("/api/lock/unlock")
+    def lock_unlock(body: PinBody, request: Request):
+        try:
+            token = app.state.lock.unlock(body.pin)
+        except lock.LockError as exc:
+            return lock_fail(exc)
+        return with_session(app.state.lock.status(token), token)
+
+    @app.post("/api/lock/lock")
+    def lock_now(request: Request):
+        app.state.lock.close(request.cookies.get(lock.COOKIE))
+        response = JSONResponse(app.state.lock.status(None))
+        response.delete_cookie(lock.COOKIE, path="/")
+        return response
+
+    @app.post("/api/lock/ping")
+    def lock_ping():
+        return {"ok": True}      # сессию продлевает сама проверка в `guard`: любой запрос-действие считается «я здесь»
+
+    @app.post("/api/lock/pin")
+    def lock_set_pin(body: PinBody, request: Request):
+        try:
+            where = app.state.lock.set_pin(body.pin, body.current)
+        except lock.LockError as exc:
+            return lock_fail(exc)
+        audit.detail(request, "хранится в Связке ключей" if where == "keychain" else "хранится в файле lock.json")
+        token = app.state.lock.open_session()      # тот, кто задал PIN, остаётся внутри
+        payload = app.state.lock.status(token)
+        payload["message"] = "PIN установлен"
+        return with_session(payload, token)
+
+    @app.post("/api/lock/remove")
+    def lock_remove_pin(body: PinBody):
+        try:
+            app.state.lock.remove_pin(body.current or body.pin)
+        except lock.LockError as exc:
+            return lock_fail(exc)
+        response = JSONResponse({**app.state.lock.status(None), "message": "PIN снят"})
+        response.delete_cookie(lock.COOKIE, path="/")
+        return response
+
+    class TimeoutBody(BaseModel):
+        minutes: int
+
+    @app.put("/api/lock/timeout")
+    def lock_timeout(body: TimeoutBody, request: Request):
+        if body.minutes not in lock.TIMEOUTS:
+            raise HTTPException(400, "Доступно: " + ", ".join(str(m) for m in lock.TIMEOUTS) + " мин")
+        core.cfg = config.save_config({**core.cfg, "lock_timeout_min": body.minutes})
+        audit.detail(request, f"{body.minutes} мин")
+        return app.state.lock.status(request.cookies.get(lock.COOKIE))
 
     @app.get("/api/state")
     def state():
@@ -315,7 +423,8 @@ def create_app() -> FastAPI:
         days: int | None = None
 
     @app.post("/api/storage/clean")
-    def storage_clean(body: CleanBody):
+    def storage_clean(body: CleanBody, request: Request):
+        audit.detail(request, f"категория: {body.category}")
         if body.category.startswith("work") and jobs.is_running():
             raise HTTPException(409, "Идёт обработка записей: дождитесь её окончания")
         if body.days is not None and body.days < 0:
@@ -368,6 +477,7 @@ def create_app() -> FastAPI:
         note_writeback: bool = False
         mirror_enabled: bool = True
         default_template: str = "meeting"
+        lock_timeout_min: int | None = None
 
     @app.get("/api/settings")
     def get_settings():
@@ -375,7 +485,9 @@ def create_app() -> FastAPI:
         return {**cfg, "exists": {k: Path(cfg[k]).expanduser().exists() for k in ("recordings_dir", "obsidian_dir", "archive_dir")}}
 
     @app.put("/api/settings")
-    def put_settings(body: SettingsBody):
+    def put_settings(body: SettingsBody, request: Request):
+        before = core.cfg
+        audit.detail(request, "изменены: " + ", ".join(sorted(k for k, v in body.model_dump().items() if k in before and before.get(k) != v)))
         for key, label in (("recordings_dir", "записей"), ("obsidian_dir", "заметок Obsidian")):
             value = getattr(body, key).strip()
             if value and value != str(core.cfg.get(key, "")) and not Path(value).expanduser().is_dir():
@@ -385,7 +497,10 @@ def create_app() -> FastAPI:
         if body.default_template not in templates.load_all()[0]:
             raise HTTPException(400, "Такого шаблона заметки нет")
         try:
-            saved = core.apply_settings(body.model_dump())
+            values = body.model_dump()
+            if values.get("lock_timeout_min") is None:     # время блокировки меняется отдельным запросом
+                values["lock_timeout_min"] = core.cfg.get("lock_timeout_min", lock.DEFAULT_TIMEOUT)
+            saved = core.apply_settings(values)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {**saved, "message": "Настройки сохранены"}
@@ -976,6 +1091,73 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "Аудиофайл не найден")
         return {"bars": waveform.cached(meeting_id, path)}
 
+    # ------------------------------------------------------------------ стереть запись целиком
+    class EraseBody(BaseModel):
+        confirm: str = ""
+        scrubBackups: bool = True
+        noteCopies: bool = True
+        documents: list[str] = []
+
+    @app.get("/api/meetings/{meeting_id}/erase/plan")
+    def erase_plan(meeting_id: str):
+        try:
+            return erase.plan(core, meeting_id)
+        except erase.EraseError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+
+    @app.post("/api/meetings/{meeting_id}/erase")
+    def erase_record(meeting_id: str, body: EraseBody, request: Request):
+        try:
+            result = erase.apply(core, meeting_id, body.confirm, scrub_backups=body.scrubBackups,
+                                 note_copies=body.noteCopies, documents=body.documents)
+        except erase.EraseError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+        audit.detail(request, erase.summary(result))
+        return {"ok": not result["problems"], **result}
+
+    # ------------------------------------------------------------------ журнал действий
+    def audit_objects(rows: list[dict]) -> dict[str, str]:
+        """Названия объектов для показа: берутся из текущей базы, в самом журнале их нет."""
+        titles: dict[str, str] = {}
+        for row in rows:
+            ident, kind = str(row.get("id", "")), row.get("target", "")
+            if not ident or ident in titles:
+                continue
+            if kind == "meeting":
+                meeting = core.by_id.get(ident)
+                titles[ident] = f"«{meeting.title}»" if meeting else "стёртая запись"
+            elif kind in ("task", "decision"):
+                found = storage.one(f"SELECT m.title FROM {kind}s t JOIN meetings m ON m.id=t.meeting_id WHERE t.id=?", (ident,))
+                titles[ident] = ("задача" if kind == "task" else "решение") + (f" из «{found['title']}»" if found else " (запись стёрта)")
+            elif kind == "project":
+                found = next((pr for pr in core.projects() if pr["id"] == ident), None)
+                titles[ident] = f"проект «{found['title']}»" if found else "проект"
+            elif kind == "person":
+                found = storage.one("SELECT name FROM people WHERE id=?", (ident,))
+                titles[ident] = found["name"] if found else "человек"
+        return titles
+
+    @app.get("/api/audit")
+    def audit_list(actor: str = "", result: str = "", kind: str = "", q: str = Query("", max_length=100), since: str = "", until: str = "",
+                   limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0)):
+        data = audit.query(actor=actor, result=result, kind=kind, q=q.strip(), since=since, until=until, limit=limit, offset=offset)
+        titles = audit_objects(data["items"])
+        items = [{**row, "label": data["labels"].get(row.get("action", ""), row.get("action", "")),
+                  "actorLabel": audit.ACTORS.get(row.get("actor", ""), row.get("actor", "")),
+                  "object": titles.get(str(row.get("id", "")), "")} for row in data["items"]]
+        return {"total": data["total"], "items": items, "chain": audit.verify(),
+                "actors": audit.ACTORS, "results": audit.RESULTS}
+
+    @app.get("/api/audit/export")
+    def audit_export(actor: str = "", result: str = "", kind: str = "", q: str = Query("", max_length=100), since: str = "", until: str = ""):
+        data = audit.query(actor=actor, result=result, kind=kind, q=q.strip(), since=since, until=until, limit=1000, offset=0)
+        rows = audit.query(actor=actor, result=result, kind=kind, q=q.strip(), since=since, until=until, limit=10 ** 9, offset=0)["items"] \
+            if data["total"] > 1000 else data["items"]
+        text = audit.to_csv(rows, audit_objects(rows))
+        name = f"журнал-{datetime.now():%Y-%m-%d}.csv"
+        return Response(text, media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(name)})
+
     # ------------------------------------------------------------------ справочники
     class ProjectBody(BaseModel):
         title: str
@@ -1260,13 +1442,15 @@ def create_app() -> FastAPI:
     BULK_LIMIT = 500
 
     @app.patch("/api/tasks/{item_id}")
-    def patch_task(item_id: str, body: ItemPatch):
+    def patch_task(item_id: str, body: ItemPatch, request: Request):
+        audit.detail(request, "поля: " + ", ".join(k for k, v in body.model_dump().items() if v is not None))
         result = patch_item("tasks", item_id, body, TASK_STATUSES)
         result.pop("_noteUpdated", None)
         return result
 
     @app.patch("/api/decisions/{item_id}")
-    def patch_decision(item_id: str, body: ItemPatch):
+    def patch_decision(item_id: str, body: ItemPatch, request: Request):
+        audit.detail(request, "поля: " + ", ".join(k for k, v in body.model_dump().items() if v is not None))
         result = patch_item("decisions", item_id, body, DECISION_STATUSES)
         result.pop("_noteUpdated", None)
         return result
@@ -1307,11 +1491,13 @@ def create_app() -> FastAPI:
         return {"updated": updated, "noteMissing": missing_note, "failed": failed[:20], "failedCount": len(failed)}
 
     @app.post("/api/tasks/bulk")
-    def bulk_tasks(body: BulkItems):
+    def bulk_tasks(body: BulkItems, request: Request):
+        audit.detail(request, f"элементов: {len(body.ids)}" + (f"; статус: {body.status}" if body.status else ""))
         return bulk_items("tasks", body, TASK_STATUSES)
 
     @app.post("/api/decisions/bulk")
-    def bulk_decisions(body: BulkItems):
+    def bulk_decisions(body: BulkItems, request: Request):
+        audit.detail(request, f"элементов: {len(body.ids)}" + (f"; статус: {body.status}" if body.status else ""))
         return bulk_items("decisions", body.model_copy(update={"owner": None, "deadline": None}), DECISION_STATUSES)
 
     class BulkMeetings(BaseModel):
@@ -1320,7 +1506,8 @@ def create_app() -> FastAPI:
         value: str | None = None
 
     @app.post("/api/meetings/bulk")
-    def bulk_meetings(body: BulkMeetings):
+    def bulk_meetings(body: BulkMeetings, request: Request):
+        audit.detail(request, f"элементов: {len(body.ids)}; действие: {body.action}")
         ids = bulk_ids(body.ids)
         project = record_type = None
         if body.action == "project" and body.value:

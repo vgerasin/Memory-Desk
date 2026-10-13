@@ -3,6 +3,8 @@ import { Chat } from './components/Chat'
 import { Header } from './components/Header'
 import { SettingsModal } from './components/Settings'
 import { StorageModal } from './components/Storage'
+import { AuditModal } from './components/Security'
+import { EraseDialog } from './components/EraseDialog'
 import { PrepModal } from './components/PrepBrief'
 import { MaterialModal } from './components/Material'
 import { Toast } from './components/Toast'
@@ -63,6 +65,8 @@ export default function App() {
       <Chat />
       <SettingsModal />
       <StorageModal />
+      <AuditModal />
+      <EraseDialog />
       <PrepModal />
       <MaterialModal />
       <Toast />

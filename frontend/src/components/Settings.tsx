@@ -7,6 +7,7 @@ import { AppearanceSettings } from './AppearanceSettings'
 import { DictionarySettings } from './DictionarySettings'
 import { TemplateSettings } from './TemplateSettings'
 import { VoiceSettings } from './VoiceSettings'
+import { SecurityBlock } from './Security'
 
 export function SettingsModal() {
   const { settingsOpen, setSettingsOpen, showToast, invalidate } = useApp()
@@ -281,6 +282,7 @@ export function SettingsModal() {
               ))}
               {pending && <span className="hint">Текущее состояние базы будет сохранено в новую копию до восстановления. Заметки Obsidian не меняются.</span>}
             </div>
+            <SecurityBlock />
           </>
         )}
         {error && <div className="error-box" style={{ marginTop: 0 }}>{error}</div>}
