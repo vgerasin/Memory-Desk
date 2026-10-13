@@ -43,7 +43,7 @@ export function SettingsModal() {
         reminders_list: form.reminders_list, reminders_scope: form.reminders_scope, my_name: form.my_name,
         notify: form.notify, morning_brief: form.morning_brief, morning_hour: Number(form.morning_hour) || 0, backup_auto: form.backup_auto,
         backup_interval_hours: Number(form.backup_interval_hours) || 24, backup_keep: Number(form.backup_keep) || 7,
-        backup_on_change: form.backup_on_change, note_writeback: form.note_writeback, mirror_enabled: form.mirror_enabled, suggestions_auto: form.suggestions_auto,
+        backup_on_change: form.backup_on_change, note_writeback: form.note_writeback, mirror_enabled: form.mirror_enabled, suggestions_auto: form.suggestions_auto, dossier_model: form.dossier_model,
       })
       showToast('Настройки сохранены')
       invalidate()
@@ -139,6 +139,14 @@ export function SettingsModal() {
               </div>
               <button className={'switch' + (form.suggestions_auto !== false ? ' on' : '')} role="switch" aria-checked={form.suggestions_auto !== false}
                 onClick={() => set('suggestions_auto', form.suggestions_auto === false)}><i /></button>
+            </div>
+            <div className="switch-row">
+              <div className="field" style={{ gap: 2 }}>
+                <label>«О чём разговор» в досье</label>
+                <span className="hint">После обработки записи локальная модель коротко пересказывает последние встречи человека и проекта. Выключено — остаётся пересказ из кратких содержаний без модели</span>
+              </div>
+              <button className={'switch' + (form.dossier_model !== false ? ' on' : '')} role="switch" aria-checked={form.dossier_model !== false}
+                onClick={() => set('dossier_model', form.dossier_model === false)}><i /></button>
             </div>
             <div className="switch-row">
               <div className="field" style={{ gap: 2 }}>

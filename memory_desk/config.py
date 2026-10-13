@@ -58,6 +58,7 @@ def defaults() -> dict:
         "default_template": "meeting",
         "lock_timeout_min": 15,
         "suggestions_auto": True,
+        "dossier_model": True,
     }
 
 
@@ -96,6 +97,7 @@ def save_config(values: dict) -> dict:
     normalized["mirror_enabled"] = bool(normalized["mirror_enabled"])
     normalized["morning_brief"] = bool(normalized["morning_brief"])
     normalized["suggestions_auto"] = bool(normalized["suggestions_auto"])
+    normalized["dossier_model"] = bool(normalized["dossier_model"])
     try:
         normalized["morning_hour"] = min(23, max(0, int(normalized["morning_hour"])))
     except (TypeError, ValueError):

@@ -93,6 +93,15 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("POST", "/api/suggestions/{sid}/create"): ("suggestion.create", "Предложение выполнено", "suggestion", "sid"),
     ("POST", "/api/suggestions/{sid}/dismiss"): ("suggestion.dismiss", "Предложение отклонено", "suggestion", "sid"),
     ("POST", "/api/suggestions/{sid}/restore"): ("suggestion.restore", "Предложение возвращено", "suggestion", "sid"),
+    ("POST", "/api/people/{person_id}/pins"): ("dossier.pin", "Факт закреплён в досье человека", "person", "person_id"),
+    ("POST", "/api/projects/{project_id}/pins"): ("dossier.pin", "Факт закреплён в досье проекта", "project", "project_id"),
+    ("PATCH", "/api/pins/{pin_id}"): ("dossier.pin_edit", "Закреплённый факт изменён", "pin", "pin_id"),
+    ("DELETE", "/api/pins/{pin_id}"): ("dossier.unpin", "Закреплённый факт убран", "pin", "pin_id"),
+    ("POST", "/api/people/{person_id}/hanging/mute"): ("dossier.mute", "Вопрос в досье человека закрыт вручную", "person", "person_id"),
+    ("POST", "/api/projects/{project_id}/hanging/mute"): ("dossier.mute", "Вопрос в досье проекта закрыт вручную", "project", "project_id"),
+    ("DELETE", "/api/hanging/{mute_id}"): ("dossier.unmute", "Вопрос возвращён в висящие", "system", ""),
+    ("POST", "/api/people/{person_id}/refresh"): ("dossier.refresh_request", "Обновление досье человека", "person", "person_id"),
+    ("POST", "/api/projects/{project_id}/refresh"): ("dossier.refresh_request", "Обновление досье проекта", "project", "project_id"),
     ("POST", "/api/lock/pin"): ("lock.pin", "PIN: установка или смена", "system", ""),
     ("POST", "/api/lock/remove"): ("lock.pin_remove", "PIN снят", "system", ""),
     ("PUT", "/api/lock/timeout"): ("lock.timeout_set", "Изменено время блокировки", "system", ""),
@@ -237,7 +246,8 @@ def labels() -> dict[str, str]:
     result = {code: label for code, label, _t, _p in ACTIONS.values()}
     result.update({"record.processed": "Запись обработана", "backup.auto": "Автоматическая копия базы",
                    "lock.blocked": "Запрос отклонён: приложение заблокировано",
-                   "suggestion.scan": "Поиск договорённостей в записи", "lock.timeout": "Блокировка по бездействию", "lock.reset": "PIN сброшен с компьютера"})
+                   "suggestion.scan": "Поиск договорённостей в записи", "lock.timeout": "Блокировка по бездействию", "lock.reset": "PIN сброшен с компьютера",
+                   "dossier.refresh": "Досье пересчитано"})
     return result
 
 

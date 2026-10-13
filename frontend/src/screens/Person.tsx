@@ -8,6 +8,8 @@ import type { PersonDossier } from '../types'
 import { Avatar, ErrorBox, Loading } from '../components/ui'
 import { agoLabel, BackLink, DecisionLine, Empty, FactRow, MeetingRow, Section, TaskLine, Tile } from '../components/Dossier'
 import { DocMenu } from '../components/DocMenu'
+import { ChangesSection, GistCard, HangingSection, PinsSection, Pinnable } from '../components/Live'
+import type { PinContext } from '../components/Live'
 
 function Editor({ dossier, onDone }: { dossier: PersonDossier; onDone: () => void }) {
   const { showToast, invalidate } = useApp()
@@ -53,6 +55,7 @@ export function Person() {
   const { person: p, stats, tasks } = data
   const first = p.name.split(' ')[0]
   const sub = [p.role, p.organization].filter(Boolean).join(' · ')
+  const ctx: PinContext = { scope: 'person', ownerId: p.id, pins: data.pins }
   return (
     <>
       <BackLink to="/people" label="Люди" />
@@ -75,6 +78,8 @@ export function Person() {
       {editing && <Editor dossier={data} onDone={() => setEditing(false)} />}
       {!editing && p.notes && <div className="dos-notes card r20">{p.notes}</div>}
 
+      <GistCard scope="person" ownerId={p.id} gist={data.gist} />
+
       <div className="dos-tiles">
         <Tile label="Встреч" value={stats.meetings} sub={stats.meetings ? `за 30 дней: ${stats.meetingsLast30}` : 'в записях не встречается'} />
         <Tile label="Последний контакт" value={agoLabel(stats.daysSince)} sub={stats.lastMeeting ? stats.lastMeeting.title : undefined}
@@ -86,12 +91,19 @@ export function Person() {
       </div>
 
       <div className="dos-grid">
+        <PinsSection scope="person" ownerId={p.id} pins={data.pins} />
+        <HangingSection ctx={ctx} hanging={data.hanging} />
+        <ChangesSection changes={data.changes} />
         <Section title="Обязательства" count={tasks.open}>
-          {tasks.items.length === 0 ? <Empty text="Открытых обязательств нет" /> : tasks.items.map(t => <TaskLine key={t.id} task={t} />)}
+          {tasks.items.length === 0 ? <Empty text="Открытых обязательств нет" /> : tasks.items.map(t => (
+            <Pinnable key={t.id} ctx={ctx} payload={{ text: t.text, kind: 'task', meetingId: t.meetingId, sec: t.tSec }}><TaskLine task={t} /></Pinnable>
+          ))}
           {tasks.open > tasks.items.length && <button className="link-btn" onClick={() => navigate('/tasks')}>Все задачи</button>}
         </Section>
         <Section title="Действующие решения" count={data.decisions.total}>
-          {data.decisions.items.length === 0 ? <Empty text="В записях с участием человека решений нет" /> : data.decisions.items.map(d => <DecisionLine key={d.id} item={d} />)}
+          {data.decisions.items.length === 0 ? <Empty text="В записях с участием человека решений нет" /> : data.decisions.items.map(d => (
+            <Pinnable key={d.id} ctx={ctx} payload={{ text: d.text, kind: 'decision', meetingId: d.meetingId, sec: d.tSec }}><DecisionLine item={d} /></Pinnable>
+          ))}
         </Section>
         <Section title="Проекты">
           {data.projects.length === 0 ? <Empty text="Проектов нет" /> : data.projects.map(pr => (
@@ -110,8 +122,10 @@ export function Person() {
             </button>
           ))}
         </Section>
-        <Section title="Открытые вопросы" count={data.questions.length}>
-          {data.questions.length === 0 ? <Empty text="Из последних записей вопросов не осталось" /> : data.questions.map((q, i) => <FactRow key={i} fact={q} />)}
+        <Section title="Открытые вопросы в последних записях" count={data.questions.length}>
+          {data.questions.length === 0 ? <Empty text="Из последних записей вопросов не осталось" /> : data.questions.map((q, i) => (
+            <Pinnable key={i} ctx={ctx} payload={{ text: q.text, kind: 'question', meetingId: q.meetingId, sec: q.sec }}><FactRow fact={q} /></Pinnable>
+          ))}
         </Section>
         <Section title="Хронология">
           {data.timeline.length === 0 ? <Empty text="Записей нет" /> : data.timeline.map(m => <MeetingRow key={m.id} m={m} />)}

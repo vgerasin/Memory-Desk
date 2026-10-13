@@ -8,6 +8,8 @@ import type { ProjectDossier, ProjectStatus } from '../types'
 import { Avatar, ErrorBox, Loading } from '../components/ui'
 import { agoLabel, BackLink, DecisionLine, Empty, FactRow, MeetingRow, Section, TaskLine, Tile } from '../components/Dossier'
 import { DocMenu } from '../components/DocMenu'
+import { ChangesSection, GistCard, HangingSection, PinsSection, Pinnable } from '../components/Live'
+import type { PinContext } from '../components/Live'
 
 const STATUSES: { key: ProjectStatus; label: string }[] = [
   { key: 'active', label: 'В работе' }, { key: 'paused', label: 'На паузе' }, { key: 'done', label: 'Завершён' },
@@ -30,6 +32,7 @@ export function Project() {
     catch (e) { showToast(errorText(e)) }
   }
   const h = HEALTH[health.level]
+  const ctx: PinContext = { scope: 'project', ownerId: p.id, pins: data.pins }
   const maxWeek = Math.max(1, ...data.weeks.map(w => w.meetings))
   return (
     <>
@@ -74,6 +77,8 @@ export function Project() {
         <span>{health.reasons.length ? health.reasons.join(' · ') : 'просроченных и зависших задач нет'}</span>
       </div>
 
+      <GistCard scope="project" ownerId={p.id} gist={data.gist} />
+
       <div className="dos-tiles">
         <Tile label="Открытых задач" value={health.openTasks} tone={health.overdue ? 'bad' : undefined}
           sub={health.overdue ? `просрочено: ${health.overdue}` : health.drafts ? `ждут подтверждения: ${health.drafts}` : undefined} />
@@ -84,17 +89,24 @@ export function Project() {
       </div>
 
       <div className="dos-grid">
+        <PinsSection scope="project" ownerId={p.id} pins={data.pins} />
+        <HangingSection ctx={ctx} hanging={data.hanging} />
+        <ChangesSection changes={data.changes} />
         <Section title="Задачи по людям" count={health.openTasks}>
           {data.tasksByPerson.length === 0 ? <Empty text="Открытых задач нет" /> : data.tasksByPerson.map(g => (
             <div key={g.owner} className="dos-group">
               <div className="dos-group-head">{g.owner} <span className="dos-count">{g.count}</span></div>
-              {g.items.map(t => <TaskLine key={t.id} task={t} />)}
+              {g.items.map(t => (
+                <Pinnable key={t.id} ctx={ctx} payload={{ text: t.text, kind: 'task', meetingId: t.meetingId, sec: t.tSec }}><TaskLine task={t} /></Pinnable>
+              ))}
               {g.count > g.items.length && <div className="dos-foot">и ещё {g.count - g.items.length}</div>}
             </div>
           ))}
         </Section>
         <Section title="Действующие решения" count={data.decisions.activeTotal}>
-          {data.decisions.active.length === 0 ? <Empty text="Решений пока нет" /> : data.decisions.active.map(d => <DecisionLine key={d.id} item={d} />)}
+          {data.decisions.active.length === 0 ? <Empty text="Решений пока нет" /> : data.decisions.active.map(d => (
+            <Pinnable key={d.id} ctx={ctx} payload={{ text: d.text, kind: 'decision', meetingId: d.meetingId, sec: d.tSec }}><DecisionLine item={d} /></Pinnable>
+          ))}
           {data.decisions.replaced.length > 0 && (
             <details className="dos-replaced"><summary>Заменённые · {data.decisions.replacedTotal}</summary>
               {data.decisions.replaced.map(d => <DecisionLine key={d.id} item={d} />)}
@@ -131,10 +143,14 @@ export function Project() {
           )}
         </Section>
         <Section title="Риски" count={data.risks.length}>
-          {data.risks.length === 0 ? <Empty text="Рисков в последних записях нет" /> : data.risks.map((r, i) => <FactRow key={i} fact={r} />)}
+          {data.risks.length === 0 ? <Empty text="Рисков в последних записях нет" /> : data.risks.map((r, i) => (
+            <Pinnable key={i} ctx={ctx} payload={{ text: r.text, kind: 'risk', meetingId: r.meetingId, sec: r.sec }}><FactRow fact={r} /></Pinnable>
+          ))}
         </Section>
         <Section title="Открытые вопросы" count={data.questions.length}>
-          {data.questions.length === 0 ? <Empty text="Открытых вопросов нет" /> : data.questions.map((q, i) => <FactRow key={i} fact={q} />)}
+          {data.questions.length === 0 ? <Empty text="Открытых вопросов нет" /> : data.questions.map((q, i) => (
+            <Pinnable key={i} ctx={ctx} payload={{ text: q.text, kind: 'question', meetingId: q.meetingId, sec: q.sec }}><FactRow fact={q} /></Pinnable>
+          ))}
         </Section>
         <Section title="Последние записи" wide>
           {data.recent.length === 0 ? <Empty text="Записей пока нет" /> : data.recent.map(m => <MeetingRow key={m.id} m={m} />)}

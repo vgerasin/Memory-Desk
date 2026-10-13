@@ -107,6 +107,7 @@ export interface Settings {
   default_template: string
   lock_timeout_min?: number
   suggestions_auto?: boolean
+  dossier_model?: boolean
   exists?: Record<string, boolean>
 }
 
@@ -263,7 +264,22 @@ export type ProjectStatus = 'active' | 'paused' | 'done'
 export interface MeetingBrief { id: string; title: string; date: string; time: string; project: ProjectRef | null }
 export interface FactLine { text: string; sec: number | null; meetingId: string; meetingTitle: string; date: string }
 
-export interface PersonDossier {
+// --- этап 9: живое досье
+export interface PinSource { meetingId: string; meetingTitle: string; date: string; sec: number | null }
+export interface DossierPin {
+  id: string; text: string; kind: string; kindLabel: string; origin: string; edited: boolean; createdAt: string
+  source: PinSource | null; sourceGone: boolean
+}
+export interface HangingItem { text: string; count: number; first: string; last: string; occurrences: PinSource[] }
+export interface HangingView { items: HangingItem[]; total: number; muted: { id: string; text: string }[]; from: number }
+export interface GistView {
+  text: string; engine: '' | 'model' | 'structure'; stale: boolean; updatedAt: string; busy: boolean
+  sources: { meetingId: string; meetingTitle: string; date: string }[]
+}
+export interface ChangeRow { meetingId: string; meetingTitle: string; date: string; decisions: number; tasks: number; questions: number; risks: number }
+export interface LiveDossier { pins: DossierPin[]; hanging: HangingView; gist: GistView; changes: ChangeRow[] }
+
+export interface PersonDossier extends LiveDossier {
   person: PersonDto & { voice: { samples: number; seconds: number } | null }
   stats: {
     meetings: number; meetingsLast30: number; firstContact: string | null; lastContact: string | null; daysSince: number | null
@@ -277,7 +293,7 @@ export interface PersonDossier {
   timeline: MeetingBrief[]
 }
 
-export interface ProjectDossier {
+export interface ProjectDossier extends LiveDossier {
   project: { id: string; title: string; color: string; status: ProjectStatus; statusLabel: string; goal: string; description: string }
   health: { level: 'ok' | 'warn' | 'bad'; reasons: string[]; overdue: number; stuck: number; drafts: number; openTasks: number; openQuestions: number; daysSinceLast: number | null }
   counts: { records: number; first: string | null; last: string | null }

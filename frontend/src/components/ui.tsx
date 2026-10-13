@@ -20,6 +20,9 @@ export const IconGear = ({ size = 17 }: IconProps) => (
 export const IconLock = ({ size = 15 }: IconProps) => (
   <svg {...base(size, 1.8)}><rect x="5" y="11" width="14" height="9" rx="2.2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
 )
+export const IconPin = ({ size = 14 }: IconProps) => (
+  <svg {...base(size, 1.8)}><path d="M9 4h6l-1 6 3 3H7l3-3-1-6z" /><path d="M12 13v7" /></svg>
+)
 export const IconChevron = ({ size = 10, style }: IconProps) => (
   <svg {...base(size, 2.6, style)}><path d="M6 9l6 6 6-6" /></svg>
 )

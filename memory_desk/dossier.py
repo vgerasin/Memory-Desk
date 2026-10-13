@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, timedelta
 
-from . import knowledge, series, services, storage, voice
+from . import knowledge, live as livedoc, series, services, storage, voice
 from .core import Core
 
 STUCK_WARN_DAYS = 14        # без встреч дольше этого проект подсвечивается
@@ -141,6 +141,7 @@ def person(core: Core, person_id: str, today: date | None = None) -> dict:
         "questions": _questions(mine[:3], 8),
         "companions": companions,
         "timeline": [_meeting_brief(m) for m in mine[:10]],
+        **livedoc.extras(core, "person", person_id, mine),
     }
 
 
@@ -220,6 +221,9 @@ def project(core: Core, project_id: str, today: date | None = None) -> dict:
         reasons.append("вопрос висит несколько встреч подряд")
     if found.get("status", "active") == "active" and since is not None and since > STUCK_WARN_DAYS:
         reasons.append(f"встреч не было {since} дн.")
+    extras = livedoc.extras(core, "project", project_id, linked)
+    if extras["hanging"]["total"]:
+        reasons.append(f"висящих вопросов: {extras['hanging']['total']}")
     level = "bad" if overdue >= 3 or (overdue and stuck) else "warn" if reasons else "ok"
 
     stored = storage.one("SELECT description FROM projects WHERE id=?", (project_id,)) or {}
@@ -237,4 +241,5 @@ def project(core: Core, project_id: str, today: date | None = None) -> dict:
         "weeks": weeks,
         "series": [s for s in series.listing(linked) if s["count"] > 1][:6],
         "recent": [_meeting_brief(m) for m in linked[:8]],
+        **extras,
     }

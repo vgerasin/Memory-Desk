@@ -19,7 +19,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-from . import attachments, config, knowledge, mirror, storage
+from . import attachments, config, knowledge, live, mirror, storage
 
 WORD = "СТЕРЕТЬ"
 DERIVED_FOLDERS = ("Протоколы", "Карты", "Служебные записки", "Брифы", "Письма", "Дайджесты", "Ответы", "Сводки")
@@ -115,6 +115,7 @@ def _db_counts(meeting_id: str) -> dict[str, int]:
         "overlaps": count("SELECT COUNT(*) n FROM meeting_overlaps WHERE meeting_id=?"),
         "events": count("SELECT COUNT(*) n FROM processing_events WHERE meeting_id=?"),
         "suggestions": count("SELECT COUNT(*) n FROM suggestions WHERE meeting_id=?"),
+        "dossier": live.forget_count(meeting_id),
         "made": count("SELECT COUNT(*) n FROM suggestions WHERE meeting_id=? AND status='created'"),
         "reminders": count("SELECT COUNT(*) n FROM reminder_links r JOIN tasks t ON t.id=r.task_id WHERE t.meeting_id=? AND r.state='active'"),
     }
@@ -153,8 +154,9 @@ def plan(core, meeting_id: str) -> dict:
         {"key": "attachments", "label": "Вложения (фото и тексты)", "count": len(attached), "names": [p.name for p in attached]},
         {"key": "work", "label": "Рабочие файлы обработки", "count": len(_work_folders(meeting))},
         {"key": "registry", "label": "Записи в базе кабинета",
-         "count": 1 + sum(counts[k] for k in ("tasks", "decisions", "people", "voices", "overlaps", "events", "suggestions")),
-         "detail": f"задач {counts['tasks']}, решений {counts['decisions']}, участников {counts['people']}, отпечатков голосов {counts['voices']}"},
+         "count": 1 + sum(counts[k] for k in ("tasks", "decisions", "people", "voices", "overlaps", "events", "suggestions", "dossier")),
+         "detail": f"задач {counts['tasks']}, решений {counts['decisions']}, участников {counts['people']}, отпечатков голосов {counts['voices']}"
+                   + (f", строк досье {counts['dossier']}" if counts["dossier"] else "")},
         {"key": "index", "label": "Фрагменты в поисковом индексе", "count": len(knowledge.sections(meeting))},
         {"key": "waveform", "label": "Волна для плеера", "count": 1 if (config.DATA_DIR / "waveforms" / f"{meeting_id}.json").exists() else 0},
         {"key": "noteCopies", "label": "Прежние копии заметки (после «Пересобрать по другому»)", "count": len(copies), "optional": True},
@@ -214,6 +216,7 @@ def _scrub_registry(meeting_id: str, audio_names: set[str]) -> int:
         for table in ("tasks", "decisions", "meeting_people", "meeting_voices", "meeting_overlaps", "suggestions"):
             removed += db.execute(f"DELETE FROM {table} WHERE meeting_id=?", (meeting_id,)).rowcount
         removed += db.execute("DELETE FROM processing_events WHERE meeting_id=?", (meeting_id,)).rowcount
+        removed += live.forget_meeting(meeting_id, db)
         removed += db.execute("DELETE FROM meetings WHERE id=?", (meeting_id,)).rowcount
     # пары «решение устарело / не связаны», где участвовало стёртое решение, и пометки файла в очереди
     from . import conflicts, jobs
@@ -243,11 +246,15 @@ def _scrub_backup(path: Path, meeting_id: str) -> bool:
             db.execute("PRAGMA foreign_keys = ON")
             db.execute("PRAGMA secure_delete = ON")
             db.execute("PRAGMA journal_mode = DELETE")
-            for table in ("tasks", "decisions", "meeting_people", "meeting_voices", "meeting_overlaps", "processing_events", "suggestions"):
+            for table in ("tasks", "decisions", "meeting_people", "meeting_voices", "meeting_overlaps", "processing_events", "suggestions", "dossier_pins", "dossier_mutes"):
                 try:
                     db.execute(f"DELETE FROM {table} WHERE meeting_id=?", (meeting_id,))
                 except sqlite3.Error:
                     continue
+            try:
+                db.execute("DELETE FROM dossier_gists WHERE sources LIKE ?", (f'%"meetingId": "{meeting_id}"%',))
+            except sqlite3.Error:
+                pass
             db.execute("DELETE FROM meetings WHERE id=?", (meeting_id,))
             db.commit()
             db.execute("VACUUM")

@@ -925,6 +925,36 @@ ul { padding: 0; list-style: none; }
 .dos-week > span { display: block; width: 100%; border-radius: 4px 4px 2px 2px; }
 .dos-series { margin-top: 10px; }
 
+/* --- этап 9: живое досье */
+.dos-gist { margin-top: 12px; padding: 18px 22px; display: flex; flex-direction: column; gap: 8px; }
+.dos-gist-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dos-gist-tag { font-size: 12px; color: var(--text3); }
+.dos-gist-tag.stale { color: var(--warn-text); }
+.dos-gist-text { margin: 0; font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
+.dos-gist-src { font-size: 12px; color: var(--text3); }
+.dos-gist-src .link-btn { font-size: 12px; }
+.dos-pinrow { position: relative; }
+.dos-pinrow > .dos-line, .dos-pinrow > .dos-hang { padding-right: 34px; }
+.dos-pinbtn { position: absolute; top: 8px; right: 0; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--text3); opacity: 0; transition: opacity .15s; }
+.dos-pinrow:hover .dos-pinbtn, .dos-pinbtn:focus-visible, .dos-pinrow.pinned .dos-pinbtn { opacity: 1; }
+.dos-pinbtn:hover:not(:disabled) { background: var(--fill); color: var(--accent); }
+.dos-pinrow.pinned .dos-pinbtn { color: var(--accent); cursor: default; }
+@media (hover: none) { .dos-pinbtn { opacity: 1; } }
+.dos-pin { padding: 10px 0; border-top: 1px solid var(--sep); display: flex; flex-direction: column; gap: 3px; }
+.dos-section-head + .dos-pin { border-top: none; }
+.dos-pin-text { font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.dos-pin-kind { font-weight: 600; color: var(--text2); }
+.dos-pin-actions { display: flex; gap: 14px; margin-top: 2px; }
+.dos-pin-actions .link-btn { font-size: 12px; }
+.dos-pin-add { display: flex; gap: 8px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--sep); }
+.dos-pin-add input { flex: 1; min-width: 0; border: none; background: var(--fill); border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 14px; color: var(--text); outline: none; }
+.dos-hang { padding: 8px 0; border-top: 1px solid var(--sep); display: flex; flex-direction: column; gap: 2px; }
+.dos-section-head + .dos-pinrow > .dos-hang { border-top: none; }
+.dos-occ { margin: 4px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+.dos-occ .link-btn { font-size: 13px; text-align: left; }
+.dos-muted { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; color: var(--text2); }
+.dos-muted .link-btn { font-size: 13px; flex-shrink: 0; }
+
 @media (max-width: 900px) {
   .dos-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dos-grid { grid-template-columns: minmax(0, 1fr); }

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, views, voice, waveform
+from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -57,6 +57,7 @@ class Watcher:
                 audit.record("system", "record.processed", target="meeting", target_id=fresh_id)
                 if core.cfg.get("suggestions_auto", True):
                     suggest.scan_async(core, fresh_id)
+                live.refresh_for_meeting_async(core, fresh_id, use_model=bool(core.cfg.get("dossier_model", True)))
             self._notify_done(before)
         self._was_active = queue["active"]
         if self._tick % 3 == 0:
@@ -538,6 +539,7 @@ def create_app() -> FastAPI:
         default_template: str = "meeting"
         lock_timeout_min: int | None = None
         suggestions_auto: bool | None = None
+        dossier_model: bool | None = None
 
     @app.get("/api/settings")
     def get_settings():
@@ -562,6 +564,8 @@ def create_app() -> FastAPI:
                 values["lock_timeout_min"] = core.cfg.get("lock_timeout_min", lock.DEFAULT_TIMEOUT)
             if values.get("suggestions_auto") is None:
                 values["suggestions_auto"] = core.cfg.get("suggestions_auto", True)
+            if values.get("dossier_model") is None:
+                values["dossier_model"] = core.cfg.get("dossier_model", True)
             saved = core.apply_settings(values)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -1191,6 +1195,9 @@ def create_app() -> FastAPI:
             elif kind in ("task", "decision"):
                 found = storage.one(f"SELECT m.title FROM {kind}s t JOIN meetings m ON m.id=t.meeting_id WHERE t.id=?", (ident,))
                 titles[ident] = ("задача" if kind == "task" else "решение") + (f" из «{found['title']}»" if found else " (запись стёрта)")
+            elif kind == "pin":
+                found = storage.one("SELECT scope,owner_id FROM dossier_pins WHERE id=?", (ident,))
+                titles[ident] = "закреплённый факт" if found else "закреплённый факт (убран)"
             elif kind == "suggestion":
                 found = storage.one("SELECT title FROM suggestions WHERE id=?", (ident,))
                 titles[ident] = f"предложение «{found['title']}»" if found else "предложение"
@@ -1308,6 +1315,88 @@ def create_app() -> FastAPI:
             return dossier.project(core, project_id)
         except KeyError as exc:
             raise HTTPException(404, str(exc.args[0])) from exc
+
+    # ------------------------------------------------------------------ живое досье: закрепления, висящие вопросы, обновление
+    class PinBody(BaseModel):
+        text: str = Field(..., max_length=2000)
+        kind: str = "manual"
+        meetingId: str = ""
+        sec: float | None = None
+
+    class PinText(BaseModel):
+        text: str = Field(..., max_length=2000)
+
+    class MuteBody(BaseModel):
+        text: str = Field(..., max_length=2000)
+        meetingId: str = ""
+
+    def owner_check(scope: str, owner_id: str) -> str:
+        _meetings, name = live.meetings_of(core, scope, owner_id)
+        if not name:
+            raise HTTPException(404, "Человек не найден" if scope == "person" else "Проект не найден")
+        return name
+
+    def dossier_call(fn, *args, **kwargs):
+        try:
+            result = fn(*args, **kwargs)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc.args[0])) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        core.data_version += 1
+        return result
+
+    def add_pin(scope: str, owner_id: str, body: PinBody):
+        owner_check(scope, owner_id)
+        return dossier_call(live.add_pin, core, scope, owner_id, body.text, kind=body.kind, meeting_id=body.meetingId, sec=body.sec)
+
+    @app.post("/api/people/{person_id}/pins")
+    def person_pin(person_id: str, body: PinBody):
+        return add_pin("person", person_id, body)
+
+    @app.post("/api/projects/{project_id}/pins")
+    def project_pin(project_id: str, body: PinBody):
+        return add_pin("project", project_id, body)
+
+    @app.patch("/api/pins/{pin_id}")
+    def pin_edit(pin_id: str, body: PinText):
+        return dossier_call(live.edit_pin, core, pin_id, body.text)
+
+    @app.delete("/api/pins/{pin_id}")
+    def pin_remove(pin_id: str):
+        dossier_call(live.remove_pin, pin_id)
+        return {"ok": True}
+
+    def mute(scope: str, owner_id: str, body: MuteBody):
+        owner_check(scope, owner_id)
+        row = dossier_call(live.mute_question, scope, owner_id, body.text, body.meetingId)
+        return {"id": row["id"], "text": row["text"]}
+
+    @app.post("/api/people/{person_id}/hanging/mute")
+    def person_mute(person_id: str, body: MuteBody):
+        return mute("person", person_id, body)
+
+    @app.post("/api/projects/{project_id}/hanging/mute")
+    def project_mute(project_id: str, body: MuteBody):
+        return mute("project", project_id, body)
+
+    @app.delete("/api/hanging/{mute_id}")
+    def hanging_unmute(mute_id: str):
+        dossier_call(live.unmute_question, mute_id)
+        return {"ok": True}
+
+    def refresh(scope: str, owner_id: str):
+        owner_check(scope, owner_id)
+        started = live.refresh_async(core, [(scope, owner_id)], actor="cabinet", use_model=True)
+        return {"started": started}
+
+    @app.post("/api/people/{person_id}/refresh")
+    def person_refresh(person_id: str):
+        return refresh("person", person_id)
+
+    @app.post("/api/projects/{project_id}/refresh")
+    def project_refresh(project_id: str):
+        return refresh("project", project_id)
 
     class ProjectPatch(BaseModel):
         status: str | None = None

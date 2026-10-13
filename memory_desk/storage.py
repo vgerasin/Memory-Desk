@@ -111,6 +111,23 @@ def initialize() -> None:
                 created_at TEXT NOT NULL, updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS suggestions_meeting ON suggestions(meeting_id);
+            CREATE TABLE IF NOT EXISTS dossier_pins (
+                id TEXT PRIMARY KEY, scope TEXT NOT NULL, owner_id TEXT NOT NULL, text TEXT NOT NULL,
+                origin TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'manual',
+                meeting_id TEXT NOT NULL DEFAULT '', sec REAL, edited INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS dossier_pins_owner ON dossier_pins(scope, owner_id);
+            CREATE TABLE IF NOT EXISTS dossier_mutes (
+                id TEXT PRIMARY KEY, scope TEXT NOT NULL, owner_id TEXT NOT NULL, text TEXT NOT NULL,
+                meeting_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS dossier_mutes_owner ON dossier_mutes(scope, owner_id);
+            CREATE TABLE IF NOT EXISTS dossier_gists (
+                scope TEXT NOT NULL, owner_id TEXT NOT NULL, text TEXT NOT NULL, engine TEXT NOT NULL,
+                signature TEXT NOT NULL, sources TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL,
+                PRIMARY KEY(scope, owner_id)
+            );
             CREATE TABLE IF NOT EXISTS meeting_overlaps (
                 meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
                 sec REAL NOT NULL, PRIMARY KEY(meeting_id, sec)
