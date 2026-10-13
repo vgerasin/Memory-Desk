@@ -12,12 +12,13 @@ import { BulkBar, MoreButton, PAGE, useBulk } from '../components/Bulk'
 import { DecisionRow, TaskRow } from '../components/Items'
 import { RecordMenus } from '../components/RecordMenus'
 import { RebuildPanel } from '../components/RebuildPanel'
+import { ViewsPanel } from '../components/ViewsPanel'
 import { CalendarSuggest } from '../components/CalendarSuggest'
 import { EventDialog, type EventDraft } from '../components/EventDialog'
 import { Player, type PlayerHandle } from '../components/Player'
 import { SpeakerPanel, SpeakerPicker, openPicker, speakerColor, type PickerTarget } from '../components/Speakers'
 
-type View = 'overview' | 'transcript' | 'actions' | 'questions'
+type View = 'overview' | 'transcript' | 'actions' | 'questions' | 'views'
 const FILTER_KEYS = ['project', 'person', 'type', 'status', 'period'] as const
 
 function RecordRow({ r, selected, href, picking, checked, onCheck }: {
@@ -84,6 +85,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   const tabs = [
     { key: 'overview' as View, label: 'Обзор' }, { key: 'transcript' as View, label: 'Стенограмма' },
     { key: 'actions' as View, label: 'Решения и задачи', count: nAct }, { key: 'questions' as View, label: 'Вопросы и риски', count: nQ },
+    { key: 'views' as View, label: 'Взгляды', count: m.views?.length || undefined },
   ]
 
   const archive = async () => {
@@ -257,6 +259,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
           </div>
         </div>
       )}
+      {view === 'views' && <ViewsPanel meeting={m} onJump={jump} />}
       {eventDraft && <EventDialog draft={eventDraft} onClose={() => setEventDraft(null)} />}
     </article>
   )
@@ -318,7 +321,7 @@ export function Records() {
   const bulk = useBulk()
   const routeId = route.segments[1] ?? null
   const selectedId = routeId ?? items[0]?.id ?? null
-  const view = (['overview', 'transcript', 'actions', 'questions'].includes(params.get('view') ?? '') ? params.get('view') : (params.get('t') ? 'transcript' : 'overview')) as View
+  const view = (['overview', 'transcript', 'actions', 'questions', 'views'].includes(params.get('view') ?? '') ? params.get('view') : (params.get('t') ? 'transcript' : 'overview')) as View
   const t = params.get('t') != null && params.get('t') !== '' ? Number(params.get('t')) : null
 
   const filterQuery = (patch: Record<string, string>) => buildQuery({ ...filters, q, ...patch })

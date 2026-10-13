@@ -43,6 +43,7 @@ export interface MeetingDetail extends MeetingItem {
   speakers: SpeakerInfo[]; diarization: DiarizationStatus | null
   obsidianUrl: string | null; notePath: string; hasAudio: boolean; audioUrl: string | null
   template?: { id: string; name: string; suggestedId: string }; extraSections?: { title: string; items: Fact[] }[]
+  views?: ViewDto[]
 }
 
 export interface MeetingsResponse { items: MeetingItem[]; total: number; counts: { total: number; needsReview: number; noProject: number } }
@@ -234,4 +235,15 @@ export interface TemplatesResponse { items: TemplateDto[]; problems: string[]; d
 export interface RebuildState {
   state: 'idle' | 'running' | 'done' | 'error'; templateId?: string; requestedId?: string; fallback?: string
   keptTasks?: number; keptDecisions?: number; message?: string
+}
+
+export interface ViewDto {
+  id: string; title: string; kind: 'preset' | 'custom'; instruction: string; date: string; model: string
+  items: Fact[]; edited: boolean
+}
+export interface ViewPreset { id: string; title: string; instruction: string; limit: number }
+export interface ViewPresets { presets: ViewPreset[]; max: number }
+export interface ViewJob {
+  state: 'idle' | 'running' | 'done' | 'error'; viewId?: string; title?: string; label?: string
+  percent?: number; part?: number; total?: number; elapsed?: number; message?: string
 }

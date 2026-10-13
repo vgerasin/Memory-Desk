@@ -1,4 +1,4 @@
-"""Этап 3.1: библиотека шаблонов заметки."""
+"""Этап 3.1: библиотека шаблонов заметки. Этап 3.2: взгляды на запись."""
 from __future__ import annotations
 
 import re
@@ -24,10 +24,10 @@ TRANSCRIPT = (
 def _modules(fixture_dir):
     # модули приложения читают окружение при импорте, поэтому импортируем их только после `fixture_dir`
     sys.path.insert(0, str(ROOT))
-    import meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates  # noqa: F401
+    import meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views  # noqa: F401
     g = globals()
-    g["mp"], g["knowledge"], g["storage"], g["templates"] = (
-        meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates)
+    g["mp"], g["knowledge"], g["storage"], g["templates"], g["views"] = (
+        meetings_process, memory_desk.knowledge, memory_desk.storage, memory_desk.templates, memory_desk.views)
 
 
 @pytest.fixture()
@@ -618,3 +618,225 @@ def test_protocol_progress_without_model_and_percent_curve(client, items, monkey
     job = {"state": "running", "base": 15, "span": 72, "tau": 14, "stageStarted": 100.0}
     values = [materials._percent(job, 100 + t) for t in (0, 5, 15, 40, 600)]
     assert values == sorted(values) and values[0] == 15 and values[-1] <= 87
+
+
+# --------------------------------------------------------------------------- 3.2 взгляды на запись
+
+def fake_views(monkeypatch, answer=None, calls=None):
+    """Подменяет запрос модели для взглядов; `answer(prompt)` возвращает словарь ответа."""
+    from memory_desk import llm
+
+    def fake(prompt, **kwargs):
+        if calls is not None:
+            calls.append(prompt)
+        if answer:
+            return answer(prompt)
+        return {"items": [{"text": "Справочник ведём в КХД", "evidence_time": "00:02:00"},
+                          {"text": "Иван подготовит выгрузку до пятницы", "evidence_time": "00:01:30"}]}
+    monkeypatch.setattr(llm, "ollama_json", fake)
+
+
+def wait_view(client, meeting_id):
+    for _ in range(100):
+        state = client.get(f"/api/meetings/{meeting_id}/views/status").json()
+        if state["state"] in {"done", "error"}:
+            return state
+        time.sleep(0.05)
+    raise AssertionError("взгляд не построился")
+
+
+@pytest.fixture(autouse=True)
+def _clean_views():
+    yield
+    views.JOBS.clear()
+
+
+def add_view(client, note, **body):
+    response = client.post(f"/api/meetings/{note.id}/views", json=body)
+    assert response.status_code == 200, response.text
+    return wait_view(client, note.id)
+
+
+def test_presets_listed(client):
+    data = client.get("/api/views/presets").json()
+    assert [p["id"] for p in data["presets"]] == ["decisions", "tasks_by_person", "client_questions", "risks", "exec5"]
+    assert data["max"] == 8 and all(p["instruction"] for p in data["presets"])
+
+
+def test_view_section_roundtrip():
+    section = views.render_section("c-demo", "custom", "Что обсудить с -- юристом", "Выпиши вопросы юристу — сроки и \"суммы\"",
+                                   [{"text": "Сроки договора", "evidence_time": "00:01:10"}], "qwen3:4b")
+    assert "<!-- md-view id=c-demo kind=custom" in section
+    marker = section.splitlines()[2]
+    assert marker.count("--") == 2   # открытие и закрытие, внутри двойных дефисов нет
+    found = views.parse_sections(section)
+    assert len(found) == 1 and found[0]["title"] == "Что обсудить с -- юристом" and not found[0]["edited"]
+    assert found[0]["instruction"].startswith("Выпиши вопросы юристу") and found[0]["items"][0]["t"] == "00:01:10"
+    assert found[0]["model"] == "qwen3:4b"
+    edited = section.replace("Сроки договора", "Сроки договора и оплата")
+    assert views.parse_sections(edited)[0]["edited"] is True
+
+
+def test_add_view_keeps_rest_of_note_byte_identical(client, note, monkeypatch):
+    fake_views(monkeypatch)
+    before = note.path.read_text(encoding="utf-8")
+    state = add_view(client, note, presetId="decisions")
+    assert state["state"] == "done" and state["percent"] == 100
+    after = note.path.read_text(encoding="utf-8")
+    assert "## Взгляд: Только решения" in after and "Справочник ведём в КХД — `⏱ 00:02:00`" in after
+    assert after.index("## Взгляд: Только решения") < after.index("## Стенограмма")
+    # убираем раздел взгляда — остальной текст совпадает с исходным до байта
+    assert client.delete(f"/api/meetings/{note.id}/views/decisions").status_code == 200
+    assert note.path.read_text(encoding="utf-8") == before
+    assert client.delete(f"/api/meetings/{note.id}/views/decisions").status_code == 404
+
+
+def test_view_in_record_and_not_in_extra_sections(client, note, monkeypatch):
+    fake_views(monkeypatch)
+    add_view(client, note, presetId="risks")
+    detail = client.get(f"/api/meetings/{note.id}").json()
+    assert [v["id"] for v in detail["views"]] == ["risks"]
+    view = detail["views"][0]
+    assert view["title"] == "Риски" and view["kind"] == "preset" and view["edited"] is False
+    assert view["items"][0] == {"text": "Справочник ведём в КХД", "t": "00:02:00", "tSec": 120}
+    assert all(not s["title"].startswith("Взгляд") for s in detail["extraSections"])
+    # основное саммари и задачи записи не изменились
+    assert detail["summary"] == ["Старая заметка"]
+    assert {t["text"] for t in detail["tasks"]} == {"Подготовить выгрузку клиентов", "Старая задача, которой нет в стенограмме"}
+
+
+def test_view_reaches_search_index_without_service_line(client, note, monkeypatch):
+    fake_views(monkeypatch)
+    add_view(client, note, presetId="exec5")
+    meeting = client.app.state.core.by_id[note.id]
+    chunks = [c for c in knowledge.sections(meeting) if c["section"] == "Взгляд: Для руководителя на 5 строк"]
+    assert chunks and "Иван подготовит выгрузку" in chunks[0]["text"] and "md-view" not in chunks[0]["text"]
+    assert chunks[0]["timestamp"] in {"00:02:00", "00:01:30"}
+
+
+def test_refresh_respects_manual_edits(client, note, monkeypatch):
+    fake_views(monkeypatch)
+    add_view(client, note, presetId="decisions")
+    text = note.path.read_text(encoding="utf-8")
+    head, view = text.split("## Взгляд: Только решения")
+    note.path.write_text(head + "## Взгляд: Только решения" + view.replace("Справочник ведём в КХД —", "Справочник ведём в КХД (правка Валерия) —"),
+                         encoding="utf-8")
+    client.app.state.core.reload(force=True)
+    assert client.get(f"/api/meetings/{note.id}").json()["views"][0]["edited"] is True
+    refused = client.post(f"/api/meetings/{note.id}/views/decisions/refresh")
+    assert refused.status_code == 409 and "правили вручную" in refused.json()["detail"]
+    assert "правка Валерия" in note.path.read_text(encoding="utf-8")   # молча не затёрто
+    fake_views(monkeypatch, answer=lambda p: {"items": [{"text": "Новое решение", "evidence_time": "00:02:00"}]})
+    assert client.post(f"/api/meetings/{note.id}/views/decisions/refresh", params={"force": "true"}).status_code == 200
+    assert wait_view(client, note.id)["state"] == "done"
+    final = note.path.read_text(encoding="utf-8")
+    assert "Новое решение" in final and "правка Валерия" not in final and final.count("## Взгляд: Только решения") == 1
+    assert client.get(f"/api/meetings/{note.id}").json()["views"][0]["edited"] is False
+
+
+def test_refresh_of_unedited_view_needs_no_confirmation(client, note, monkeypatch):
+    fake_views(monkeypatch)
+    add_view(client, note, presetId="risks")
+    assert client.post(f"/api/meetings/{note.id}/views/risks/refresh").status_code == 200
+    assert wait_view(client, note.id)["state"] == "done"
+    assert client.post(f"/api/meetings/{note.id}/views/нет/refresh").status_code == 404
+
+
+def test_custom_view_and_validation(client, note, monkeypatch):
+    calls = []
+    fake_views(monkeypatch, calls=calls)
+    assert client.post(f"/api/meetings/{note.id}/views", json={"title": "Только цифры", "instruction": "коротко"}).status_code == 400
+    assert client.post(f"/api/meetings/{note.id}/views", json={"title": "", "instruction": "Выпиши все цифры и даты"}).status_code == 400
+    assert client.post(f"/api/meetings/{note.id}/views", json={"presetId": "нет"}).status_code == 404
+    assert client.post("/api/meetings/нет/views", json={"presetId": "risks"}).status_code == 404
+    add_view(client, note, title="Что сказать юристу", instruction="Выпиши всё, что нужно согласовать с юристом")
+    view = client.get(f"/api/meetings/{note.id}").json()["views"][0]
+    assert view["kind"] == "custom" and view["title"] == "Что сказать юристу" and view["id"].startswith("c-")
+    assert "согласовать с юристом" in view["instruction"] and "согласовать с юристом" in calls[0]
+    # повторный пересчёт использует сохранённый фокус
+    assert client.post(f"/api/meetings/{note.id}/views/{view['id']}/refresh").status_code == 200
+    wait_view(client, note.id)
+    assert "согласовать с юристом" in calls[-1]
+    # то же название второй раз — это тот же взгляд
+    assert client.post(f"/api/meetings/{note.id}/views", json={"title": "Что сказать юристу", "instruction": "Другой фокус тут"}).status_code == 409
+
+
+def test_duplicate_and_limit(client, note, monkeypatch):
+    fake_views(monkeypatch)
+    add_view(client, note, presetId="risks")
+    assert client.post(f"/api/meetings/{note.id}/views", json={"presetId": "risks"}).status_code == 409
+    for index in range(7):
+        add_view(client, note, title=f"Фокус {index}", instruction="Выпиши то, что относится к фокусу")
+    over = client.post(f"/api/meetings/{note.id}/views", json={"presetId": "decisions"})
+    assert over.status_code == 400 and "не больше 8" in over.json()["detail"]
+
+
+def test_view_errors_leave_note_untouched(client, note, monkeypatch):
+    from memory_desk import llm
+    monkeypatch.setattr(llm, "ollama_json", lambda prompt, **k: (_ for _ in ()).throw(RuntimeError("Ollama не отвечает. Запустите Ollama.")))
+    before = note.path.read_text(encoding="utf-8")
+    assert client.post(f"/api/meetings/{note.id}/views", json={"presetId": "risks"}).status_code == 200
+    state = wait_view(client, note.id)
+    assert state["state"] == "error" and "Ollama" in state["message"]
+    assert note.path.read_text(encoding="utf-8") == before
+    assert client.get("/api/meetings/нет/views/status").json() == {"state": "idle"}
+
+
+def test_long_transcript_is_read_in_parts_and_condensed(client, note, monkeypatch):
+    long_text = "\n\n".join(f"[00:{i // 60:02d}:{i % 60:02d}] **Спикер 1:** " + "Обсуждаем детали проекта. " * 20 for i in range(1, 40))
+    monkeypatch.setattr(knowledge, "meeting_transcript", lambda m: long_text)
+    calls = []
+
+    def answer(prompt):
+        calls.append(prompt)
+        if prompt.startswith("Ниже пункты"):
+            return {"items": [{"text": "Итоговый пункт", "evidence_time": "00:00:30"}]}
+        return {"items": [{"text": f"Пункт {len(calls)}-{i}", "evidence_time": "00:00:30"} for i in range(5)] + [{"text": "Повтор", "evidence_time": "00:00:30"}]}
+    fake_views(monkeypatch, answer=answer)
+    add_view(client, note, presetId="exec5")
+    assert len(calls) >= 3 and calls[-1].startswith("Ниже пункты")
+    view = client.get(f"/api/meetings/{note.id}").json()["views"][0]
+    assert [i["text"] for i in view["items"]] == ["Итоговый пункт"]
+    # дубли между частями не копятся, если сводить не нужно
+    monkeypatch.setattr(views, "build_items", views.build_items)
+    items = views.build_items(long_text, "Тест", "Выпиши всё что нужно", 100)
+    assert len([i for i in items if i["text"] == "Повтор"]) == 1
+
+
+def test_empty_answer_gives_explicit_placeholder(client, note, monkeypatch):
+    fake_views(monkeypatch, answer=lambda p: {"items": []})
+    add_view(client, note, presetId="client_questions")
+    text = note.path.read_text(encoding="utf-8")
+    assert "Не выявлено." in text.split("## Взгляд: Вопросы к заказчику")[1].split("## ")[0]
+    assert client.get(f"/api/meetings/{note.id}").json()["views"][0]["items"] == []
+
+
+def test_template_rebuild_keeps_views(client, note, monkeypatch):
+    fake_model(monkeypatch)
+    fake_views(monkeypatch)
+    add_view(client, note, presetId="risks")
+    view_text = views.sections_text(note.path.read_text(encoding="utf-8"))
+    assert client.post(f"/api/meetings/{note.id}/rebuild", json={"templateId": "lecture"}).status_code == 200
+    assert wait_rebuild(client, note.id)["state"] == "done"
+    after = note.path.read_text(encoding="utf-8")
+    assert view_text in after and after.index("## Взгляд: Риски") < after.index("## Стенограмма")
+    assert [v["id"] for v in client.get(f"/api/meetings/{note.id}").json()["views"]] == ["risks"]
+
+
+def test_second_view_while_first_runs_is_refused(client, note, monkeypatch):
+    import threading
+    gate = threading.Event()
+
+    def slow(prompt, **k):
+        gate.wait(5)
+        return {"items": []}
+    from memory_desk import llm
+    monkeypatch.setattr(llm, "ollama_json", slow)
+    try:
+        assert client.post(f"/api/meetings/{note.id}/views", json={"presetId": "risks"}).status_code == 200
+        busy = client.post(f"/api/meetings/{note.id}/views", json={"presetId": "decisions"})
+        assert busy.status_code == 409 and "уже строится" in busy.json()["detail"]
+        assert client.get(f"/api/meetings/{note.id}/views/status").json()["state"] == "running"
+    finally:
+        gate.set()
+        wait_view(client, note.id)

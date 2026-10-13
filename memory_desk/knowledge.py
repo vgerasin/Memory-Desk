@@ -550,7 +550,7 @@ def sections(meeting: Meeting) -> list[dict]:
     chunks = []
     for part in re.split(r"(?m)^##\s+", meeting.content)[1:]:
         heading, _, body = part.partition("\n")
-        body = body.strip()
+        body = re.sub(r"(?m)^<!--\s*md-view .*?-->[ \t]*\n?", "", body).strip()  # служебная строка взгляда
         if not body or heading.strip() == "Карта встречи":
             continue
         paragraphs = [p.strip() for p in body.split("\n\n") if p.strip() and not p.startswith("```")]

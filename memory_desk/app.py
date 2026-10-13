@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, voice, waveform
+from . import __version__, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -473,6 +473,41 @@ def create_app() -> FastAPI:
     @app.get("/api/meetings/{meeting_id}/rebuild")
     def rebuild_status(meeting_id: str):
         return rebuild.status(meeting_id)
+
+    # ------------------------------------------------------------------ взгляды на запись
+    class ViewBody(BaseModel):
+        presetId: str = ""
+        title: str = ""
+        instruction: str = ""
+        limit: int | None = None
+
+    def view_call(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except views.ViewError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+
+    @app.get("/api/views/presets")
+    def view_presets():
+        return {"presets": views.public_presets(), "max": views.MAX_VIEWS}
+
+    @app.post("/api/meetings/{meeting_id}/views")
+    def add_view(meeting_id: str, body: ViewBody):
+        return view_call(views.start, core, meeting_id, body.model_dump())
+
+    @app.post("/api/meetings/{meeting_id}/views/{view_id}/refresh")
+    def refresh_view(meeting_id: str, view_id: str, force: bool = False):
+        return view_call(views.start, core, meeting_id, {"viewId": view_id}, refresh=True, force=force)
+
+    @app.delete("/api/meetings/{meeting_id}/views/{view_id}")
+    def delete_view(meeting_id: str, view_id: str):
+        if not view_call(views.delete, core, meeting_id, view_id):
+            raise HTTPException(404, "Такого взгляда в записи нет")
+        return {"ok": True}
+
+    @app.get("/api/meetings/{meeting_id}/views/status")
+    def view_status(meeting_id: str):
+        return views.status(meeting_id)
 
     # ------------------------------------------------------------------ SSE
     @app.get("/api/stream")

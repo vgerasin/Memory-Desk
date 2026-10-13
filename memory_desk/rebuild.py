@@ -135,7 +135,10 @@ def build_text(meeting: knowledge.Meeting, template: templates.Template, data: d
         sections = _replace_section(sections + "\n", knowledge.DECISION_SECTION, "\n".join(
             knowledge.render_item_line("decisions", i) for i in decision_lines) or "Не выявлено.")
     signature = f"\n_{used.signature}_\n" if used.signature else ""
-    new_body = f"{preamble}\n{sections.strip()}\n\n{transcript_block}{signature}"
+    from . import views
+    kept_views = views.sections_text(body)  # «Взгляды» не зависят от шаблона и переживают пересборку
+    views_block = f"{kept_views.strip()}\n\n" if kept_views.strip() else ""
+    new_body = f"{preamble}\n{sections.strip()}\n\n{views_block}{transcript_block}{signature}"
     # поле template в метаданных
     line = f'template: "{used.id}"'
     if re.search(r"(?m)^template:.*$", front):
