@@ -3,6 +3,7 @@ import { api, errorText } from '../api'
 import { useApp } from '../store'
 import { fmtBytes } from '../format'
 import type { AppleStatus, BackupItem, Settings } from '../types'
+import { AppearanceSettings } from './AppearanceSettings'
 import { DictionarySettings } from './DictionarySettings'
 import { VoiceSettings } from './VoiceSettings'
 
@@ -97,6 +98,7 @@ export function SettingsModal() {
         {!form && !error && <div className="subtitle">Загрузка…</div>}
         {form && (
           <>
+            <AppearanceSettings />
             {dirField('recordings_dir', 'Папка записей', 'Сюда PLAUD или вы сами кладёте аудиофайлы')}
             {dirField('obsidian_dir', 'Папка Obsidian', 'Готовые заметки и стенограммы')}
             {dirField('archive_dir', 'Архив обработанных записей', 'Куда переносится аудио после обработки')}

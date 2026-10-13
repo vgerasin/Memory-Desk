@@ -2,7 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api, ApiError, errorText } from './api'
 import type { AppState, ChatMessage, ChatReply, ChatScope, MaterialTarget, Meta, PrepTarget } from './types'
 
-type Theme = 'light' | 'dark'
+import { applyPalette, DEFAULT_PALETTE, findPalette, type Appearance, type Mode, type Palette } from './themes'
+
+type Theme = Mode
 interface Toast { id: number; text: string; undo?: () => void }
 
 interface Ctx {
@@ -13,6 +15,10 @@ interface Ctx {
   invalidate: () => void
   theme: Theme
   toggleTheme: () => void
+  appearance: Appearance
+  setAppearance: (value: Appearance) => void
+  palette: Palette
+  setPalette: (id: string) => void
   wide: boolean
   toast: Toast | null
   showToast: (text: string, undo?: () => void) => void
@@ -50,11 +56,16 @@ export function useApp(): Ctx {
   return ctx
 }
 
-function readTheme(): Theme {
-  try {
-    const saved = localStorage.getItem('md-theme')
-    if (saved === 'light' || saved === 'dark') return saved
-  } catch { /* хранилище недоступно */ }
+function readStored(key: string): string | null {
+  try { return localStorage.getItem(key) } catch { return null }
+}
+
+function readAppearance(): Appearance {
+  const saved = readStored('md-appearance') ?? readStored('md-theme')  // md-theme — ключ прежней версии
+  return saved === 'light' || saved === 'dark' ? saved : 'system'
+}
+
+function systemMode(): Theme {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
@@ -65,7 +76,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false)
   const [meta, setMeta] = useState<Meta | null>(null)
   const [local, setLocal] = useState(0)
-  const [theme, setTheme] = useState<Theme>(readTheme)
+  const [appearance, setAppearance] = useState<Appearance>(readAppearance)
+  const [paletteId, setPaletteId] = useState<string>(() => findPalette(readStored('md-palette') ?? DEFAULT_PALETTE).id)
+  const [system, setSystem] = useState<Theme>(systemMode)
   const [wide, setWide] = useState(() => window.innerWidth >= 1180)
   const [toast, setToast] = useState<Toast | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
@@ -85,12 +98,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   scopeRef.current = scope
   const busyRef = useRef(false)
 
-  // --- тема
+  // --- оформление: палитра + светлый/тёмный режим (по умолчанию как в системе)
+  const theme: Theme = appearance === 'system' ? system : appearance
+  const palette = useMemo(() => findPalette(paletteId), [paletteId])
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    try { localStorage.setItem('md-theme', theme) } catch { /* ничего страшного */ }
-  }, [theme])
-  const toggleTheme = useCallback(() => setTheme(t => (t === 'dark' ? 'light' : 'dark')), [])
+    const query = window.matchMedia?.('(prefers-color-scheme: dark)')
+    if (!query) return
+    const onChange = () => setSystem(query.matches ? 'dark' : 'light')
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
+  useEffect(() => { applyPalette(palette, theme) }, [palette, theme])
+  useEffect(() => {
+    try {
+      localStorage.setItem('md-appearance', appearance)
+      localStorage.setItem('md-palette', paletteId)
+    } catch { /* ничего страшного */ }
+  }, [appearance, paletteId])
+  const toggleTheme = useCallback(() => setAppearance(theme === 'dark' ? 'light' : 'dark'), [theme])
 
   // --- адаптивность
   useEffect(() => {
@@ -201,13 +226,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<Ctx>(() => ({
-    state, live, meta, version, invalidate, theme, toggleTheme, wide, toast, showToast, hideToast, openMenu, setOpenMenu,
+    state, live, meta, version, invalidate, theme, toggleTheme, appearance, setAppearance, palette, setPalette: setPaletteId, wide, toast, showToast, hideToast, openMenu, setOpenMenu,
     chat: {
       open: chatOpen, scope, messages, busy, openChat, closeChat: () => setChatOpen(false),
       setScope, send, clear: () => setMessages([]),
     },
     currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, prep, setPrep, material, setMaterial,
-  }), [state, live, meta, version, invalidate, theme, toggleTheme, wide, toast, showToast, hideToast, openMenu,
+  }), [state, live, meta, version, invalidate, theme, toggleTheme, appearance, palette, wide, toast, showToast, hideToast, openMenu,
     chatOpen, scope, messages, busy, openChat, send, currentRecord, settingsOpen, storageOpen, prep, material])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
