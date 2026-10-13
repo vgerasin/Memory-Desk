@@ -132,8 +132,9 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
             <button className="tbtn" onClick={() => setEventDraft({ title: 'Продолжение: ' + m.title, date: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), meetingId: id })}>В Календарь</button>
           )}
           {m.obsidianUrl && <a className="tbtn" href={m.obsidianUrl} style={{ textDecoration: 'none' }}><span>Obsidian</span><IconOut /></a>}
-          <button className="tbtn sq" onClick={editing ? () => setEditing(false) : startEdit} title="Править текст" aria-label="Править текст">
-            {editing ? <span style={{ fontSize: 13, fontWeight: 500 }}>Отмена</span> : <IconEdit />}
+          <button className={'tbtn' + (editing ? '' : ' sq')} style={editing ? { color: 'var(--text2)' } : undefined}
+            onClick={editing ? () => setEditing(false) : startEdit} title={editing ? 'Отменить правку' : 'Править текст'} aria-label={editing ? 'Отмена' : 'Править текст'}>
+            {editing ? 'Отмена' : <IconEdit />}
           </button>
           <button className="tbtn sq" onClick={archive} title="В архив" aria-label="В архив"><IconArchive /></button>
         </div>
