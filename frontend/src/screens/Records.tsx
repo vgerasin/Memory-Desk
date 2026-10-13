@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { navigate, buildQuery, useRoute } from '../router'
+import { SeriesPanel } from '../components/SeriesPanel'
 import { useApi } from '../useApi'
 import { useApp } from '../store'
 import { useActions } from '../actions'
@@ -161,6 +162,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
               {m.summary.map((p, i) => <li key={i}><i /><span>{p}</span></li>)}
             </ul>
           )}
+          {!editing && <SeriesPanel meetingId={id} />}
           <div className="note-path mono">{m.status === 'completed' ? 'Опубликовано · ' : 'Ещё не опубликовано · '}{m.notePath}</div>
         </>
       )}

@@ -151,6 +151,7 @@ export function TaskRow({ task, first, source, onToggle, onConfirm, onReject, on
         <div className="text-row" style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
           <div className={'text' + (task.done ? ' done' : '')}>{task.text}</div>
           {task.draft && <span className="draft-badge">Черновик</span>}
+          {task.stuck && <span className="stuck-badge" title="Задача в работе без движения больше двух недель">{task.stuckReasons?.join(' · ')}</span>}
         </div>
         <div className="meta">
           <span>{ownerLabel(task.owner)}</span><span>·</span>

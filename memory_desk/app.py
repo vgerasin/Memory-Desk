@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, apple, config, dictionary, housekeeping, integrations, jobs, knowledge, materials, services, speakers, storage, voice, waveform
+from . import __version__, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, materials, series, services, speakers, storage, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -57,6 +57,14 @@ class Watcher:
         if core.cfg.get("reminders_enabled") and self._tick % 13 == 0:
             integrations.schedule_sync(core.cfg)
         self.backup_if_due()
+        if self._tick % 40 == 0:  # раз в минуту
+            self._morning()
+
+    def _morning(self) -> None:
+        try:
+            daily.send_morning_notification(self.core)
+        except Exception:  # noqa: BLE001 — сводка не должна ронять наблюдателя
+            pass
 
     def backup_if_due(self, now: float | None = None) -> bool:
         """Копия базы по расписанию из настроек; после каждой копии лишние старые удаляются."""
@@ -325,6 +333,8 @@ def create_app() -> FastAPI:
         reminders_scope: str = "mine"
         my_name: str = ""
         notify: bool = True
+        morning_brief: bool = True
+        morning_hour: int = 8
         backup_auto: bool = True
         backup_interval_hours: int = 24
         backup_keep: int = 7
@@ -402,6 +412,10 @@ def create_app() -> FastAPI:
     def today():
         return services.today_payload(core)
 
+    @app.get("/api/morning")
+    def morning():
+        return daily.morning_payload(core)
+
     @app.get("/api/meetings")
     def meetings(q: str = "", project: str = "", person: str = "", type: str = "", status: str = "",
                  period: str = "", archived: bool = False, limit: int = Query(0, ge=0, le=1000), offset: int = Query(0, ge=0)):
@@ -413,6 +427,16 @@ def create_app() -> FastAPI:
         if not meeting:
             raise HTTPException(404, "Запись не найдена")
         return meeting
+
+    @app.get("/api/series")
+    def series_list():
+        return {"items": series.listing(core.live_meetings())}
+
+    @app.get("/api/meetings/{meeting_id}/series")
+    def meeting_series(meeting_id: str):
+        if meeting_id not in core.by_id:
+            raise HTTPException(404, "Запись не найдена")
+        return {"series": series.for_meeting(core.live_meetings(), meeting_id)}
 
     @app.get("/api/meetings/{meeting_id}")
     def meeting(meeting_id: str):
@@ -694,6 +718,37 @@ def create_app() -> FastAPI:
     def analytics(days: int = Query(90, ge=0, le=3650)):
         return services.analytics(core, days)
 
+    class ConflictPair(BaseModel):
+        old: str
+        new: str
+
+    @app.get("/api/decisions/conflicts")
+    def decision_conflicts():
+        items = conflicts.candidates(services._decision_dto)
+        return {"items": items, "total": len(items)}
+
+    def conflict_pair(body: ConflictPair) -> tuple[dict, dict]:
+        pair = storage.rows("SELECT d.*, m.title mt, m.meeting_date md FROM decisions d JOIN meetings m ON m.id=d.meeting_id WHERE d.id IN (?,?)",
+                            (body.old, body.new))
+        info = {r["id"]: services._decision_dto(r, r["mt"], r["md"]) for r in pair}
+        if body.old not in info or body.new not in info or body.old == body.new:
+            raise HTTPException(404, "Решение не найдено")
+        return {**info[body.old], "date": info[body.old]["meetingDate"]}, {**info[body.new], "date": info[body.new]["meetingDate"]}
+
+    @app.post("/api/decisions/conflicts/check")
+    def check_conflict(body: ConflictPair):
+        old, new = conflict_pair(body)
+        try:
+            return conflicts.ask_model(old, new)
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+
+    @app.post("/api/decisions/conflicts/dismiss")
+    def dismiss_conflict(body: ConflictPair):
+        conflict_pair(body)
+        conflicts.dismiss(body.old, body.new)
+        return {"dismissed": True}
+
     @app.get("/api/decisions/tree")
     def decisions_tree(project: str = Query("", max_length=80), days: int = Query(0, ge=0, le=3650)):
         return services.decision_tree(core, project, days)
@@ -772,8 +827,9 @@ def create_app() -> FastAPI:
 
     # ------------------------------------------------------------------ задачи и решения
     @app.get("/api/tasks")
-    def tasks(kind: str = Query("tasks", pattern="^(tasks|decisions)$"), limit: int = Query(0, ge=0, le=1000), offset: int = Query(0, ge=0)):
-        return services.tasks_registry(core, kind, limit, offset)
+    def tasks(kind: str = Query("tasks", pattern="^(tasks|decisions)$"), limit: int = Query(0, ge=0, le=1000), offset: int = Query(0, ge=0),
+              stuck: bool = False):
+        return services.tasks_registry(core, kind, limit, offset, stuck)
 
     class ItemPatch(BaseModel):
         status: str | None = None

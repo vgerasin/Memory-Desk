@@ -8,6 +8,7 @@ import type { Hero, TaskDto, TodayPayload } from '../types'
 interface HeroItem { key: string; text: string; meta: string; go: () => void; task?: TaskDto }
 import { AvatarStack, ErrorBox, Loading } from '../components/ui'
 import { DueButton, TaskRow } from '../components/Items'
+import { MorningCard } from '../components/MorningCard'
 
 const stageLine = (label: string, index: number) => `${label} · этап ${index} из 12`
 
@@ -109,6 +110,8 @@ export function Today() {
           <div className="num" style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)' }}>{Math.floor(run.percent)}%</div>
         </button>
       )}
+
+      <MorningCard />
 
       {data.hero
         ? <HeroCard hero={data.hero} />

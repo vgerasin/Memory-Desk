@@ -62,12 +62,12 @@ export function BulkBar({ count, total, onAll, onClear, onStop, children }: {
 }
 
 /** Срок пачкой: быстрые кнопки, дата и «Без срока». */
-export function BulkDue({ disabled, onPick }: { disabled: boolean; onPick: (iso: string) => void }) {
+export function BulkDue({ disabled, onPick, label = 'Срок…' }: { disabled: boolean; onPick: (iso: string) => void; label?: string }) {
   const [open, setOpen] = useState(false)
   const quick: [string, string][] = [['Сегодня', isoDay(0)], ['Завтра', isoDay(1)], ['Через неделю', isoDay(7)]]
   return (
     <span className="bulk-pop-wrap">
-      <button className="btn s28" disabled={disabled} onClick={() => setOpen(o => !o)}>Срок…</button>
+      <button className="btn s28" disabled={disabled} onClick={() => setOpen(o => !o)}>{label}</button>
       {open && (
         <div className="bulk-pop" onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}>
           {quick.map(([label, iso]) => <button key={label} className="btn s28" onClick={() => { setOpen(false); onPick(iso) }}>{label}</button>)}

@@ -15,6 +15,7 @@ export interface TaskDto {
   id: string; text: string; owner: string; due: string | null; dueText: string
   t: string; tSec: number | null; status: 'draft' | 'open' | 'done' | 'rejected'
   draft: boolean; done: boolean; meetingId: string; meetingTitle: string; meetingDate: string
+  ageDays?: number; stuck?: boolean; stuckReasons?: string[]
 }
 export interface DecisionDto {
   id: string; text: string; owner: string; t: string; tSec: number | null
@@ -99,7 +100,7 @@ export interface Settings {
   recordings_dir: string; obsidian_dir: string; archive_dir: string
   retention_days: number; auto_process: boolean; diarize: boolean; voice_enabled: boolean; calendar_source: string
   apple_calendar: boolean; reminders_enabled: boolean; reminders_list: string; reminders_scope: 'mine' | 'all'; my_name: string
-  notify: boolean; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
+  notify: boolean; morning_brief: boolean; morning_hour: number; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
   exists?: Record<string, boolean>
 }
 
@@ -198,3 +199,26 @@ export interface CalendarRange {
   from: string; to: string; source: 'apple' | 'ics' | 'none'; error: string; configured: boolean
   days: CalendarDay[]; totals: { events: number; withRecord: number; recordsWithoutEvent: number }
 }
+
+export interface MorningTask { id: string; text: string; owner: string; due: string | null; dueText: string; meetingId: string; meetingTitle: string; tSec: number | null; ageDays: number }
+export interface MorningMeeting {
+  title: string; start: string; end: string; people: string[]; project: { id: string; title: string } | null; headline: string; hasRecord: boolean
+}
+export interface MorningPayload {
+  date: string; empty: boolean; message: string
+  counts: { overdue: number; mine: number; promised: number; meetings: number; stuck: number }
+  overdue: MorningTask[]; mine: MorningTask[]; promised: MorningTask[]; stuck: MorningTask[]; meetings: MorningMeeting[]
+}
+
+export interface SeriesItem { id: string; text: string; owner: string; status: string; deadline?: string }
+export interface SeriesInfo {
+  id: string; title: string; count: number; position: number
+  meetings: { id: string; title: string; date: string; time: string; current: boolean }[]
+  previous: { id: string; title: string; date: string; time: string } | null
+  decisionsNew: SeriesItem[]; tasksNew: SeriesItem[]; tasksClosed: SeriesItem[]; tasksOpen: SeriesItem[]
+  questionsNew: { text: string; sec: number | null }[]; questionsResolved: { text: string }[]
+  questionsRepeated: { text: string; sec: number | null; count: number; since: string }[]
+}
+
+export interface ConflictPair { key: string; similarity: number; project: string; old: DecisionDto; new: DecisionDto }
+export interface ConflictVerdict { relation: 'replaces' | 'contradicts' | 'consistent' | 'unrelated'; reason: string }

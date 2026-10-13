@@ -39,7 +39,7 @@ export function SettingsModal() {
         retention_days: Number(form.retention_days) || 14, auto_process: form.auto_process, diarize: form.diarize, voice_enabled: form.voice_enabled, calendar_source: form.calendar_source,
         apple_calendar: form.apple_calendar, reminders_enabled: form.reminders_enabled,
         reminders_list: form.reminders_list, reminders_scope: form.reminders_scope, my_name: form.my_name,
-        notify: form.notify, backup_auto: form.backup_auto,
+        notify: form.notify, morning_brief: form.morning_brief, morning_hour: Number(form.morning_hour) || 0, backup_auto: form.backup_auto,
         backup_interval_hours: Number(form.backup_interval_hours) || 24, backup_keep: Number(form.backup_keep) || 7,
       })
       showToast('Настройки сохранены')
@@ -129,6 +129,22 @@ export function SettingsModal() {
               <button className={'switch' + (form.notify ? ' on' : '')} role="switch" aria-checked={form.notify}
                 onClick={() => set('notify', !form.notify)}><i /></button>
             </div>
+            <div className="switch-row">
+              <div className="field" style={{ gap: 2 }}>
+                <label>Утренняя сводка</label>
+                <span className="hint">Одно уведомление в день: просроченное, встречи на сегодня, задачи на неделю. Требует включённых уведомлений</span>
+              </div>
+              <button className={'switch' + (form.morning_brief ? ' on' : '')} role="switch" aria-checked={form.morning_brief}
+                onClick={() => set('morning_brief', !form.morning_brief)}><i /></button>
+            </div>
+            {form.morning_brief && (
+              <div className="backup-plan">
+                <label htmlFor="morning-hour">Не раньше</label>
+                <select id="morning-hour" value={form.morning_hour} onChange={e => set('morning_hour', Number(e.target.value))}>
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                </select>
+              </div>
+            )}
             <DictionarySettings />
             <div className="apple-box">
               <div className="field" style={{ gap: 2 }}>

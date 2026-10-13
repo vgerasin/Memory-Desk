@@ -47,6 +47,8 @@ def defaults() -> dict:
         "reminders_scope": "mine",
         "my_name": "",
         "notify": True,
+        "morning_brief": True,
+        "morning_hour": 8,
         "backup_auto": True,
         "backup_interval_hours": 24,
         "backup_keep": 7,
@@ -83,6 +85,11 @@ def save_config(values: dict) -> dict:
     normalized["my_name"] = " ".join(str(normalized.get("my_name") or "").split())
     normalized["notify"] = bool(normalized["notify"])
     normalized["backup_auto"] = bool(normalized["backup_auto"])
+    normalized["morning_brief"] = bool(normalized["morning_brief"])
+    try:
+        normalized["morning_hour"] = min(23, max(0, int(normalized["morning_hour"])))
+    except (TypeError, ValueError):
+        raise ValueError("Час утренней сводки должен быть числом от 0 до 23")
     try:
         normalized["backup_interval_hours"] = min(24 * 30, max(1, int(normalized["backup_interval_hours"])))
         normalized["backup_keep"] = min(60, max(1, int(normalized["backup_keep"])))

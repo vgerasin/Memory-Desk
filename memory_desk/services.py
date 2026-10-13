@@ -8,7 +8,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import config, dictionary, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, voice
+from . import config, daily, dictionary, digest, integrations, jobs, knowledge, materials, speakers as speakers_mod, storage, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -85,6 +85,7 @@ def _task_dto(row: dict, meeting_title: str = "", meeting_date_value: str = "") 
         "t": t, "tSec": clock_seconds(t), "status": row["status"],
         "draft": row["status"] == "draft", "done": row["status"] == "done",
         "meetingId": row["meeting_id"], "meetingTitle": meeting_title, "meetingDate": meeting_date_value,
+        **daily.stuck_fields(row, meeting_date_value),
     }
 
 
@@ -235,7 +236,7 @@ def people_overview(core: Core) -> list[dict]:
     return result
 
 
-def tasks_registry(core: Core, kind: str, limit: int = 0, offset: int = 0) -> dict:
+def tasks_registry(core: Core, kind: str, limit: int = 0, offset: int = 0, stuck: bool = False) -> dict:
     meta = {r["id"]: r for r in storage.rows("SELECT id,title,meeting_date FROM meetings WHERE archived=0")}
     if kind == "decisions":
         raw = storage.rows("SELECT d.* FROM decisions d JOIN meetings m ON m.id=d.meeting_id WHERE d.status!='rejected' AND m.archived=0 "
@@ -248,12 +249,17 @@ def tasks_registry(core: Core, kind: str, limit: int = 0, offset: int = 0) -> di
         raw = storage.rows("SELECT t.* FROM tasks t JOIN meetings m ON m.id=t.meeting_id WHERE t.status!='rejected' AND m.archived=0 "
                            "ORDER BY t.status='draft' DESC, t.status='done' ASC, COALESCE(NULLIF(t.deadline,''),'9') ASC, m.recorded_at DESC")
         raw = [r for r in raw if r["meeting_id"] in meta]
+        if stuck:  # зависшие: самые старые первыми
+            raw = [r for r in raw if daily.stuck_fields(r, meta[r["meeting_id"]]["meeting_date"])["stuck"]]
+            raw.sort(key=lambda r: -daily.stuck_fields(r, meta[r["meeting_id"]]["meeting_date"])["ageDays"])
         total = len(raw)
         raw = raw[offset:offset + limit] if limit else raw
         items = [_task_dto(r, meta[r["meeting_id"]]["title"], meta[r["meeting_id"]]["meeting_date"]) for r in raw]
     counts = {
         "tasks": storage.one("SELECT COUNT(*) n FROM tasks t JOIN meetings m ON m.id=t.meeting_id WHERE t.status!='rejected' AND m.archived=0")["n"],
         "decisions": storage.one("SELECT COUNT(*) n FROM decisions d JOIN meetings m ON m.id=d.meeting_id WHERE d.status!='rejected' AND m.archived=0")["n"],
+        "stuck": sum(1 for r in storage.rows("SELECT t.* FROM tasks t JOIN meetings m ON m.id=t.meeting_id WHERE t.status='open' AND m.archived=0")
+                     if r["meeting_id"] in meta and daily.stuck_fields(r, meta[r["meeting_id"]]["meeting_date"])["stuck"]),
     }
     return {"items": items, "total": total, "counts": counts}
 
