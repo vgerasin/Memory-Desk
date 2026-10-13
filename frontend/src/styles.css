@@ -799,3 +799,9 @@ ul { padding: 0; list-style: none; }
 .view-source span + span::before { content: '·'; margin-right: 10px; }
 .view-source .view-edited { color: var(--danger); }
 .view-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+
+/* «Сохранить ответ в Obsidian» под ответом чата */
+.save-answer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.save-answer .saved-mark { font-size: 12px; font-weight: 600; color: var(--text2); }
+.save-answer .link-btn { font-size: 12px; text-decoration: none; }
+.save-answer .save-error { font-size: 12px; color: var(--danger); }

@@ -840,3 +840,76 @@ def test_second_view_while_first_runs_is_refused(client, note, monkeypatch):
     finally:
         gate.set()
         wait_view(client, note.id)
+
+
+# --------------------------------------------------------------------------- 3.3 сохранить ответ чата в Obsidian
+
+@pytest.fixture()
+def answers_dir(client):
+    import shutil
+    from memory_desk import knowledge as k
+    folder = k.WORKSPACE_DIR / "Ответы"
+    shutil.rmtree(folder, ignore_errors=True)
+    yield folder
+    shutil.rmtree(folder, ignore_errors=True)
+
+
+def chat_payload(note):
+    return {
+        "question": "Что решили про справочник?", "answer": "Решили вести справочник клиентов в КХД.\n# Не заголовок\n- Иван готовит выгрузку",
+        "scope": "Проект: КХД",
+        "sources": [{"meetingId": note.id, "title": "левое название", "date": "2026-10-10", "time": "11:00", "t": "00:02:00",
+                     "tSec": 120, "excerpt": "Решили: справочник ведём в КХД."},
+                    {"meetingId": "нет-такой", "title": "Удалённая запись | [x]", "t": "", "excerpt": "Фрагмент"}]}
+
+
+def test_save_answer_writes_note_with_links_and_timecodes(client, note, answers_dir):
+    response = client.post("/api/chat/save", json=chat_payload(note))
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["already"] is False and "Ответы/" in data["savedAs"]
+    assert data["obsidianUrl"].startswith("obsidian://open")
+    files = list(answers_dir.glob("*.md"))
+    assert len(files) == 1 and files[0].name.startswith(f"{datetime.now():%Y-%m-%d} — Что решили про справочник")
+    text = files[0].read_text(encoding="utf-8")
+    assert "type: chat_answer" in text and 'question: "Что решили про справочник?"' in text and 'scope: "Проект: КХД"' in text
+    assert re.search(r"(?m)^# Что решили про справочник\?$", text) and "Решили вести справочник клиентов в КХД." in text
+    assert "\\# Не заголовок" in text                                  # заголовок из ответа не ломает структуру
+    rel = knowledge.note_relative_path(note.path).removesuffix(".md")
+    assert f"[[{rel}|Разговор о справочнике]]" in text                  # название и путь — из архива, не из присланного
+    assert "— 10.10.2026, 11:00 · `⏱ 00:02:00`" in text and "> «Решили: справочник ведём в КХД.»" in text
+    assert "Удалённая запись / (x)" in text and "[[нет-такой" not in text   # неизвестная запись — просто текст
+    assert not any(m["title"].startswith("Что решили") for m in client.get("/api/meetings", params={"limit": 200}).json()["items"])
+
+
+def test_save_answer_twice_makes_no_duplicates_and_keeps_user_edits(client, note, answers_dir):
+    first = client.post("/api/chat/save", json=chat_payload(note)).json()
+    path = next(answers_dir.glob("*.md"))
+    path.write_text(path.read_text(encoding="utf-8") + "\nМоя пометка в Obsidian\n", encoding="utf-8")
+    second = client.post("/api/chat/save", json=chat_payload(note)).json()
+    assert second["already"] is True and second["savedAs"] == first["savedAs"]
+    assert len(list(answers_dir.glob("*.md"))) == 1 and "Моя пометка в Obsidian" in path.read_text(encoding="utf-8")
+    # другой ответ на тот же вопрос — отдельная заметка
+    other = chat_payload(note) | {"answer": "Другой ответ."}
+    assert client.post("/api/chat/save", json=other).json()["already"] is False
+    assert len(list(answers_dir.glob("*.md"))) == 2
+
+
+def test_save_answer_same_next_day_finds_existing(client, note, answers_dir):
+    from memory_desk import answers
+    payload = chat_payload(note)
+    yesterday = datetime.now() - timedelta(days=1)
+    first = answers.save(client.app.state.core, payload["question"], payload["answer"], payload["sources"], when=yesterday)
+    assert first["already"] is False
+    again = client.post("/api/chat/save", json=payload).json()
+    assert again["already"] is True and again["savedAs"] == first["savedAs"] and len(list(answers_dir.glob("*.md"))) == 1
+
+
+def test_save_answer_validation(client, note, answers_dir):
+    assert client.post("/api/chat/save", json={"question": " ", "answer": "x"}).status_code == 400
+    assert client.post("/api/chat/save", json={"question": "Вопрос", "answer": "  "}).status_code == 400
+    assert client.post("/api/chat/save", json={"question": "Вопрос"}).status_code == 422
+    weird = chat_payload(note) | {"question": 'Что/где: "когда"? <это> | всё*'}
+    assert client.post("/api/chat/save", json=weird).status_code == 200
+    name = next(answers_dir.glob("*.md")).name
+    assert not re.search(r'[\\/:*?"<>|]', name)

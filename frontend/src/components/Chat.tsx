@@ -91,6 +91,21 @@ export function Chat() {
                   Открыть окно: править, скачать, в Obsidian
                 </button>
               )}
+              {!m.pending && !m.error && !m.material && (m.sources?.length ?? 0) > 0 && (
+                <div className="save-answer">
+                  {m.saved ? (
+                    <>
+                      <span className="saved-mark">Сохранено в Obsidian</span>
+                      <a className="link-btn" href={m.saved.obsidianUrl}>Открыть заметку</a>
+                    </>
+                  ) : (
+                    <button className="btn s28" disabled={m.saving} onClick={() => void chat.saveAnswer(m.id)}>
+                      {m.saving ? 'Сохраняю…' : 'Сохранить в Obsidian'}
+                    </button>
+                  )}
+                  {m.saveError && <span className="save-error" role="alert">{m.saveError}</span>}
+                </div>
+              )}
               {m.digest && m.sources && m.sources.length > 0 && (
                 <div className="digest-note">Записи за период: {m.digest.shown < m.digest.records ? `последние ${m.digest.shown} из ${m.digest.records}` : m.digest.records}</div>
               )}

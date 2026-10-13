@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
+from . import __version__, answers, apple, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, materials, rebuild, series, services, speakers, storage, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -1217,6 +1217,22 @@ def create_app() -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         except knowledge.IndexNotReady as exc:
             raise HTTPException(503, "Поисковый индекс ещё готовится") from exc
+
+    class ChatSaveBody(BaseModel):
+        question: str = Field(..., min_length=1, max_length=2000)
+        answer: str = Field(..., min_length=1, max_length=30_000)
+        sources: list[dict] = Field(default_factory=list, max_length=20)
+        scope: str = Field("", max_length=200)
+
+    @app.post("/api/chat/save")
+    def chat_save(body: ChatSaveBody):
+        """«Сохранить ответ в Obsidian»: заметка Ответы/… с источниками; повторное сохранение того же ответа дублей не создаёт."""
+        try:
+            return answers.save(core, body.question, body.answer, body.sources, body.scope)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить заметку: {exc}") from exc
 
     # ------------------------------------------------------------------ фронтенд
     index_file = config.WEB_DIR / "index.html"

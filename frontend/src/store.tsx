@@ -32,6 +32,8 @@ interface Ctx {
     setScope: (scope: ChatScope) => void
     send: (text: string) => void
     clear: () => void
+    /** сохраняет ответ с источниками в Obsidian (заметка в «Ответах», повтор дублей не создаёт) */
+    saveAnswer: (id: number) => Promise<void>
   }
   currentRecord: string | null
   setCurrentRecord: (id: string | null) => void
@@ -197,6 +199,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const saveAnswer = useCallback(async (id: number) => {
+    const list = messagesRef.current
+    const index = list.findIndex(m => m.id === id)
+    const bot = list[index]
+    const user = [...list.slice(0, Math.max(0, index))].reverse().find(m => m.role === 'user')
+    if (!bot || !user || bot.saving) return
+    const current = scopeRef.current
+    const scope = 'label' in current ? current.label : 'Весь архив'
+    setMessages(m => m.map(x => x.id === id ? { ...x, saving: true, saveError: undefined } : x))
+    try {
+      const saved = await api.post<{ savedAs: string; obsidianUrl: string; already: boolean }>('/api/chat/save',
+        { question: user.text, answer: bot.text, sources: bot.sources ?? [], scope })
+      setMessages(m => m.map(x => x.id === id ? { ...x, saving: false, saved } : x))
+      showToast(saved.already ? 'Этот ответ уже сохранён: ' + saved.savedAs : 'Ответ сохранён в Obsidian: ' + saved.savedAs)
+    } catch (error) {
+      setMessages(m => m.map(x => x.id === id ? { ...x, saving: false, saveError: errorText(error) } : x))
+    }
+  }, [showToast])
+
   const openChat = useCallback((nextScope?: ChatScope, question?: string) => {
     if (nextScope) { setScope(nextScope); scopeRef.current = nextScope }
     setChatOpen(true)
@@ -229,11 +250,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     state, live, meta, version, invalidate, theme, toggleTheme, appearance, setAppearance, palette, setPalette: setPaletteId, wide, toast, showToast, hideToast, openMenu, setOpenMenu,
     chat: {
       open: chatOpen, scope, messages, busy, openChat, closeChat: () => setChatOpen(false),
-      setScope, send, clear: () => setMessages([]),
+      setScope, send, clear: () => setMessages([]), saveAnswer,
     },
     currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, prep, setPrep, material, setMaterial,
   }), [state, live, meta, version, invalidate, theme, toggleTheme, appearance, palette, wide, toast, showToast, hideToast, openMenu,
-    chatOpen, scope, messages, busy, openChat, send, currentRecord, settingsOpen, storageOpen, prep, material])
+    chatOpen, scope, messages, busy, openChat, send, saveAnswer, currentRecord, settingsOpen, storageOpen, prep, material])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
