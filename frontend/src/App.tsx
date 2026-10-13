@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react'
+import { Component, useEffect, type ReactNode } from 'react'
 import { Chat } from './components/Chat'
 import { Header } from './components/Header'
 import { SettingsModal } from './components/Settings'
@@ -6,23 +6,27 @@ import { StorageModal } from './components/Storage'
 import { PrepModal } from './components/PrepBrief'
 import { MaterialModal } from './components/Material'
 import { Toast } from './components/Toast'
-import { useRoute } from './router'
+import { navigate, useRoute } from './router'
 import { useApp } from './store'
 import { Analytics } from './screens/Analytics'
 import { Archive } from './screens/Archive'
 import { Calendar } from './screens/Calendar'
-import { Inbox } from './screens/Inbox'
 import { People } from './screens/People'
 import { Projects } from './screens/Projects'
 import { Records } from './screens/Records'
 import { Tasks } from './screens/Tasks'
 import { Today } from './screens/Today'
 
+function Redirect({ to }: { to: string }) {
+  useEffect(() => { navigate(to, true) }, [to])
+  return null
+}
+
 function Screen() {
   const { segments } = useRoute()
   switch (segments[0]) {
     case 'archive': return <Archive />
-    case 'inbox': return <Inbox />
+    case 'inbox': return <Redirect to="/records" />   // «Входящие» теперь часть «Записей»; старые ссылки и закладки ведут туда
     case 'records': return <Records />
     case 'projects': return <Projects />
     case 'people': return <People />

@@ -6,7 +6,7 @@ import type { ReindexStatus, SystemStatus } from '../types'
 import { IconGear, IconRefresh, IconSearch, Segmented } from './ui'
 
 const TABS = [
-  { key: '/', label: 'Сегодня' }, { key: '/inbox', label: 'Входящие' }, { key: '/records', label: 'Записи' },
+  { key: '/', label: 'Сегодня' }, { key: '/records', label: 'Записи' },
   { key: '/projects', label: 'Проекты' }, { key: '/people', label: 'Люди' }, { key: '/tasks', label: 'Задачи' },
   { key: '/analytics', label: 'Аналитика' },
 ]
@@ -127,7 +127,7 @@ export function Header() {
           <div className="brand-mark"><i /></div>
           {wide && <span className="brand-name">Memory Desk</span>}
         </div>
-        <Segmented items={TABS.map(t => ({ ...t, badge: t.key === '/inbox' ? state.inboxCount : null }))}
+        <Segmented items={TABS.map(t => ({ ...t, badge: t.key === '/records' ? state.inboxCount : null }))}
           value={tab} onChange={key => navigate(key)} />
         <div className="header-spacer" />
         <div className="header-actions">
@@ -136,7 +136,7 @@ export function Header() {
             {wide && <><span>Спросить архив</span><kbd>⌘K</kbd></>}
           </button>
           {running && (
-            <button className="hbtn proc" onClick={() => navigate('/inbox')} title="Идёт обработка">
+            <button className="hbtn proc" onClick={() => navigate('/records')} title="Идёт обработка">
               <span className="ring" style={{ background: `conic-gradient(currentColor ${running.percent}%, color-mix(in srgb, currentColor 25%, transparent) 0)` }} />
               <span className="num">{Math.floor(running.percent)}%</span>
             </button>

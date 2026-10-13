@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, errorText } from '../api'
-import { navigate, recordLink } from '../router'
 import { useApi } from '../useApi'
 import { useApp } from '../store'
-import { useActions } from '../actions'
-import { clockOf, dayLabel, etaLabel, fmt } from '../format'
-import type { Job, MeetingsResponse, TemplateDto } from '../types'
-import { RecordMenus } from '../components/RecordMenus'
+import { clockOf, etaLabel, fmt, plural } from '../format'
+import type { Job, TemplateDto } from '../types'
 
 const STATUS = {
   running: { label: 'Обработка', bg: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)' },
@@ -14,7 +11,7 @@ const STATUS = {
   failed: { label: 'Ошибка', bg: 'color-mix(in srgb, #FF3B30 12%, transparent)', color: '#E0352B' },
 }
 
-function useNow(active: boolean) {
+export function useNow(active: boolean) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     if (!active) return
@@ -24,7 +21,7 @@ function useNow(active: boolean) {
   return now
 }
 
-function JobCard({ job, now, templates }: { job: Job; now: number; templates: TemplateDto[] }) {
+export function JobCard({ job, now, templates }: { job: Job; now: number; templates: TemplateDto[] }) {
   const { showToast, invalidate } = useApp()
   const [log, setLog] = useState<string | null>(null)
   const running = job.state === 'running', failed = job.state === 'failed'
@@ -113,53 +110,28 @@ function JobCard({ job, now, templates }: { job: Job; now: number; templates: Te
   )
 }
 
-export function Inbox() {
+
+/** «Новые и в обработке»: очередь файлов с выбором шаблона, ходом работы и ошибками. Пока файлов нет, блока на экране нет. */
+export function IntakePanel() {
   const { state } = useApp()
   const now = useNow(!!state.running)
-  const actions = useActions()
-  const { data: reviews } = useApi<MeetingsResponse>('/api/meetings?status=needs_review')
-  const { data: settings } = useApi<{ recordings_dir: string; auto_process: boolean }>('/api/settings')
   const { data: tpl } = useApi<{ items: TemplateDto[] }>('/api/templates')
+  const { data: settings } = useApi<{ recordings_dir: string; auto_process: boolean }>('/api/settings')
+  if (state.queue.length === 0) return null
   const folder = settings?.recordings_dir?.replace(/^\/Users\/[^/]+/, '~') ?? ''
-  const list = reviews?.items ?? []
-
+  const waiting = state.queue.filter(j => j.state === 'queued').length
   return (
-    <>
-      <div className="page-head">
-        <div className="titles">
-          <h1 className="h1">Входящие</h1>
-          {settings && <div className="subtitle">Папка {folder} · автоматическое обнаружение {settings.auto_process ? 'включено' : 'выключено'}</div>}
-        </div>
+    <section className="intake" aria-label="Новые и в обработке">
+      <div className="intake-head">
+        <h3 className="h3">Новые и в обработке</h3>
+        <span className="intake-sub">
+          {plural(state.queue.length, 'файл', 'файла', 'файлов')}{waiting > 0 ? ` · ждут запуска: ${waiting}` : ''}
+          {settings ? ` · папка ${folder}, автообнаружение ${settings.auto_process ? 'включено' : 'выключено'}` : ''}
+        </span>
       </div>
-
-      <h3 className="h3" style={{ margin: '40px 0 14px' }}>Очередь обработки</h3>
       <div className="jobs">
-        {state.queue.length === 0 && <div className="empty">Новых файлов нет. Положите запись в папку или нажмите «Обработать новые».</div>}
         {state.queue.map(job => <JobCard key={job.id} job={job} now={now} templates={tpl?.items ?? []} />)}
       </div>
-
-      <h3 className="h3" style={{ margin: '44px 0 14px' }}>Требуют проверки</h3>
-      <div className="jobs">
-        {reviews && list.length === 0 && <div className="empty">Всё опубликовано в Obsidian.</div>}
-        {list.map(r => (
-          <div className="card r20 review" key={r.id}>
-            <div className="review-top">
-              <div className="review-main">
-                <div style={{ fontSize: 13, color: 'var(--text2)' }}>{dayLabel(r.date)}, {r.time}{r.durationSec != null ? ' · ' + fmt(r.durationSec) : ''}</div>
-                <div className="h3">{r.title}</div>
-                {r.excerpt && <div className="review-excerpt">{r.excerpt}</div>}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn s34" onClick={() => navigate(recordLink(r.id))}>Просмотреть</button>
-                <button className="btn accent s34" onClick={() => actions.publish(r.id)}>Опубликовать в Obsidian</button>
-              </div>
-            </div>
-            <div className="review-menus">
-              <RecordMenus meeting={r} keyed idPrefix={'rv' + r.id} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
+    </section>
   )
 }

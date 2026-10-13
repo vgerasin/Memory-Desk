@@ -101,7 +101,7 @@ export function Today() {
       </div>
 
       {run && (
-        <button className="procbar" onClick={() => navigate('/inbox')}>
+        <button className="procbar" onClick={() => navigate('/records')}>
           <div className="info">
             <div className="ellipsis" style={{ fontSize: 14, fontWeight: 600 }}>{run.file}</div>
             <div style={{ fontSize: 13, color: 'var(--text2)' }}>{stageLine(run.stage_label, run.stage_index)}</div>

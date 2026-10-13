@@ -13,6 +13,7 @@ import { DecisionRow, TaskRow } from '../components/Items'
 import { RecordMenus } from '../components/RecordMenus'
 import { RebuildPanel } from '../components/RebuildPanel'
 import { ViewsPanel } from '../components/ViewsPanel'
+import { IntakePanel } from '../components/Intake'
 import { BookmarksPanel, colorHex, useBookmarkActions } from '../components/Bookmarks'
 import { CalendarSuggest } from '../components/CalendarSuggest'
 import { EventDialog, type EventDraft } from '../components/EventDialog'
@@ -384,14 +385,25 @@ export function Records() {
     { id: 'fs', key: 'status', label: 'Статус', all: 'Все', options: [{ label: 'Требует проверки', value: 'needs_review' }, { label: 'Опубликовано', value: 'completed' }] },
     { id: 'fd', key: 'period', label: 'Период', all: 'Все даты', options: [{ label: 'Сегодня', value: 'today' }, { label: '7 дней', value: '7d' }, { label: '30 дней', value: '30d' }] },
   ]
-  const stats = data ? `${plural(data.counts.total, 'запись', 'записи', 'записей')} · ${data.counts.needsReview} ${data.counts.needsReview === 1 ? 'требует' : 'требуют'} проверки` : ' '
 
   return (
     <>
       <div className="page-head">
         <div className="titles">
           <h1 className="h1">Записи</h1>
-          <div className="subtitle">{stats}</div>
+          <div className="subtitle">
+            {data ? (
+              <>
+                {plural(data.counts.total, 'запись', 'записи', 'записей')}
+                {' · '}
+                {data.counts.needsReview > 0 && filters.status !== 'needs_review'
+                  ? <button className="link-btn" onClick={() => setFilter('status', 'needs_review')} title="Показать только записи, которые нужно проверить">
+                      {data.counts.needsReview} {data.counts.needsReview === 1 ? 'требует' : 'требуют'} проверки
+                    </button>
+                  : <>{data.counts.needsReview} {data.counts.needsReview === 1 ? 'требует' : 'требуют'} проверки</>}
+              </>
+            ) : ' '}
+          </div>
         </div>
         <div className="head-tools">
           <button className={'btn s32' + (bulk.on ? ' accent' : '')} onClick={() => (bulk.on ? bulk.stop() : bulk.setOn(true))}>{bulk.on ? 'Закончить выбор' : 'Выбрать'}</button>
@@ -402,6 +414,8 @@ export function Records() {
           </label>
         </div>
       </div>
+
+      <IntakePanel />
 
       <div className="filters">
         {menus.map(m => {
