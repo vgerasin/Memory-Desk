@@ -72,6 +72,7 @@ def defaults() -> dict:
         "asr_hint": True,
         "asr_prep": "off",
         "llm_model": "",
+        "setup_done": False,
     }
 
 
@@ -120,6 +121,7 @@ def save_config(values: dict) -> dict:
     if normalized["llm_model"] and not _LLM_NAME.match(normalized["llm_model"]):
         raise ValueError("Модель анализа: имя вида qwen3:8b (как в `ollama list`)")
     normalized["asr_hint"] = bool(normalized["asr_hint"])
+    normalized["setup_done"] = bool(normalized.get("setup_done"))
     if normalized.get("asr_prep") not in asr.PREP_MODES:
         normalized["asr_prep"] = "off"
     try:

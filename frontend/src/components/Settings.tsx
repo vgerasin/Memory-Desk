@@ -18,7 +18,7 @@ type Tab = 'general' | 'records' | 'templates' | 'speech' | 'calendar' | 'data' 
 const TABS: Tab[] = ['general', 'records', 'templates', 'speech', 'calendar', 'data', 'security']
 
 export function SettingsModal() {
-  const { settingsOpen, setSettingsOpen, showToast, invalidate } = useApp()
+  const { settingsOpen, setSettingsOpen, showToast, invalidate, setSetupOpen } = useApp()
   const [form, setForm] = useState<Settings | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -303,7 +303,14 @@ export function SettingsModal() {
             )}
             {tab === 'data' && (
               <div className="set-pane-in">
-                <div className="set-lead">{tr('Сводки в Obsidian и резервные копии базы')}</div>
+                <div className="set-lead">{tr('Проверка системы, сводки в Obsidian и резервные копии базы')}</div>
+                <div className="field">
+                  <label>{tr('Проверка системы')}</label>
+                  <div className="switch-row">
+                    <span className="hint">{tr('Что установлено, чего не хватает, какие модели скачаны; недостающее можно докачать. Это тот же мастер, что при первом запуске.')}</span>
+                    <button className="btn s28" onClick={() => { setSettingsOpen(false); setSetupOpen(true) }}>{tr('Открыть мастер')}</button>
+                  </div>
+                </div>
                 <div className="field">
                   <label>{tr('Задачи и решения в Obsidian')}</label>
                   <div className="switch-row">

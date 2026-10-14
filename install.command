@@ -3,7 +3,8 @@
 #
 #   ./install.command                 установить всё и запустить кабинет
 #   ./install.command --check         только проверить, что уже есть (ничего не меняет)
-#   ./install.command --skip-models   пропустить загрузку моделей (быстро, для обновления кода)
+#   ./install.command --skip-models   пропустить загрузку моделей: их скачивает мастер первого запуска в кабинете
+#                                     (так ставит приложение для Mac; для обновления кода тоже подходит)
 #   ./install.command --no-open       не открывать кабинет в конце
 #
 # Скрипт можно запускать повторно: готовое пропускается, пользовательские данные не затрагиваются.
@@ -224,7 +225,9 @@ else
   if ollama_up; then
     if OLLAMA_HOST="$OLLAMA_ADDR" ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$LLM_MODEL"; then
       ok "Модель $LLM_MODEL уже загружена"
-    elif [ "$MODE" = check ] || [ "$SKIP_MODELS" = 1 ]; then
+    elif [ "$SKIP_MODELS" = 1 ] && [ "$MODE" = install ]; then
+      warn "Модель $LLM_MODEL не загружена: её скачает мастер первого запуска в кабинете (около 2,5 ГБ)"
+    elif [ "$MODE" = check ]; then
       bad "Модель $LLM_MODEL не загружена"
     else
       say "  → загружаю $LLM_MODEL (около 2,5 ГБ)…"
@@ -251,7 +254,9 @@ EMBED_HOME="$HF_CACHE"            # sentence-transformers: cache_folder=huggingf
 WHISPER_HOME="$HF_CACHE/hub"      # mlx_whisper: HF_HOME=huggingface-cache → hub/
 if hf_cached "$EMBED_MODEL" "$EMBED_HOME"; then
   ok "Модель поиска есть ($(basename "$EMBED_MODEL"))"
-elif [ "$MODE" = check ] || [ "$SKIP_MODELS" = 1 ]; then
+elif [ "$SKIP_MODELS" = 1 ] && [ "$MODE" = install ]; then
+  warn "Модель поиска не загружена: её скачает мастер первого запуска в кабинете (около 0,5 ГБ)"
+elif [ "$MODE" = check ]; then
   bad "Нет модели поиска: без неё не работают поиск и чат"
 elif [ -x "$PY" ]; then
   say "  → загружаю модель поиска (около 0,5 ГБ)…"
@@ -265,7 +270,7 @@ fi
 if hf_cached "$WHISPER_MODEL" "$WHISPER_HOME"; then
   ok "Модель распознавания речи есть ($(basename "$WHISPER_MODEL"))"
 elif [ "$MODE" = check ] || [ "$SKIP_MODELS" = 1 ]; then
-  warn "Модель распознавания речи не загружена: скачается при первой обработке записи (около 1,6 ГБ)"
+  warn "Модель распознавания речи не загружена: её скачает мастер первого запуска в кабинете (около 1,6 ГБ)"
 elif [ -x "$PY" ]; then
   say "  → загружаю модель распознавания речи (около 1,6 ГБ)…"
   run "Загрузка модели распознавания" env WHISPER_MODEL="$WHISPER_MODEL" HF_HOME="$HF_CACHE" HF_HUB_OFFLINE=0 \
@@ -297,6 +302,7 @@ if [ "$MODE" = check ]; then
   exit 0
 fi
 say "Готово. Адрес кабинета: http://127.0.0.1:8502"
+[ "$SKIP_MODELS" = 1 ] && say "Модели скачает мастер первого запуска: он откроется в кабинете сам."
 say "Папки записей и Obsidian выбираются в кабинете: шестерёнка → «Настройки»."
 if [ "$OPEN_AFTER" = 1 ]; then
   say "Открываю Memory Desk…"

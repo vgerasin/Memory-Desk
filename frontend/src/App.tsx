@@ -4,6 +4,7 @@ import { Header } from './components/Header'
 import { SettingsModal } from './components/Settings'
 import { StorageModal } from './components/Storage'
 import { AuditModal } from './components/Security'
+import { SetupWizard, useSetupAutoOpen } from './components/Setup'
 import { EraseDialog } from './components/EraseDialog'
 import { PrepModal } from './components/PrepBrief'
 import { MaterialModal } from './components/Material'
@@ -54,6 +55,7 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 
 export default function App() {
   const { live } = useApp()
+  useSetupAutoOpen()
   return (
     <div className="app">
       <Header />
@@ -63,6 +65,7 @@ export default function App() {
       <SettingsModal />
       <StorageModal />
       <AuditModal />
+      <SetupWizard />
       <EraseDialog />
       <PrepModal />
       <MaterialModal />

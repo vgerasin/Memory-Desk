@@ -47,6 +47,9 @@ interface Ctx {
   /** журнал действий */
   auditOpen: boolean
   setAuditOpen: (v: boolean) => void
+  /** мастер первого запуска и проверки системы */
+  setupOpen: boolean
+  setSetupOpen: (v: boolean) => void
   /** запись, для которой открыто окно «Стереть запись целиком» */
   eraseId: string | null
   setEraseId: (v: string | null) => void
@@ -101,6 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [storageOpen, setStorageOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(false)
   const [eraseId, setEraseId] = useState<string | null>(null)
   const [prep, setPrep] = useState<PrepTarget | null>(null)
   const [material, setMaterial] = useState<MaterialTarget | null>(null)
@@ -274,9 +278,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       open: chatOpen, scope, messages, busy, openChat, closeChat: () => setChatOpen(false),
       setScope, send, clear: () => setMessages([]), saveAnswer, answerPayload,
     },
-    currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, auditOpen, setAuditOpen, eraseId, setEraseId, prep, setPrep, material, setMaterial,
+    currentRecord, setCurrentRecord, settingsOpen, setSettingsOpen, storageOpen, setStorageOpen, auditOpen, setAuditOpen, setupOpen, setSetupOpen, eraseId, setEraseId, prep, setPrep, material, setMaterial,
   }), [state, live, meta, version, invalidate, theme, toggleTheme, appearance, palette, wide, toast, showToast, hideToast, openMenu,
-    chatOpen, scope, messages, busy, openChat, send, saveAnswer, answerPayload, currentRecord, settingsOpen, storageOpen, auditOpen, eraseId, prep, material])
+    chatOpen, scope, messages, busy, openChat, send, saveAnswer, answerPayload, currentRecord, settingsOpen, storageOpen, auditOpen, setupOpen, eraseId, prep, material])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

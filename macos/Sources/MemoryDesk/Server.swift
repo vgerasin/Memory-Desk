@@ -30,6 +30,20 @@ final class Server {
         return url
     }
 
+    /// Папка программы, если она уже известна: сохранённая или стандартная ~/memory-desk (без вопросов).
+    func knownHome() -> URL? {
+        if let saved = UserDefaults.standard.string(forKey: Server.defaultsKey),
+           FileManager.default.fileExists(atPath: saved + "/meeting-assistant") {
+            return URL(fileURLWithPath: saved)
+        }
+        let standard = InstallerWindow.defaultHome
+        if FileManager.default.fileExists(atPath: standard.path + "/meeting-assistant") {
+            UserDefaults.standard.set(standard.path, forKey: Server.defaultsKey)
+            return standard
+        }
+        return nil
+    }
+
     func isRunning() async -> Bool {
         var request = URLRequest(url: baseURL.appendingPathComponent("api/health"))
         request.timeoutInterval = 1.5

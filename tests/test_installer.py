@@ -166,4 +166,6 @@ def test_skip_models_flag(tmp_path):
     result = _run(project, env, "--skip-models", "--no-open")
     log = calls.read_text()
     assert "pull" not in log and "snapshot_download" not in log
-    assert result.returncode == 1 and "не загружена" in result.stdout  # модель Ollama отсутствует — это проблема, о ней сказано
+    assert result.returncode == 0 and "мастер первого запуска" in result.stdout   # моделей нет: это не ошибка, их скачает мастер в кабинете
+    checked = _run(project, env, "--check")
+    assert checked.returncode == 1 and "не загружена" in checked.stdout          # а проверка без изменений по-прежнему считает это проблемой

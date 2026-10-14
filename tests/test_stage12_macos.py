@@ -15,7 +15,7 @@ def test_macos_draft_is_consistent():
     info = plistlib.loads((base / "Resources/Info.plist").read_bytes())
     assert info["CFBundleExecutable"] == "MemoryDesk" and info["CFBundleURLTypes"][0]["CFBundleURLSchemes"] == ["memorydesk"]
     sources = sorted((base / "Sources/MemoryDesk").glob("*.swift"))
-    assert {p.name for p in sources} == {"main.swift", "AppDelegate.swift", "Server.swift", "WebWindow.swift", "StatusMenu.swift"}
+    assert {p.name for p in sources} == {"main.swift", "AppDelegate.swift", "Server.swift", "WebWindow.swift", "StatusMenu.swift", "Installer.swift"}
     for path in sources:
         text = path.read_text(encoding="utf-8")
         import re

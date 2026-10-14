@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, access, answers, apple, asr, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, voice, waveform
+from . import __version__, access, answers, setup as setup_wizard, apple, asr, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -331,6 +331,72 @@ def create_app() -> FastAPI:
         response = JSONResponse({**app.state.lock.status(None), "message": "PIN снят"})
         response.delete_cookie(lock.COOKIE, path="/")
         return response
+
+    # ------------------------------------------------------------------ мастер установки
+    @app.get("/api/setup")
+    def setup_status():
+        return setup_wizard.status(core.cfg, len(core.meetings))
+
+    class SetupRun(BaseModel):
+        component: str = Field(..., max_length=40)
+
+    @app.post("/api/setup/run")
+    def setup_run(body: SetupRun, request: Request):
+        audit.detail(request, f"компонент: {body.component}")
+        try:
+            started = setup_wizard.runner.start(body.component, core.cfg)
+        except setup_wizard.SetupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if not started:
+            raise HTTPException(409, "Уже идёт другая загрузка: дождитесь её конца или остановите")
+        return setup_wizard.status(core.cfg, len(core.meetings))
+
+    @app.post("/api/setup/cancel")
+    def setup_cancel():
+        return {"cancelled": setup_wizard.runner.cancel()}
+
+    class SetupFolders(BaseModel):
+        recordings_dir: str = Field(..., min_length=1, max_length=500)
+        obsidian_dir: str = Field(..., min_length=1, max_length=500)
+
+    @app.post("/api/setup/folders")
+    def setup_folders(body: SetupFolders, request: Request):
+        """Папки записей и заметок: создаются, если их нет, и сохраняются в настройках."""
+        values = {}
+        for key, label in (("recordings_dir", "записей"), ("obsidian_dir", "заметок")):
+            raw = getattr(body, key).strip()
+            path = Path(raw).expanduser()
+            if not path.is_absolute():
+                raise HTTPException(400, f"Папка {label}: нужен полный путь, например ~/Documents/Записи")
+            values[key] = str(path)
+        previous_default = str(Path(core.cfg["recordings_dir"]).expanduser() / "Обработано")
+        archive = core.cfg.get("archive_dir", "")
+        values["archive_dir"] = str(Path(values["recordings_dir"]) / "Обработано") if str(archive) == previous_default else archive
+        audit.detail(request, "папки записей и заметок")
+        try:
+            core.apply_settings({**core.cfg, **values})
+        except (OSError, ValueError) as exc:
+            raise HTTPException(400, f"Не удалось создать или сохранить папки: {exc}") from exc
+        return setup_wizard.status(core.cfg, len(core.meetings))
+
+    class SetupModels(BaseModel):
+        llm_model: str = Field("", max_length=130)
+        asr_model: str = Field("turbo", max_length=130)
+
+    @app.post("/api/setup/models")
+    def setup_models(body: SetupModels, request: Request):
+        """Какие модели нужны: анализ (Ollama) и распознавание речи. Только выбор, скачивает мастер отдельно."""
+        audit.detail(request, f"анализ: {body.llm_model or 'по умолчанию'}; речь: {body.asr_model}")
+        try:
+            core.apply_settings({**core.cfg, "llm_model": body.llm_model.strip(), "asr_model": body.asr_model.strip()})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return setup_wizard.status(core.cfg, len(core.meetings))
+
+    @app.post("/api/setup/finish")
+    def setup_finish():
+        core.apply_settings({**core.cfg, "setup_done": True})
+        return setup_wizard.status(core.cfg, len(core.meetings))
 
     # ------------------------------------------------------------------ токены доступа (командная строка, MCP)
     class AccessBody(BaseModel):
@@ -660,6 +726,7 @@ def create_app() -> FastAPI:
         asr_hint: bool | None = None
         asr_prep: str | None = None
         llm_model: str | None = None
+        setup_done: bool | None = None
 
     @app.get("/api/settings")
     def get_settings():
@@ -691,7 +758,7 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "Такого языка интерфейса нет")
             if values.get("dossier_model") is None:
                 values["dossier_model"] = core.cfg.get("dossier_model", True)
-            for key, default in (("asr_model", "turbo"), ("asr_hint", True), ("asr_prep", "off"), ("llm_model", "")):
+            for key, default in (("asr_model", "turbo"), ("asr_hint", True), ("asr_prep", "off"), ("llm_model", ""), ("setup_done", False)):
                 if values.get(key) is None:
                     values[key] = core.cfg.get(key, default)
             if values["asr_prep"] not in asr.PREP_MODES:

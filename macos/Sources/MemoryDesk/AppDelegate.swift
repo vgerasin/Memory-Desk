@@ -3,6 +3,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var web: WebWindowController!
     private var status: StatusMenu!
+    private var installer: InstallerWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
@@ -13,6 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         web.showWindow(nil)
         web.showMessage("Запускаю Memory Desk… При первом запуске после обновления это может занять несколько минут.")
         Task {
+            let installed = await self.prepareHome()
+            if !installed {
+                await MainActor.run { self.web.showMessage("Memory Desk не установлен. Закройте приложение и откройте его снова, чтобы начать установку.") }
+                return
+            }
             let ready = await Server.shared.ensureRunning()
             await MainActor.run {
                 if ready { self.web.load() } else {
@@ -20,6 +26,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             status.start()
+        }
+    }
+
+    /// Папка программы уже есть, или показываем окно установки и ждём его результата.
+    private func prepareHome() async -> Bool {
+        if Server.shared.knownHome() != nil { return true }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            DispatchQueue.main.async {
+                let window = InstallerWindow(done: { ok in continuation.resume(returning: ok) })
+                self.installer = window
+                window.show()
+            }
         }
     }
 

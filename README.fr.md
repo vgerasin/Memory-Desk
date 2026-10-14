@@ -67,6 +67,15 @@ Les Mac Intel ne sont pas pris en charge : MLX Whisper ne fonctionne que sur App
 
 ## Installation
 
+Il y a deux voies, au même résultat : le cabinet tourne sur votre Mac et vos données ne quittent pas l’ordinateur.
+
+| Voie | Pour qui | Comment |
+| --- | --- | --- |
+| **Navigateur** | vous voulez maîtriser chaque étape | télécharger le dépôt et lancer le script (ci-dessous) ; le cabinet s’ouvre dans le navigateur |
+| **Application Mac** | vous voulez une application ordinaire | compiler ou télécharger `MemoryDesk.app` ([`macos/`](macos/README.md)) ; au premier lancement, l’application propose de s’installer |
+
+Dans les deux cas, l’**assistant de premier lancement** du cabinet vérifie ce qui manque (paquets Python, ffmpeg, Ollama), vous laisse choisir les modèles d’analyse et de reconnaissance vocale et les télécharge **sur votre clic** : avec les tailles, la progression et un bouton d’arrêt. Les dossiers des enregistrements et des notes et l’accès au Calendrier et aux Rappels s’y règlent aussi. Plus tard, l’assistant s’ouvre depuis « Réglages → Données → Vérification du système ». `install.command --skip-models` n’installe que l’environnement et laisse les modèles à l’assistant ; sans cet indicateur, il télécharge tout lui-même.
+
 En une commande (récupère le code dans `~/memory-desk` et lance l’installateur) :
 
 ```bash
@@ -189,7 +198,7 @@ install.command    installateur ; start.command — lancement du bureau
 
 ## Ce qui a été vérifié
 
-- **Automatiquement** (`pytest`, 477 tests) : API et protection, filtres et recherche, fiche d’enregistrement, publication, tâches et décisions, analytique, synthèses du chat, compte rendu et carte, note de service, brief et courriel avec contrôle des horodatages, synthèse par projet, arbre des décisions, intégration du calendrier, point du matin, tâches bloquées et séries, modèles de notes et leur retour arrière, signets, suggestions de questions, export (PDF, DOCX, HTML, Markdown, PNG), robustesse des notes face aux modifications « hostiles », EventKit et encodeur vocal simulés, scénarios de l’installateur sur simulations, journal d’activité, verrouillage par PIN, dossiers vivants, langues de l’interface.
+- **Automatiquement** (`pytest`, 505 tests) : API et protection, filtres et recherche, fiche d’enregistrement, publication, tâches et décisions, analytique, synthèses du chat, compte rendu et carte, note de service, brief et courriel avec contrôle des horodatages, synthèse par projet, arbre des décisions, intégration du calendrier, point du matin, tâches bloquées et séries, modèles de notes et leur retour arrière, signets, suggestions de questions, export (PDF, DOCX, HTML, Markdown, PNG), robustesse des notes face aux modifications « hostiles », EventKit et encodeur vocal simulés, scénarios de l’installateur sur simulations, journal d’activité, verrouillage par PIN, dossiers vivants, langues de l’interface.
 - **Dans un navigateur** (Chromium, données fictives) : tous les écrans en thème clair et sombre, un jeu de charge d’environ 55 enregistrements sans erreur JavaScript ni réponse 500 ; PDF, DOCX et images de carte examinés à l’œil (DOCX ouvert dans LibreOffice) ; la page du téléphone dans une fenêtre de 390×844.
 
 **Non vérifié sur du vrai matériel** (l’environnement de développement n’a pas d’Apple Silicon) : transcription MLX Whisper et analyse Ollama via la nouvelle interface, qualité des réponses et synthèses de `qwen3:4b`, chargement du vrai modèle d’embeddings, lecture du Calendrier et des Rappels via EventKit, modèle vocal ECAPA et seuil de similarité, filtre Whisper sur de la vraie musique et du vrai bruit, ouverture des DOCX dans Word et Pages, installation sur un Mac vierge, coque de l’application macOS (jamais compilée), qualité des traductions. Faites le premier lancement sur un seul fichier court.

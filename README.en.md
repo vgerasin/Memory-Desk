@@ -67,6 +67,15 @@ Intel Macs are not supported: MLX Whisper runs only on Apple Silicon.
 
 ## Installation
 
+There are two ways, with the same result: the cabinet runs on your Mac and your data never leaves the computer.
+
+| Way | For whom | How |
+| --- | --- | --- |
+| **Browser** | you want control over every step | download the repository and run the script (below); the cabinet opens in the browser |
+| **Mac app** | you want an ordinary application | build or download `MemoryDesk.app` ([`macos/`](macos/README.md)); on first launch the app offers to install itself |
+
+In both cases the **first-launch wizard** in the cabinet checks what is missing (Python packages, ffmpeg, Ollama), lets you choose the analysis and speech-recognition models and downloads them **on your click**: with sizes, progress and a stop button. Recording and notes folders and access to Calendar and Reminders are set up there too. Later the wizard opens from “Settings → Data → System check”. `install.command --skip-models` installs only the environment and leaves the models to the wizard; without the flag it downloads everything itself.
+
 One command (fetches the code into `~/memory-desk` and runs the installer):
 
 ```bash
@@ -189,7 +198,7 @@ install.command    installer; start.command — start the desk
 
 ## What has been verified
 
-- **Automatically** (`pytest`, 477 tests): API and protection, filters and search, the record card, publishing, tasks and decisions, analytics, chat summaries, minutes and map, memo, brief and email with timecode checks, project digest, decision tree, calendar integration, morning brief, stuck tasks and series, note templates and their rollback, bookmarks, question hints, export (PDF, DOCX, HTML, Markdown, PNG), resilience of notes to “hostile” edits, stubbed EventKit and voice encoder, installer scenarios on stubs, the activity log, PIN lock, live dossiers, interface languages.
+- **Automatically** (`pytest`, 505 tests): API and protection, filters and search, the record card, publishing, tasks and decisions, analytics, chat summaries, minutes and map, memo, brief and email with timecode checks, project digest, decision tree, calendar integration, morning brief, stuck tasks and series, note templates and their rollback, bookmarks, question hints, export (PDF, DOCX, HTML, Markdown, PNG), resilience of notes to “hostile” edits, stubbed EventKit and voice encoder, installer scenarios on stubs, the activity log, PIN lock, live dossiers, interface languages.
 - **In a browser** (Chromium, fictional data): all screens in light and dark themes, a stress set of ~55 recordings with no JavaScript errors and no 500 responses; PDF, DOCX and map images inspected by eye (DOCX opened in LibreOffice); the phone page in a 390×844 window.
 
 **Not verified on real hardware** (the development environment has no Apple Silicon): MLX Whisper transcription and Ollama analysis through the new interface, the quality of `qwen3:4b` answers and summaries, loading the real embedding model, reading Calendar and Reminders through EventKit, the ECAPA voice model and similarity threshold, the Whisper filter on real music and noise, opening DOCX in Word and Pages, installation on a clean Mac, the macOS app shell (never built), the quality of the translations. Run the first launch on one short file.
