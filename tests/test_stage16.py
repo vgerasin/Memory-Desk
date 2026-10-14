@@ -308,14 +308,14 @@ def test_brew_needs_homebrew(monkeypatch):
     assert "brew.sh" in str(caught.value)
     calls = []
     monkeypatch.setattr(setup, "which", lambda name: "/opt/homebrew/bin/brew")
-    monkeypatch.setattr(setup, "stream_command", lambda job, argv, env=None, poll=None, label="": calls.append(argv))
+    monkeypatch.setattr(setup, "stream_command", lambda job, argv, env=None, poll=None, label="", on_line=None: calls.append(argv))
     setup.HANDLERS["ollama_bin"](setup.Job("o", "o"), {})
     assert calls == [["/opt/homebrew/bin/brew", "install", "ollama"]]
 
 
 def test_pip_installs_into_the_running_environment(monkeypatch):
     calls = []
-    monkeypatch.setattr(setup, "stream_command", lambda job, argv, env=None, poll=None, label="": calls.append(argv))
+    monkeypatch.setattr(setup, "stream_command", lambda job, argv, env=None, poll=None, label="", on_line=None: calls.append(argv))
     setup.HANDLERS["vision"](setup.Job("v", "v"), {})
     setup.HANDLERS["packages"](setup.Job("p", "p"), {})
     assert calls[0] == [sys.executable, "-m", "pip", "install", "pyobjc-framework-Vision>=10"]
@@ -444,3 +444,101 @@ def test_api_pick_folder(client, monkeypatch):
     monkeypatch.setattr(setup.sys, "platform", "linux")
     assert client.post("/api/setup/pick-folder", json={"kind": "vault"}).status_code == 409
     assert client.post("/api/setup/pick-folder", json={"kind": "system"}).status_code == 400
+
+
+# --------------------------------------------------------------------------- этапы, время, места
+
+def test_pip_output_moves_through_stages():
+    job = setup.Job("packages", "Python-пакеты")
+    parse = setup.pip_line_parser(job)
+    assert job.stages == setup.PIP_STAGES and job.stage == 0
+    parse("Collecting fastapi>=0.110 (from -r requirements.txt (line 1))")
+    assert job.stage == 1 and "fastapi" in job.note and "найдено: 1" in job.note
+    parse("Downloading torch-2.4.0-cp313-none-macosx_11_0_arm64.whl (62.1 MB)")
+    assert "62.1 MB" in job.note
+    parse("Collecting uvicorn")
+    assert "найдено: 2" in job.note
+    parse("Installing collected packages: a, b, c")
+    assert job.stage == 2 and "3 пакетов" in job.note
+    parse("Collecting late")             # этапы не откатываются назад
+    assert job.stage == 2
+
+
+def test_brew_output_gives_download_percent_then_install():
+    job = setup.Job("ffmpeg", "ffmpeg")
+    parse = setup.brew_line_parser(job)
+    parse("==> Fetching ffmpeg")
+    assert job.stage == 1
+    parse("######################                                            34.5%")
+    assert (job.done, job.total) == (345, 1000) and job.view()["percent"] == 34
+    parse("==> Pouring ffmpeg--7.1.arm64_sequoia.bottle.tar.gz")
+    assert job.stage == 2 and job.total == 0
+
+
+def test_job_view_reports_speed_and_eta(monkeypatch):
+    job = setup.Job("whisper", "Модель")
+    job.bytes = True
+    job.total = 1000
+    clock = [100.0]
+    monkeypatch.setattr(setup.time, "time", lambda: clock[0])
+    job.done = 0
+    job.view()
+    clock[0] = 110.0
+    job.done = 200
+    view = job.view()
+    assert view["speed"] == 20 and view["eta"] == 40
+    job.bytes = False
+    assert job.view()["speed"] is None and job.view()["eta"] is not None
+
+
+def test_job_without_progress_has_no_eta():
+    job = setup.Job("packages", "Python-пакеты")
+    view = job.view()
+    assert view["eta"] is None and view["speed"] is None and view["percent"] is None
+
+
+def test_stream_command_feeds_the_line_parser(tmp_path):
+    job = setup.Job("x", "x")
+    seen = []
+    setup.stream_command(job, [sys.executable, "-c", "print('Collecting a'); print('Collecting b')"], on_line=seen.append)
+    assert seen == ["Collecting a", "Collecting b"]
+    broken = []
+
+    def boom(line):
+        broken.append(line)
+        raise RuntimeError("разбор сломался")
+    setup.stream_command(setup.Job("y", "y"), [sys.executable, "-c", "print('q')"], on_line=boom)   # не должно падать
+    assert broken == ["q"]
+
+
+def test_places_and_reveal(monkeypatch, tmp_path):
+    cfg = {"recordings_dir": str(tmp_path / "rec"), "obsidian_dir": str(tmp_path / "vault")}
+    rows = {row["key"]: row for row in setup.places(cfg)}
+    assert set(rows) == {"program", "data", "models", "recordings", "notes", "logs"}
+    assert rows["recordings"]["path"] == str(tmp_path / "rec") and rows["recordings"]["exists"] is False
+    assert rows["program"]["path"] == str(setup.config.PROJECT_ROOT)
+    with pytest.raises(ValueError):
+        setup.reveal("../etc", cfg)
+    monkeypatch.setattr(setup.sys, "platform", "linux")
+    with pytest.raises(RuntimeError):
+        setup.reveal("program", cfg)
+    calls = []
+    monkeypatch.setattr(setup.sys, "platform", "darwin")
+    monkeypatch.setattr(setup, "which", lambda name: "/usr/bin/open")
+    monkeypatch.setattr(setup.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    with pytest.raises(RuntimeError):
+        setup.reveal("recordings", cfg)          # папки ещё нет
+    (tmp_path / "rec").mkdir()
+    assert setup.reveal("recordings", cfg) == str(tmp_path / "rec") and calls == [["open", str(tmp_path / "rec")]]
+
+
+def test_api_status_has_places_and_reveal_is_guarded(client, monkeypatch):
+    assert {"places"} <= set(client.get("/api/setup").json())
+    monkeypatch.setattr(setup.sys, "platform", "linux")
+    assert client.post("/api/setup/reveal", json={"key": "program"}).status_code == 409
+    assert client.post("/api/setup/reveal", json={"key": "nope"}).status_code == 400
+
+
+def test_system_rows_offer_a_fix_for_missing_engines(client):
+    rows = {r["key"]: r for r in client.get("/api/system").json()["rows"]}
+    assert rows["ocr"].get("fix") == 1 and rows["whisper"].get("fix") == 1

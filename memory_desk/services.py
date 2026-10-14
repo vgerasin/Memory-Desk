@@ -798,8 +798,8 @@ def system_status(core: Core) -> dict:
     else:
         index_value, index_state = "готовится…", "warn"
     rows = [
-        {"key": "whisper", "name": "Whisper", "value": "large-v3-turbo" if whisper_ok else "не найден", "state": "ok" if whisper_ok else "bad"},
-        {"key": "ollama", "name": "Ollama", "value": ollama_value, "state": ollama_state},
+        {"key": "whisper", "name": "Whisper", "value": "large-v3-turbo" if whisper_ok else "не найден", "state": "ok" if whisper_ok else "bad", "fix": 1},
+        {"key": "ollama", "name": "Ollama", "value": ollama_value, "state": ollama_state, "fix": 0 if ollama_state != "ok" else None},
         {"key": "index", "name": "Поисковый индекс", "value": index_value, "state": index_state},
         {"key": "recordings", "name": "Папка записей", "value": "доступ есть" if recordings.exists() else "не найдена",
          "state": "ok" if recordings.exists() else "bad"},
@@ -807,7 +807,7 @@ def system_status(core: Core) -> dict:
          "state": "ok" if vault.exists() else "bad"},
         {"key": "disk", "name": "Свободное место", "value": f"{free_gb:.0f} ГБ", "state": "ok" if free_gb > 20 else "warn"},
         {"key": "ocr", "name": "Распознавание текста на фото", "value": ", ".join(ocr_engines) if ocr_engines else "нет движка: фото сохраняются без текста",
-         "state": "ok" if ocr_engines else "warn"},
+         "state": "ok" if ocr_engines else "warn", "fix": 1},
         {"key": "database", "name": "База кабинета", "value": "цела" if db_ok else "повреждена: восстановите из копии",
          "state": "ok" if db_ok else "bad", "detail": db_message},
         {"key": "backup", "name": "Резервная копия",

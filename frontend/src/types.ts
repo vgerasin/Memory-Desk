@@ -95,7 +95,7 @@ export interface AppState {
   dataVersion: number; jobsVersion: number; indexState: string
 }
 
-export interface SystemRow { key: string; name: string; value: string; state: 'ok' | 'warn' | 'bad' }
+export interface SystemRow { key: string; name: string; value: string; state: 'ok' | 'warn' | 'bad'; fix?: number | null }
 export interface SystemStatus { rows: SystemRow[]; overall: 'ok' | 'warn' | 'bad'; indexState: string; indexError: string }
 
 export interface Settings {

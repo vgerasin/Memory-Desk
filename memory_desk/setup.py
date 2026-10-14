@@ -15,11 +15,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import threading
 import time
+from collections import deque
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -160,6 +162,32 @@ def folders(cfg: dict) -> dict:
             "recordingsOk": rec.is_dir(), "obsidianOk": vault.is_dir(), "canPick": can_pick()}
 
 
+def places(cfg: dict) -> list[dict]:
+    """Где что лежит на диске: человек должен видеть, куда встала программа, данные и модели."""
+    rows = [
+        ("program", "Программа", "Сама программа и её окружение Python (папка с файлом meeting-assistant)", config.PROJECT_ROOT),
+        ("data", "Данные кабинета", "База, настройки, индекс, резервные копии", config.DATA_DIR),
+        ("models", "Модели", "Модели поиска и распознавания речи (кеш Hugging Face)", config.MODEL_CACHE),
+        ("recordings", "Записи", "Сюда кладите аудиофайлы", Path(str(cfg.get("recordings_dir", ""))).expanduser()),
+        ("notes", "Заметки", "Готовые заметки, протоколы и документы (Obsidian)", Path(str(cfg.get("obsidian_dir", ""))).expanduser()),
+        ("logs", "Журналы", "Если что-то пошло не так, смотрите сюда", config.LOGS_DIR),
+    ]
+    return [{"key": k, "title": t, "note": n, "path": str(p), "exists": p.exists()} for k, t, n, p in rows]
+
+
+def reveal(key: str, cfg: dict) -> str:
+    """Открывает папку в Finder. Только из фиксированного списка мест."""
+    found = next((row for row in places(cfg) if row["key"] == key), None)
+    if found is None:
+        raise ValueError("Неизвестное место")
+    if sys.platform != "darwin" or not which("open"):
+        raise RuntimeError("Открыть папку можно только на Mac: путь указан выше")
+    if not found["exists"]:
+        raise RuntimeError("Этой папки ещё нет")
+    subprocess.run(["open", found["path"]], check=False, timeout=10)
+    return found["path"]
+
+
 def status(cfg: dict, meetings: int = 0) -> dict:
     items = check(cfg)
     for item in items:
@@ -170,7 +198,7 @@ def status(cfg: dict, meetings: int = 0) -> dict:
     free = free_gb()
     required_ok = all(c["state"] == "ok" for c in items if c["required"])
     return {"components": items, "folders": folders(cfg), "disk": {"freeGb": free, "needGb": round(need_mb / 1024 + (NEED_FREE_MARGIN_GB if need_mb else 0), 1)},
-            "ready": required_ok, "done": bool(cfg.get("setup_done")), "fresh": meetings == 0, "brew": bool(which("brew")),
+            "places": places(cfg), "ready": required_ok, "done": bool(cfg.get("setup_done")), "fresh": meetings == 0, "brew": bool(which("brew")),
             "needsWizard": (not cfg.get("setup_done")) and (not required_ok or meetings == 0), "job": runner.view()}
 
 
@@ -219,10 +247,15 @@ class Job:
         self.id, self.title = cid, title
         self.state, self.message = "running", ""
         self.done, self.total = 0, 0
+        self.bytes = False                       # done/total — байты (тогда показываем скорость), иначе условные доли
         self.log: list[str] = []
         self.cancelled = False
         self.proc: subprocess.Popen | None = None
         self.started = time.time()
+        self.stages: list[str] = []              # названия этапов, например «Подготовка», «Загрузка», «Установка»
+        self.stage = 0
+        self.note = ""                           # что делается прямо сейчас: имя пакета, файла
+        self._samples: deque[tuple[float, int]] = deque(maxlen=40)
 
     def line(self, text: str) -> None:
         text = text.rstrip()
@@ -230,11 +263,36 @@ class Job:
             self.log = (self.log + [text[:300]])[-LOG_LINES:]
             self.message = text[:160]
 
+    def set_stages(self, names: list[str]) -> None:
+        self.stages, self.stage = list(names), 0
+
+    def go(self, stage: int, note: str | None = None) -> None:
+        """Переход к этапу (назад не идём: вывод команд бывает неупорядоченным)."""
+        if self.stages:
+            self.stage = max(self.stage, min(stage, len(self.stages) - 1))
+        if note is not None:
+            self.note = note[:120]
+
+    def rate(self) -> float | None:
+        """Скорость за последние секунды (единиц done в секунду); None, пока мало данных."""
+        now = time.time()
+        if self.total and self.state == "running":
+            self._samples.append((now, self.done))
+        recent = [(t, d) for t, d in self._samples if now - t <= 20]
+        if len(recent) < 2 or recent[-1][0] - recent[0][0] < 2:
+            return None
+        rate = (recent[-1][1] - recent[0][1]) / (recent[-1][0] - recent[0][0])
+        return rate if rate > 0 else None
+
     def view(self) -> dict:
         percent = round(100 * self.done / self.total) if self.total else None
+        rate = self.rate()
+        eta = round((self.total - self.done) / rate) if rate and self.total > self.done and self.state == "running" else None
         return {"id": self.id, "title": self.title, "state": self.state, "message": self.message, "done": self.done, "total": self.total,
                 "percent": min(percent, 99) if percent is not None and self.state == "running" else percent,
-                "seconds": round(time.time() - self.started), "log": self.log[-8:]}
+                "seconds": round(time.time() - self.started), "log": self.log[-8:],
+                "stages": self.stages, "stage": self.stage, "note": self.note, "bytes": self.bytes,
+                "speed": round(rate) if rate and self.bytes else None, "eta": eta}
 
 
 class Runner:
@@ -292,14 +350,22 @@ class Runner:
 runner = Runner()
 
 
-def stream_command(job: Job, argv: list[str], env: dict | None = None, poll=None, label: str = "") -> None:
+def stream_command(job: Job, argv: list[str], env: dict | None = None, poll=None, label: str = "", on_line=None) -> None:
     """Запускает команду, строки вывода идут в журнал задачи; `poll()` вызывается раз в полсекунды (для хода загрузки)."""
     merged = {**os.environ, "PATH": _path(), **(env or {})}
     try:
         job.proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=merged, bufsize=1)
     except OSError as exc:
         raise SetupError(f"Не удалось запустить {label or argv[0]}: {exc}") from exc
-    reader = threading.Thread(target=lambda: [job.line(line) for line in job.proc.stdout], daemon=True)   # type: ignore[union-attr]
+    def read() -> None:
+        for line in job.proc.stdout:                                  # type: ignore[union-attr]
+            job.line(line)
+            if on_line:
+                try:
+                    on_line(line.strip())
+                except Exception:                                      # разбор вывода не должен ронять установку
+                    pass
+    reader = threading.Thread(target=read, daemon=True)
     reader.start()
     while job.proc.poll() is None:
         if poll:
@@ -318,6 +384,9 @@ def _hf_download(job: Job, code: str, repo: str, cache_dir: Path, expected_mb: i
     cache_dir.mkdir(parents=True, exist_ok=True)
     folder = cache_dir / ("models--" + repo.replace("/", "--"))
     job.total = (expected_mb or 0) * 1024 * 1024
+    job.bytes = True
+    job.set_stages(["Загрузка", "Проверка"])
+    job.go(0, repo)
     env = {"HF_HUB_OFFLINE": "0", "TRANSFORMERS_OFFLINE": "0", "HF_HUB_DISABLE_PROGRESS_BARS": "1", "HF_HOME": str(config.MODEL_CACHE),
            "SETUP_REPO": repo, "SETUP_CACHE": str(cache_dir)}
 
@@ -326,6 +395,7 @@ def _hf_download(job: Job, code: str, repo: str, cache_dir: Path, expected_mb: i
         if job.total and job.done > job.total:
             job.total = int(job.done * 1.05)         # оценка размера занижена: шкала не должна упираться в край
     stream_command(job, [sys.executable, "-c", code], env, poll, "Загрузка модели")
+    job.go(1, "Проверяю, что модель загружена целиком")
     job.done = job.total = max(job.done, 1)
     if not job.cancelled and not hf_cached(repo, cache_dir):
         raise SetupError("Загрузка закончилась, но модели в кеше нет: проверьте интернет и повторите")
@@ -359,7 +429,17 @@ def _pull_llm(job: Job, cfg: dict) -> None:
                     continue
                 if row.get("error"):
                     raise SetupError(f"Ollama: {row['error']}")
-                job.line(str(row.get("status", "")))
+                status = str(row.get("status", ""))
+                job.line(status)
+                job.bytes = True
+                if not job.stages:
+                    job.set_stages(["Подготовка", "Загрузка", "Проверка"])
+                if status.startswith("pulling manifest"):
+                    job.go(0, "Запрашиваю список файлов модели")
+                elif status.startswith("pulling"):
+                    job.go(1, f"Файл {status.split()[-1][:12]}")
+                elif status.startswith(("verifying", "writing", "removing", "success")):
+                    job.go(2, status)
                 if row.get("total"):
                     job.total, job.done = int(row["total"]), int(row.get("completed") or 0)
     except urllib.error.HTTPError as exc:
@@ -389,19 +469,62 @@ def _start_ollama(job: Job, cfg: dict) -> None:
     raise SetupError(f"Ollama не запустилась за 15 секунд. Журнал: {config.LOGS_DIR / 'ollama.log'}")
 
 
+PIP_STAGES = ["Подготовка", "Загрузка пакетов", "Установка"]
+BREW_STAGES = ["Подготовка", "Загрузка", "Установка"]
+_PIP_COLLECT = re.compile(r"^(?:Collecting|Obtaining)\s+([^\s;=<>!~\[]+)")
+_PIP_DOWNLOAD = re.compile(r"^Downloading\s+(\S+)\s+\(([^)]+)\)")
+_PERCENT = re.compile(r"(\d{1,3}(?:\.\d)?)%\s*$")
+
+
+def pip_line_parser(job: Job):
+    """Разбирает вывод pip: сколько пакетов уже найдено, какой качается сейчас, когда пошла установка."""
+    state = {"found": 0}
+
+    def parse(line: str) -> None:
+        if (m := _PIP_COLLECT.match(line)):
+            state["found"] += 1
+            job.go(1, f"{m.group(1)} · пакетов найдено: {state['found']}")
+        elif (m := _PIP_DOWNLOAD.match(line)):
+            job.go(1, f"{m.group(1)} · {m.group(2)}")
+        elif line.startswith(("Building wheel", "Preparing metadata", "Getting requirements")):
+            job.go(1, f"Подготовка пакета: {line[:80]}")
+        elif line.startswith("Installing collected packages"):
+            count = len([p for p in line.split(":", 1)[-1].split(",") if p.strip()])
+            job.go(2, f"Ставлю {count} пакетов: это занимает до нескольких минут")
+        elif line.startswith("Successfully installed"):
+            job.go(2, "Готово")
+    job.set_stages(PIP_STAGES)
+    return parse
+
+
+def brew_line_parser(job: Job):
+    def parse(line: str) -> None:
+        if line.startswith("==> Fetching") or line.startswith("==> Downloading"):
+            job.go(1, line.lstrip("= >")[:100])
+        elif (m := _PERCENT.search(line)) and "#" in line:
+            job.go(1)
+            job.total, job.done = 1000, min(1000, int(float(m.group(1)) * 10))
+        elif line.startswith(("==> Pouring", "==> Installing", "==> Moving", "==> Linking", "==> Summary")):
+            job.go(2, line.lstrip("= >")[:100])
+            job.total = job.done = 0
+    job.set_stages(BREW_STAGES)
+    return parse
+
+
 def _brew(package: str):
     def run(job: Job, cfg: dict) -> None:
         brew = which("brew")
         if not brew:
             raise SetupError("Нет Homebrew: поставьте его с https://brew.sh и повторите")
-        stream_command(job, [brew, "install", package], {"HOMEBREW_NO_AUTO_UPDATE": "1"}, label=f"brew install {package}")
+        stream_command(job, [brew, "install", package], {"HOMEBREW_NO_AUTO_UPDATE": "1"}, label=f"brew install {package}", on_line=brew_line_parser(job))
     return run
 
 
 def _pip(*packages: str):
     def run(job: Job, cfg: dict) -> None:
         argv = [sys.executable, "-m", "pip", "install", *(packages or ("-r", str(config.PROJECT_ROOT / "requirements.txt")))]
-        stream_command(job, argv, label="pip")
+        stream_command(job, argv, label="pip", on_line=pip_line_parser(job))
+        importlib.invalidate_caches()            # только что поставленный модуль (Vision, EventKit) должен подхватиться без перезапуска
     return run
 
 

@@ -22,7 +22,7 @@ function activeTab(path: string): string {
 }
 
 function SystemPopover({ status }: { status: SystemStatus | null }) {
-  const { theme, toggleTheme, setOpenMenu, setSettingsOpen, setStorageOpen, showToast, invalidate } = useApp()
+  const { theme, toggleTheme, setOpenMenu, setSettingsOpen, setStorageOpen, setSetupOpen, setSetupStep, showToast, invalidate } = useApp()
   const run = async (path: string, fallback: string) => {
     try { const r = await api.post<{ message?: string }>(path); showToast(r.message || fallback); invalidate() }
     catch (e) { showToast(errorText(e)) }
@@ -64,6 +64,9 @@ function SystemPopover({ status }: { status: SystemStatus | null }) {
           <div className="sys-row" key={r.key}>
             <span className="name"><i style={{ background: STATE_COLOR[r.state] }} />{r.name}</span>
             <span className="val">{r.value}</span>
+            {r.state !== 'ok' && r.fix != null && (
+              <button className="sys-fix" onClick={() => { setOpenMenu(null); setSetupStep(r.fix as number); setSetupOpen(true) }}>{tr('Установить')}</button>
+            )}
           </div>
         ))}
         {!status && <div className="sys-row"><span className="val">{tr('Проверяю…')}</span></div>}

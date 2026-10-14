@@ -393,6 +393,19 @@ def create_app() -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    class SetupReveal(BaseModel):
+        key: str = Field(..., max_length=20)
+
+    @app.post("/api/setup/reveal")
+    def setup_reveal(body: SetupReveal):
+        """Показывает в Finder одну из папок программы (список фиксирован)."""
+        try:
+            return {"path": setup_wizard.reveal(body.key, core.cfg)}
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     class SetupModels(BaseModel):
         llm_model: str = Field("", max_length=130)
         asr_model: str = Field("turbo", max_length=130)

@@ -1102,3 +1102,26 @@ ul { padding: 0; list-style: none; }
 .setup-path input { flex: 1; min-width: 0; }
 .setup-path .btn { flex-shrink: 0; }
 .setup-state-ok { color: var(--ok, #2f9e44); }
+
+/* ---- мастер установки: этапы, время, места */
+.setup-stages { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; }
+.setup-stages li { flex: 1; font-size: 11px; text-align: center; padding: 4px 6px; border-radius: 8px; background: var(--fill); color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setup-stages li.past { color: var(--text2); }
+.setup-stages li.past::before { content: '✓ '; color: #34C759; }
+.setup-stages li.now { background: var(--accent, #0A84FF); color: #fff; font-weight: 600; }
+.setup-bar.wait i { width: 35%; animation: setup-wait 1.4s ease-in-out infinite; }
+@keyframes setup-wait { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+.setup-meta { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.setup-places { display: flex; flex-direction: column; border-radius: 14px; background: var(--fill); padding: 4px 14px; }
+.setup-places-title { font-size: 13px; font-weight: 600; padding: 10px 0 4px; }
+.setup-place { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line, rgba(128,128,128,.14)); }
+.setup-place:first-of-type { border-top: none; }
+.setup-path-text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text2); word-break: break-all; user-select: all; }
+.sys-fix { height: 22px; padding: 0 9px; border-radius: 7px; background: var(--accent, #0A84FF); color: #fff; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+@media (prefers-reduced-motion: reduce) { .setup-bar.wait i { animation: none; margin-left: 0; width: 100%; opacity: .4; } }
+
+/* мастер: шапка и кнопки на месте, прокручивается только содержимое шага */
+.modal.setup { max-height: calc(100vh - 32px); overflow: hidden; }
+.modal.setup > .setup-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
+.modal.setup > .error-box { flex-shrink: 0; }
+.setup-pane > * { flex-shrink: 0; }

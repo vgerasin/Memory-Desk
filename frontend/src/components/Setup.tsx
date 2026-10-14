@@ -7,10 +7,14 @@ interface Component {
   id: string; title: string; group: 'system' | 'models' | 'extras'; note: string; state: 'ok' | 'missing' | 'error'
   required: boolean; detail: string; mb: number | null; action: '' | 'run' | 'hint'; actionLabel: string
 }
-interface Job { id: string; title: string; state: 'running' | 'done' | 'error' | 'cancelled'; message: string; percent: number | null; done: number; total: number; seconds: number; log: string[] }
+interface Job {
+  id: string; title: string; state: 'running' | 'done' | 'error' | 'cancelled'; message: string; percent: number | null; done: number; total: number; seconds: number; log: string[]
+  stages: string[]; stage: number; note: string; bytes: boolean; speed: number | null; eta: number | null
+}
+interface Place { key: string; title: string; note: string; path: string; exists: boolean }
 interface SetupInfo {
   components: Component[]; folders: { recordingsDir: string; obsidianDir: string; recordingsOk: boolean; obsidianOk: boolean; canPick: boolean }
-  disk: { freeGb: number; needGb: number }; ready: boolean; done: boolean; fresh: boolean; brew: boolean; needsWizard: boolean; job: Job | null
+  disk: { freeGb: number; needGb: number }; places: Place[]; ready: boolean; done: boolean; fresh: boolean; brew: boolean; needsWizard: boolean; job: Job | null
 }
 
 const STEPS = [tr('Система'), tr('Модели'), tr('Папки и доступы'), tr('Готово')]
@@ -20,6 +24,8 @@ const SEEN = 'md-setup-seen'
 
 const gb = (mb: number) => (mb / 1000).toFixed(1)
 const size = (mb: number | null) => mb ? tr('≈ {0} ГБ', [gb(mb)]) : ''
+const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
+const etaText = (sec: number) => sec < 90 ? tr('осталось ≈ {0} с', [Math.max(5, Math.round(sec / 5) * 5)]) : tr('осталось ≈ {0} мин', [Math.ceil(sec / 60)])
 const mbText = (bytes: number) => bytes >= 1024 ** 3 ? tr('{0} ГБ', [(bytes / 1024 ** 3).toFixed(1)]) : tr('{0} МБ', [Math.round(bytes / 1024 ** 2)])
 
 /** Один раз за сессию открывает мастер, если сервер считает, что он нужен (чистая установка или не хватает обязательного). */
@@ -33,6 +39,27 @@ export function useSetupAutoOpen() {
   }, [setSetupOpen])
 }
 
+function Progress({ job }: { job: Job }) {
+  const known = job.percent != null
+  const amount = job.total && job.bytes ? `${mbText(job.done)} ${tr('из')} ${mbText(job.total)}` : ''
+  return (
+    <div className="setup-progress" role="status" aria-live="polite">
+      {job.stages.length > 1 && (
+        <ol className="setup-stages">
+          {job.stages.map((name, i) => <li key={name} className={i < job.stage ? 'past' : i === job.stage ? 'now' : ''}>{trServer(name)}</li>)}
+        </ol>
+      )}
+      <div className={'setup-bar' + (known ? '' : ' wait')}><i style={known ? { width: job.percent + '%' } : undefined} /></div>
+      <div className="setup-meta">
+        <span>{[amount, known ? `${job.percent}%` : '', job.speed ? tr('{0}/с', [mbText(job.speed)]) : ''].filter(Boolean).join(' · ') || tr('Работаю…')}</span>
+        <span>{[job.eta != null ? etaText(job.eta) : '', tr('прошло {0}', [clock(job.seconds)])].filter(Boolean).join(' · ')}</span>
+      </div>
+      {job.note && <span className="hint setup-line" title={job.note}>{trServer(job.note)}</span>}
+      {!job.note && job.message && <span className="hint setup-line">{job.message}</span>}
+    </div>
+  )
+}
+
 function Row({ item, job, busy, onRun }: { item: Component; job: Job | null; busy: boolean; onRun: (id: string) => void }) {
   const mine = job && job.id === item.id ? job : null
   const running = mine?.state === 'running'
@@ -44,13 +71,7 @@ function Row({ item, job, busy, onRun }: { item: Component; job: Job | null; bus
         <div className="setup-title">{trServer(item.title)}{!item.required && <span className="setup-opt"> · {tr('необязательно')}</span>}</div>
         <span className="hint">{trServer(item.note)}{item.mb && item.state !== 'ok' ? ` · ${size(item.mb)}` : ''}</span>
         {item.state !== 'ok' && item.detail && <span className="hint setup-detail" title={item.detail}>{trServer(item.detail)}</span>}
-        {running && (
-          <div className="setup-progress">
-            <div className="setup-bar"><i style={{ width: (mine!.percent ?? 4) + '%' }} /></div>
-            <span className="hint">{mine!.total ? `${mbText(mine!.done)} ${tr('из')} ${mbText(mine!.total)}` : tr('Работаю…')} {mine!.percent != null ? `· ${mine!.percent}%` : ''}</span>
-            {mine!.message && <span className="hint setup-line">{mine!.message}</span>}
-          </div>
-        )}
+        {running && <Progress job={mine!} />}
       </div>
       {item.state !== 'ok' && item.action === 'run' && !running && (
         <button className="btn s28 accent" disabled={busy} onClick={() => onRun(item.id)}>{item.state === 'error' ? tr('Повторить') : trServer(item.actionLabel) || tr('Установить')}</button>
@@ -61,7 +82,7 @@ function Row({ item, job, busy, onRun }: { item: Component; job: Job | null; bus
 }
 
 export function SetupWizard() {
-  const { setupOpen, setSetupOpen, showToast, invalidate } = useApp()
+  const { setupOpen, setSetupOpen, setupStep, setSetupStep, showToast, invalidate } = useApp()
   const [info, setInfo] = useState<SetupInfo | null>(null)
   const [step, setStep] = useState(0)
   const [error, setError] = useState('')
@@ -79,7 +100,7 @@ export function SetupWizard() {
     } catch (e) { setError(errorText(e)) }
   }, [])
 
-  useEffect(() => { if (setupOpen) { loaded.current = false; setStep(0); void load() } }, [setupOpen, load])
+  useEffect(() => { if (setupOpen) { loaded.current = false; setStep(setupStep); void load() } }, [setupOpen, setupStep, load])
   const running = info?.job?.state === 'running'
   useEffect(() => {
     if (!setupOpen) return
@@ -88,7 +109,7 @@ export function SetupWizard() {
   }, [setupOpen, running, load])
 
   if (!setupOpen) return null
-  const close = () => { try { sessionStorage.setItem(SEEN, '1') } catch { /* не страшно */ } setSetupOpen(false) }
+  const close = () => { try { sessionStorage.setItem(SEEN, '1') } catch { /* не страшно */ } setSetupOpen(false); setSetupStep(0) }
   const act = async (call: () => Promise<SetupInfo | unknown>) => {
     setError('')
     try { const next = await call(); if (next && (next as SetupInfo).components) setInfo(next as SetupInfo) } catch (e) { setError(errorText(e)) }
@@ -104,6 +125,7 @@ export function SetupWizard() {
     if (res.path) { if (kind === 'recordings') setRec(res.path); else setVault(res.path) }
     return null
   })
+  const reveal = (key: string) => act(async () => { await api.post('/api/setup/reveal', { key }); return null })
   const access = () => act(async () => { await api.post('/api/integrations/apple/access'); showToast(tr('Запрос доступа отправлен: подтвердите его в окне macOS')) })
   const finish = async () => { await act(() => api.post('/api/setup/finish')); invalidate(); close() }
 
@@ -158,6 +180,7 @@ export function SetupWizard() {
 
         {step === 2 && (
           <div className="setup-pane">
+            <span className="hint">{tr('Это папки для ваших материалов: программа сюда не устанавливается. Где лежит сама программа, показано на последнем шаге.')}</span>
             {([['recordings', 'setup-rec', tr('Папка с записями'), rec, setRec, info?.folders.recordingsDir, info?.folders.recordingsOk,
                tr('Сюда кладите аудиофайлы (например, из PLAUD). Обработанные автоматически уходят в архивную подпапку.')],
               ['vault', 'setup-vault', tr('Папка заметок в Obsidian'), vault, setVault, info?.folders.obsidianDir, info?.folders.obsidianOk,
@@ -192,6 +215,19 @@ export function SetupWizard() {
                 <div className="error-box">{tr('Не хватает обязательного: {0}. Без этого записи не обработаются.', [missing.map(m => trServer(m.title)).join(', ')])}</div>
                 <button className="btn s28" onClick={() => setStep(missing.some(m => m.group === 'system') ? 0 : 1)}>{tr('Вернуться и доделать')}</button>
               </>}
+            <div className="setup-places">
+              <div className="setup-places-title">{tr('Где что лежит')}</div>
+              {(info?.places ?? []).map(pl => (
+                <div className="setup-place" key={pl.key}>
+                  <div className="setup-main">
+                    <div className="setup-title">{trServer(pl.title, true)}</div>
+                    <span className="hint">{trServer(pl.note)}</span>
+                    <code className="setup-path-text">{pl.path}</code>
+                  </div>
+                  {info?.folders.canPick && pl.exists && <button className="btn s28" onClick={() => void reveal(pl.key)}>{tr('Показать')}</button>}
+                </div>
+              ))}
+            </div>
             <span className="hint">{tr('Эту проверку можно повторить в любой момент: «Настройки → Данные → Проверка системы».')}</span>
           </div>
         )}

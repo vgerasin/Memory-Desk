@@ -49,18 +49,45 @@ TOTAL=7
 mkdir -p "$LOG_DIR"
 
 say()  { printf '%s\n' "$*"; }
-step() { STEP=$((STEP + 1)); printf '\n[%s/%s] %s\n' "$STEP" "$TOTAL" "$*"; }
+step() { STEP=$((STEP + 1)); printf '\n[%s/%s] %s  (прошло %s)\n' "$STEP" "$TOTAL" "$*" "$(clock $((SECONDS - START_AT)))"; }
 ok()   { printf '  ✓ %s\n' "$*"; }
 warn() { printf '  ! %s\n' "$*"; }
 bad()  { printf '  ✗ %s\n' "$*"; PROBLEMS=$((PROBLEMS + 1)); }
 have() { command -v "$1" >/dev/null 2>&1; }
 log()  { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$LOG"; }
 
-# Выполнить команду, подробности — в журнал; при ошибке показать последние строки.
+# Время «мин:сек»; общее время установки считается от старта скрипта.
+clock() { printf '%d:%02d' "$(( $1 / 60 ))" "$(( $1 % 60 ))"; }
+START_AT=$SECONDS
+
+# Выполнить команду, подробности — в журнал. Пока она идёт, в терминале живая строка: что делает, сколько прошло времени
+# и (для загрузок) сколько уже скачано. При ошибке показать последние строки журнала.
+# RUN_WATCH — папка, размер которой показываем (кеш моделей).
 run() {
   local title="$1"; shift
+  local began=$SECONDS frames='|/-\' i=0 detail="" size="" pid rc=0
   log "RUN: $*"
-  if "$@" >>"$LOG" 2>&1; then
+  local from=$(( $(wc -l <"$LOG" | tr -d ' ') + 1 ))      # в строке состояния — только вывод этой команды
+  "$@" >>"$LOG" 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ -t 1 ]; then
+      detail=$(tail -n "+$from" "$LOG" 2>/dev/null | grep -E '^(Collecting|Downloading|Installing collected|Building|Successfully|==> )' | tail -n 1 | cut -c1-58)
+      size=""
+      [ -n "${RUN_WATCH:-}" ] && [ -d "$RUN_WATCH" ] && size=" · $(( $(du -sk "$RUN_WATCH" 2>/dev/null | awk '{print $1}') / 1024 )) МБ"
+      printf '\r  %s %s · %s%s%s\033[K' "${frames:$((i % 4)):1}" "$title" "$(clock $((SECONDS - began)))" "$size" "${detail:+ · $detail}"
+      i=$((i + 1)); sleep 0.5
+    else
+      sleep 1
+      i=$((i + 1))
+      if [ $((i % 30)) -eq 0 ]; then printf '  … %s, прошло %s\n' "$title" "$(clock $((SECONDS - began)))"; fi
+    fi
+  done
+  wait "$pid" || rc=$?
+  [ -t 1 ] && printf '\r\033[K'
+  RUN_TOOK="$(clock $((SECONDS - began)))"
+  if [ "$rc" -eq 0 ]; then
+    log "OK: $title за $RUN_TOOK"
     return 0
   fi
   bad "$title не удалось. Последние строки журнала ($LOG):"
@@ -163,7 +190,7 @@ if [ -x "$PY" ]; then
     say "  → ставлю пакеты (несколько минут, нужен интернет)…"
     run "Обновление pip" "$PY" -m pip install --upgrade pip || true
     run "Установка пакетов" "$PY" -m pip install -r "$SCRIPT_DIR/requirements.txt" || finish_with_error "не удалось поставить пакеты (журнал: $LOG)."
-    ok "пакеты установлены"
+    ok "пакеты установлены за $RUN_TOOK"
   fi
   # Календарь и Напоминания macOS — необязательная часть: без неё кабинет работает.
   if "$PY" -c "import EventKit" >/dev/null 2>&1; then
@@ -231,7 +258,11 @@ else
       bad "Модель $LLM_MODEL не загружена"
     else
       say "  → загружаю $LLM_MODEL (около 2,5 ГБ)…"
-      OLLAMA_HOST="$OLLAMA_ADDR" ollama pull "$LLM_MODEL" 2>&1 | tee -a "$LOG" | tail -n 2
+      if [ -t 1 ]; then
+        OLLAMA_HOST="$OLLAMA_ADDR" ollama pull "$LLM_MODEL"      # в терминале Ollama рисует свой индикатор: размер, скорость, остаток
+      else
+        OLLAMA_HOST="$OLLAMA_ADDR" ollama pull "$LLM_MODEL" 2>&1 | tee -a "$LOG" | tail -n 2
+      fi
       if OLLAMA_HOST="$OLLAMA_ADDR" ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$LLM_MODEL"; then
         ok "Модель $LLM_MODEL загружена в $MODELS_DIR"
       else
@@ -260,7 +291,7 @@ elif [ "$MODE" = check ]; then
   bad "Нет модели поиска: без неё не работают поиск и чат"
 elif [ -x "$PY" ]; then
   say "  → загружаю модель поиска (около 0,5 ГБ)…"
-  run "Загрузка модели поиска" env EMBED_MODEL="$EMBED_MODEL" HF_CACHE="$HF_CACHE" HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 \
+  RUN_WATCH="$HF_CACHE" run "Загрузка модели поиска" env EMBED_MODEL="$EMBED_MODEL" HF_CACHE="$HF_CACHE" HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 \
     "$PY" -c "
 import os
 from sentence_transformers import SentenceTransformer
@@ -273,7 +304,7 @@ elif [ "$MODE" = check ] || [ "$SKIP_MODELS" = 1 ]; then
   warn "Модель распознавания речи не загружена: её скачает мастер первого запуска в кабинете (около 1,6 ГБ)"
 elif [ -x "$PY" ]; then
   say "  → загружаю модель распознавания речи (около 1,6 ГБ)…"
-  run "Загрузка модели распознавания" env WHISPER_MODEL="$WHISPER_MODEL" HF_HOME="$HF_CACHE" HF_HUB_OFFLINE=0 \
+  RUN_WATCH="$HF_CACHE" run "Загрузка модели распознавания" env WHISPER_MODEL="$WHISPER_MODEL" HF_HOME="$HF_CACHE" HF_HUB_OFFLINE=0 \
     "$PY" -c "
 import os
 from huggingface_hub import snapshot_download
