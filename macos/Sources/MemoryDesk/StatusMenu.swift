@@ -15,20 +15,21 @@ final class StatusMenu {
         stateLine.isEnabled = false
         menu.addItem(stateLine)
         menu.addItem(.separator())
-        menu.addItem(target(NSMenuItem(title: "Открыть Memory Desk", action: #selector(openWindow), keyEquivalent: "")))
-        menu.addItem(target(NSMenuItem(title: "Обработать новые записи", action: #selector(scan), keyEquivalent: "")))
+        menu.addItem(target(NSMenuItem(title: "Открыть Memory Desk", action: #selector(menuOpen), keyEquivalent: "")))
+        menu.addItem(target(NSMenuItem(title: "Обработать новые записи", action: #selector(menuScan), keyEquivalent: "")))
         menu.addItem(.separator())
-        menu.addItem(target(NSMenuItem(title: "Выйти", action: #selector(quit), keyEquivalent: "")))
+        menu.addItem(target(NSMenuItem(title: "Выйти", action: #selector(menuQuit), keyEquivalent: "")))
         item.menu = menu
     }
 
     private func target(_ menuItem: NSMenuItem) -> NSMenuItem { menuItem.target = self; return menuItem }
-    @objc private func openWindow() { onOpen() }
-    @objc private func scan() { onScan() }
-    @objc private func quit() { onQuit() }
+    @objc private func menuOpen() { onOpen() }
+    @objc private func menuScan() { onScan() }
+    @objc private func menuQuit() { onQuit() }
 
     func start() {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             self.refresh()
             self.timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refresh() }
         }

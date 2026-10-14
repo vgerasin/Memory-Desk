@@ -1080,3 +1080,27 @@ ul { padding: 0; list-style: none; }
 .sg-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .sg-line { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; align-items: baseline; padding: 9px 0; text-align: left; border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); font-size: 13px; }
 .sg .muted-text { font-size: 12px; }
+
+/* Настройки: вкладки слева, содержимое прокручивается внутри окна, подвал всегда на виду */
+.modal.settings { width: min(880px, 100%); height: min(720px, calc(100vh - 32px)); padding: 0; gap: 0; overflow: hidden; }
+.set-head { padding: 24px 28px 14px; }
+.set-body { display: flex; flex: 1; min-height: 0; border-top: 1px solid var(--line, rgba(128,128,128,.18)); }
+.set-nav { width: 188px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 12px; overflow-y: auto; border-right: 1px solid var(--line, rgba(128,128,128,.18)); }
+.set-tab { text-align: left; border: none; background: none; padding: 9px 12px; border-radius: 10px; font-size: 14px; color: var(--text2, var(--text)); cursor: pointer; }
+.set-tab:hover { background: var(--fill); }
+.set-tab.on { background: var(--fill); color: var(--text); font-weight: 600; }
+.set-pane { flex: 1; min-width: 0; overflow-y: auto; padding: 20px 28px 24px; }
+.set-pane-in { display: flex; flex-direction: column; gap: 18px; }
+.set-lead { font-size: 13px; color: var(--text3); margin-bottom: 2px; }
+.set-error { margin: 0 28px 10px; }
+.set-foot { padding: 14px 28px 20px; border-top: 1px solid var(--line, rgba(128,128,128,.18)); }
+@media (max-width: 640px) {
+  .modal.settings { height: calc(100vh - 32px); }
+  .set-head { padding: 18px 18px 10px; }
+  .set-body { flex-direction: column; }
+  .set-nav { width: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px 12px; border-right: none; border-bottom: 1px solid var(--line, rgba(128,128,128,.18)); }
+  .set-tab { white-space: nowrap; }
+  .set-pane { padding: 16px 18px 20px; }
+  .set-error { margin: 0 18px 8px; }
+  .set-foot { padding: 12px 18px 16px; }
+}
