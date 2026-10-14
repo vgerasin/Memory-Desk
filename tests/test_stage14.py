@@ -153,3 +153,117 @@ def test_edit_api_errors(client, real_meeting):
     assert client.patch(f"/api/meetings/{meeting.id}/transcript/9999", json={"text": "x"}).status_code == 404
     assert client.patch(f"/api/meetings/{meeting.id}/transcript/0", json={"text": "  "}).status_code == 400
     assert client.patch(f"/api/meetings/{meeting.id}/transcript/0", json={}).status_code == 422
+
+
+# --------------------------------------------------------------------------- выбор модели анализа
+
+@pytest.fixture()
+def models(monkeypatch):
+    """Подменяет Ollama: список скачанных моделей и пробный ответ; возвращает журнал запросов."""
+    from memory_desk import llm
+    state = {"installed": [{"name": "qwen3:4b", "size": 2_600_000_000, "params": "4.0B", "quant": "Q4_K_M"},
+                           {"name": "llama3.1:8b", "size": 4_900_000_000, "params": "8.0B", "quant": "Q4_0"}],
+             "asked": []}
+    monkeypatch.setattr(llm, "list_models", lambda url, timeout=2.0: state["installed"])
+    def fake_json(prompt, *, model, **kwargs):
+        state["asked"].append(model)
+        return {"ok": True}
+    monkeypatch.setattr(llm, "ollama_json", fake_json)
+    # модель в процессе сборки заметок не должна «прилипнуть» к другим тестам
+    import meetings_process
+    monkeypatch.setattr(meetings_process, "OLLAMA_MODEL", meetings_process.OLLAMA_MODEL)
+    return state
+
+
+def _settings(client, **changes):
+    body = {k: v for k, v in client.get("/api/settings").json().items() if k != "exists"}
+    return client.put("/api/settings", json={**body, **changes})
+
+
+def test_llm_default_and_listing(client, models):
+    from memory_desk import config
+    data = client.get("/api/llm").json()
+    assert data["default"] == config.DEFAULT_LLM == "qwen3:4b" and data["current"] == "qwen3:4b" and data["chosen"] == ""
+    assert data["reachable"] and data["currentInstalled"]
+    assert [m["name"] for m in data["installed"]] == ["qwen3:4b", "llama3.1:8b"]
+    assert {s["name"]: s["installed"] for s in data["suggested"]} == {"qwen3:4b": True, "qwen3:8b": False}
+    models["installed"] = None
+    down = client.get("/api/llm").json()
+    assert down["reachable"] is False and down["installed"] == [] and down["currentInstalled"] is False
+
+
+def test_llm_choice_is_saved_and_used_everywhere(client, models):
+    from memory_desk import config, conflicts, jobs, llm, services
+    assert _settings(client, llm_model="llama3.1:8b").status_code == 200
+    assert config.llm_model() == "llama3.1:8b" and client.get("/api/llm").json()["current"] == "llama3.1:8b"
+    assert client.get("/api/settings").json()["llm_model"] == "llama3.1:8b"
+    # серверные запросы к модели идут с выбранной моделью
+    conflicts_call = llm.ollama_json("x", model=config.llm_model(), url=config.OLLAMA_URL)
+    assert conflicts_call == {"ok": True} and models["asked"][-1] == "llama3.1:8b"
+    # фоновая обработка получает её через окружение
+    assert config.llm_model(client.app.state.core.cfg) == "llama3.1:8b"
+    import inspect
+    assert "PLAUD_OLLAMA_MODEL" in inspect.getsource(jobs.start)
+    # статус системы называет выбранную модель
+    assert services._ollama_status() == ("llama3.1:8b", "ok")
+    # пустое значение возвращает модель по умолчанию
+    assert _settings(client, llm_model="").status_code == 200 and config.llm_model() == config.DEFAULT_LLM
+    assert services._ollama_status() == ("qwen3:4b", "ok")
+
+
+def test_llm_status_when_model_is_missing(client, models):
+    from memory_desk import services
+    assert _settings(client, llm_model="qwen3:8b").status_code == 200
+    assert services._ollama_status() == ("модель не загружена", "warn")
+    _settings(client, llm_model="")
+
+
+@pytest.mark.parametrize("name", ["bad name", "модель", "-x", "a;b", "x" * 200, "a b:c"])
+def test_llm_name_is_validated(client, models, name):
+    assert _settings(client, llm_model=name).status_code == 400
+    assert client.post("/api/llm/check", json={"model": name}).status_code in (400, 422)
+
+
+def test_llm_check_reports_answer_and_errors(client, models, monkeypatch):
+    from memory_desk import llm
+    ok = client.post("/api/llm/check", json={"model": "llama3.1:8b"}).json()
+    assert ok["ok"] is True and ok["model"] == "llama3.1:8b" and models["asked"][-1] == "llama3.1:8b" and ok["seconds"] >= 0
+    default = client.post("/api/llm/check", json={}).json()
+    assert default["model"] == "qwen3:4b"
+
+    def broken(prompt, **kwargs):
+        raise RuntimeError("Модель «qwen3:8b» не скачана: выполните `ollama pull qwen3:8b` или выберите другую в настройках.")
+    monkeypatch.setattr(llm, "ollama_json", broken)
+    bad = client.post("/api/llm/check", json={"model": "qwen3:8b"}).json()
+    assert bad["ok"] is False and "ollama pull qwen3:8b" in bad["message"]
+
+
+def test_has_model_matches_exact_names_and_latest_tag():
+    from memory_desk import llm
+    installed = [{"name": "qwen3:4b"}, {"name": "mistral:latest"}, {"name": "hf.co/user/model:Q4_K_M"}]
+    assert llm.has_model(installed, "qwen3:4b") and llm.has_model(installed, "mistral") and llm.has_model(installed, "hf.co/user/model:Q4_K_M")
+    assert not llm.has_model(installed, "qwen3:8b") and not llm.has_model(installed, "qwen3") and not llm.has_model([], "mistral")
+
+
+def test_ollama_404_names_the_missing_model(monkeypatch):
+    import io, json, urllib.error
+    from memory_desk import llm
+
+    def refuse(request, timeout=None):
+        raise urllib.error.HTTPError("http://x", 404, "not found", {}, io.BytesIO(json.dumps({"error": "model not found"}).encode()))
+    monkeypatch.setattr(llm.urllib.request, "urlopen", refuse)
+    with pytest.raises(RuntimeError, match="ollama pull qwen3:9b"):
+        llm.ollama_json("x", model="qwen3:9b", url="http://x")
+
+
+def test_worker_gets_model_from_environment(monkeypatch):
+    import importlib
+    monkeypatch.setenv("PLAUD_OLLAMA_MODEL", " qwen3:8b ")
+    import meetings_process
+    try:
+        reloaded = importlib.reload(meetings_process)
+        assert reloaded.OLLAMA_MODEL == "qwen3:8b"
+    finally:
+        monkeypatch.delenv("PLAUD_OLLAMA_MODEL")
+        importlib.reload(meetings_process)
+    assert meetings_process.OLLAMA_MODEL == "qwen3:4b"

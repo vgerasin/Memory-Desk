@@ -105,7 +105,7 @@ export interface Settings {
   notify: boolean; morning_brief: boolean; morning_hour: number; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
   backup_on_change: boolean; note_writeback: boolean; mirror_enabled: boolean
   default_template: string
-  asr_model?: string; asr_hint?: boolean; asr_prep?: 'off' | 'light' | 'strong'
+  asr_model?: string; asr_hint?: boolean; asr_prep?: 'off' | 'light' | 'strong'; llm_model?: string
   lock_timeout_min?: number
   suggestions_auto?: boolean
   dossier_model?: boolean

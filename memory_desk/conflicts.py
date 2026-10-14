@@ -72,7 +72,7 @@ def ask_model(old: dict, new: dict) -> dict:
         'Верни только JSON: {"relation": "replaces|contradicts|consistent|unrelated", "reason": "одно короткое предложение по-русски"}.\n'
         "replaces — новое отменяет или заменяет старое; contradicts — они противоречат, но замена не очевидна; "
         "consistent — они согласуются или уточняют друг друга; unrelated — это разные вопросы. Не придумывай фактов.")
-    data = llm.ollama_json(prompt, model=config.OLLAMA_MODEL, url=config.OLLAMA_URL, num_predict=300, attempts=2, timeout=120)
+    data = llm.ollama_json(prompt, model=config.llm_model(), url=config.OLLAMA_URL, num_predict=300, attempts=2, timeout=120)
     relation = str(data.get("relation", "")).strip().lower()
     if relation not in {"replaces", "contradicts", "consistent", "unrelated"}:
         raise RuntimeError("Модель ответила непонятно")

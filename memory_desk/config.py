@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 from . import asr
@@ -13,7 +14,9 @@ CONFIG_PATH = Path(
 )
 PORT = int(os.environ.get("MEMORY_DESK_PORT", "8502"))
 OLLAMA_URL = os.environ.get("MEMORY_DESK_OLLAMA_URL", "http://127.0.0.1:11435")
-OLLAMA_MODEL = os.environ.get("MEMORY_DESK_OLLAMA_MODEL", "qwen3:4b")
+DEFAULT_LLM = os.environ.get("MEMORY_DESK_OLLAMA_MODEL", "qwen3:4b")
+OLLAMA_MODEL = DEFAULT_LLM      # прежнее имя: модель по умолчанию; выбранную в настройках даёт llm_model()
+_LLM_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,120}$")
 
 
 def _resolve_data_dir() -> Path:
@@ -68,6 +71,7 @@ def defaults() -> dict:
         "asr_model": "turbo",
         "asr_hint": True,
         "asr_prep": "off",
+        "llm_model": "",
     }
 
 
@@ -112,6 +116,9 @@ def save_config(values: dict) -> dict:
     normalized["asr_model"] = str(normalized.get("asr_model") or "turbo").strip()
     if not asr.valid_model(normalized["asr_model"]):
         raise ValueError("Модель распознавания: turbo, large-v3, medium или полное имя вида автор/модель")
+    normalized["llm_model"] = str(normalized.get("llm_model") or "").strip()
+    if normalized["llm_model"] and not _LLM_NAME.match(normalized["llm_model"]):
+        raise ValueError("Модель анализа: имя вида qwen3:8b (как в `ollama list`)")
     normalized["asr_hint"] = bool(normalized["asr_hint"])
     if normalized.get("asr_prep") not in asr.PREP_MODES:
         normalized["asr_prep"] = "off"
@@ -136,6 +143,26 @@ def save_config(values: dict) -> dict:
         if not text:
             raise ValueError("Путь к папке не может быть пустым")
         normalized[key] = str(Path(text).expanduser().resolve())
+    global _LLM_CACHE
+    _LLM_CACHE = (-1, "")
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(normalized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return normalized
+
+
+_LLM_CACHE: tuple[int, str] = (-1, "")
+
+
+def llm_model(cfg: dict | None = None) -> str:
+    """Модель анализа (Ollama): выбранная в настройках, иначе по умолчанию. Файл настроек читается заново при его изменении."""
+    global _LLM_CACHE
+    if cfg is not None:
+        chosen = str(cfg.get("llm_model") or "").strip()
+        return chosen or DEFAULT_LLM
+    try:
+        stamp = CONFIG_PATH.stat().st_mtime_ns
+    except OSError:
+        return DEFAULT_LLM
+    if _LLM_CACHE[0] != stamp:
+        _LLM_CACHE = (stamp, llm_model(load_config()))
+    return _LLM_CACHE[1]

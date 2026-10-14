@@ -544,6 +544,7 @@ def create_app() -> FastAPI:
         asr_model: str | None = None
         asr_hint: bool | None = None
         asr_prep: str | None = None
+        llm_model: str | None = None
 
     @app.get("/api/settings")
     def get_settings():
@@ -575,7 +576,7 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "Такого языка интерфейса нет")
             if values.get("dossier_model") is None:
                 values["dossier_model"] = core.cfg.get("dossier_model", True)
-            for key, default in (("asr_model", "turbo"), ("asr_hint", True), ("asr_prep", "off")):
+            for key, default in (("asr_model", "turbo"), ("asr_hint", True), ("asr_prep", "off"), ("llm_model", "")):
                 if values.get(key) is None:
                     values[key] = core.cfg.get(key, default)
             if values["asr_prep"] not in asr.PREP_MODES:
@@ -584,6 +585,32 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {**saved, "message": "Настройки сохранены"}
+
+    # ------------------------------------------------------------------ модель анализа
+    SUGGESTED_LLMS = ({"name": "qwen3:4b", "note": "по умолчанию: быстрая, нужно около 3 ГБ памяти"},
+                      {"name": "qwen3:8b", "note": "крупнее: обычно аккуратнее, но медленнее и занимает больше памяти"})
+
+    @app.get("/api/llm")
+    def llm_models():
+        """Какая модель анализа выбрана и какие модели уже скачаны в Ollama."""
+        installed = llm.list_models(config.OLLAMA_URL, timeout=1.5)
+        current = config.llm_model(core.cfg)
+        return {"current": current, "default": config.DEFAULT_LLM, "chosen": core.cfg.get("llm_model", ""),
+                "reachable": installed is not None, "installed": installed or [],
+                "currentInstalled": installed is not None and llm.has_model(installed, current),
+                "suggested": [{**item, "installed": installed is not None and llm.has_model(installed, item["name"])}
+                              for item in SUGGESTED_LLMS]}
+
+    class LlmCheckBody(BaseModel):
+        model: str = Field("", max_length=130)
+
+    @app.post("/api/llm/check")
+    def llm_check(body: LlmCheckBody):
+        """Пробный запрос к модели: отвечает ли и как быстро. Ничего не сохраняет и не скачивает."""
+        name = body.model.strip() or config.llm_model(core.cfg)
+        if not config._LLM_NAME.match(name):
+            raise HTTPException(400, "Модель анализа: имя вида qwen3:8b (как в `ollama list`)")
+        return {"model": name, **llm.check_model(name, config.OLLAMA_URL)}
 
     # ------------------------------------------------------------------ словарь терминов
     def dictionary_view(warnings: list[str] | None = None) -> dict:
@@ -683,7 +710,7 @@ def create_app() -> FastAPI:
     def draft_template(body: dict = Body(...)):
         """Шаблон по описанию: модель предлагает структуру, пользователь смотрит и правит её до сохранения."""
         def ask(prompt: str) -> dict:
-            return llm.ollama_json(prompt, model=config.OLLAMA_MODEL, url=config.OLLAMA_URL, num_predict=1200,
+            return llm.ollama_json(prompt, model=config.llm_model(), url=config.OLLAMA_URL, num_predict=1200,
                                    attempts=2, timeout=180)
         try:
             template = templates.draft_from_model(str(body.get("description") or ""), ask)

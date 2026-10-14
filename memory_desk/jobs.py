@@ -473,6 +473,7 @@ def start(cfg: dict, files: list[Path] | None = None) -> dict:
         context_path.write_text(json.dumps(asr_context(cfg), ensure_ascii=False), encoding="utf-8")
         env = {**os.environ, "PLAUD_DIARIZE": "1" if cfg.get("diarize", True) else "0",
                "PLAUD_WHISPER_MODEL": str(cfg.get("asr_model") or asr.DEFAULT_MODEL),
+               "PLAUD_OLLAMA_MODEL": config.llm_model(cfg),
                "PLAUD_ASR_HINT": "1" if cfg.get("asr_hint", True) else "0",
                "PLAUD_ASR_PREP": str(cfg.get("asr_prep") or "off"),
                "PLAUD_ASR_CONTEXT": str(context_path),

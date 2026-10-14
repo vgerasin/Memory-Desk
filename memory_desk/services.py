@@ -740,16 +740,14 @@ def chat(core: Core, question: str, scope: dict, previous: list[str], asked: lis
 # --------------------------------------------------------------------------- система
 
 def _ollama_status() -> tuple[str, str]:
-    try:
-        import json
-        with urllib.request.urlopen(f"{config.OLLAMA_URL}/api/tags", timeout=0.6) as response:
-            tags = json.load(response)
-        names = [m.get("name", "") for m in tags.get("models", [])]
-        if any(n.startswith(config.OLLAMA_MODEL.split(":")[0]) for n in names):
-            return config.OLLAMA_MODEL, "ok"
-        return "модель не загружена", "warn"
-    except Exception:  # noqa: BLE001
+    from . import llm
+    chosen = config.llm_model()
+    installed = llm.list_models(config.OLLAMA_URL, timeout=0.6)
+    if installed is None:
         return "не отвечает", "warn"
+    if llm.has_model(installed, chosen):
+        return chosen, "ok"
+    return "модель не загружена", "warn"
 
 
 def system_status(core: Core) -> dict:

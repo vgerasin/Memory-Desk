@@ -6,6 +6,7 @@ import type { AppleStatus, BackupItem, Settings } from '../types'
 import { AppearanceSettings } from './AppearanceSettings'
 import { DictionarySettings } from './DictionarySettings'
 import { AsrSettings } from './AsrSettings'
+import { LlmSettings } from './LlmSettings'
 import { TemplateSettings } from './TemplateSettings'
 import { VoiceSettings } from './VoiceSettings'
 import { SecurityBlock } from './Security'
@@ -58,7 +59,7 @@ export function SettingsModal() {
         notify: form.notify, morning_brief: form.morning_brief, morning_hour: Number(form.morning_hour) || 0, backup_auto: form.backup_auto,
         backup_interval_hours: Number(form.backup_interval_hours) || 24, backup_keep: Number(form.backup_keep) || 7,
         backup_on_change: form.backup_on_change, note_writeback: form.note_writeback, mirror_enabled: form.mirror_enabled, suggestions_auto: form.suggestions_auto, dossier_model: form.dossier_model, ui_lang: form.ui_lang,
-        asr_model: form.asr_model, asr_hint: form.asr_hint, asr_prep: form.asr_prep,
+        asr_model: form.asr_model, asr_hint: form.asr_hint, asr_prep: form.asr_prep, llm_model: form.llm_model ?? '',
       })
       showToast(tr('Настройки сохранены'))
       invalidate()
@@ -175,6 +176,7 @@ export function SettingsModal() {
                 {dirField('recordings_dir', tr('Папка записей'), tr('Сюда PLAUD или вы сами кладёте аудиофайлы'))}
                 {dirField('obsidian_dir', tr('Папка Obsidian'), tr('Готовые заметки и стенограммы'))}
                 {dirField('archive_dir', tr('Архив обработанных записей'), tr('Куда переносится аудио после обработки'))}
+                <LlmSettings value={form.llm_model ?? ''} onChange={v => set('llm_model', v)} />
                 <div className="field">
                   <label htmlFor="retention">{tr('Хранить аудио, дней')}</label>
                   <input id="retention" type="number" min={1} max={3650} value={form.retention_days}

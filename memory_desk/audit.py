@@ -112,7 +112,7 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
 # Запросы, которые данные не меняют: строят текст, ответ или файл для скачивания.
 READ_ONLY: set[tuple[str, str]] = {
     ("POST", "/api/meetings/{meeting_id}/protocol"), ("POST", "/api/meetings/{meeting_id}/protocol/start"),
-    ("POST", "/api/materials/mindmap"), ("POST", "/api/materials/artifact"), ("POST", "/api/materials/digest"),
+    ("POST", "/api/materials/mindmap"), ("POST", "/api/llm/check"), ("POST", "/api/materials/artifact"), ("POST", "/api/materials/digest"),
     ("POST", "/api/decisions/conflicts/check"),
     ("POST", "/api/templates/draft"), ("POST", "/api/chat"), ("POST", "/api/chat/export"),
     ("POST", "/api/export"), ("POST", "/api/export/map"), ("POST", "/api/lock/ping"),

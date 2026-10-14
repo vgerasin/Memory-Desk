@@ -400,7 +400,7 @@ def prompt_part(intent: Intent, body: str) -> str:
 
 def generate(prompt: str, num_predict: int = 700) -> str:
     """Запрос к Ollama. Вынесен в функцию модуля, чтобы подменять в тестах. Бросает OSError, если модель недоступна."""
-    payload = {"model": config.OLLAMA_MODEL, "stream": False, "raw": True, "prompt": prompt,
+    payload = {"model": config.llm_model(), "stream": False, "raw": True, "prompt": prompt,
                "options": {"temperature": 0.1, "num_ctx": 8192, "num_predict": num_predict}}
     request = urllib.request.Request(f"{config.OLLAMA_URL}/api/generate", data=json.dumps(payload, ensure_ascii=False).encode(),
                                      headers={"Content-Type": "application/json"})

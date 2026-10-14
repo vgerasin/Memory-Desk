@@ -1026,7 +1026,7 @@ def answer_question(question: str, sources: list[dict], mode: str = "") -> str:
 ОТВЕТ:
 """
     payload = {
-        "model": config.OLLAMA_MODEL, "stream": False,
+        "model": config.llm_model(), "stream": False,
         # raw обходит chat-template Qwen, который на некоторых версиях Ollama игнорирует think=false.
         "raw": True, "prompt": prompt,
         "options": {"temperature": 0.1, "num_ctx": 4096, "num_predict": 160},

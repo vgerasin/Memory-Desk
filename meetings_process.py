@@ -28,7 +28,7 @@ from memory_desk.llm import ollama_json  # noqa: E402
 DEFAULT_VAULT = Path.home() / "Documents/Obsidian Vault/Встречи"
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
 WHISPER_MODEL = asr.resolve_model(os.environ.get("PLAUD_WHISPER_MODEL", asr.DEFAULT_MODEL))
-OLLAMA_MODEL = "qwen3:4b"
+OLLAMA_MODEL = os.environ.get("PLAUD_OLLAMA_MODEL", "").strip() or "qwen3:4b"   # из настроек кабинета; без них — модель по умолчанию
 OLLAMA_URL = os.environ.get("PLAUD_OLLAMA_URL", "http://127.0.0.1:11435")
 ANALYSIS_VERSION = 4
 PROCESSING_LOG = ROOT / "logs" / "processing.jsonl"

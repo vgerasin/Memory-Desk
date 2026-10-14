@@ -146,7 +146,7 @@ PROMPT = """
 
 def _ask(prompt: str) -> dict:
     from . import llm
-    return llm.ollama_json(prompt, model=config.OLLAMA_MODEL, url=config.OLLAMA_URL, num_ctx=8192, num_predict=900,
+    return llm.ollama_json(prompt, model=config.llm_model(), url=config.OLLAMA_URL, num_ctx=8192, num_predict=900,
                            attempts=2, timeout=300)
 
 

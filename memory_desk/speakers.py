@@ -14,7 +14,7 @@ _lock = threading.Lock()
 def make_chat():
     """Функция запроса к модели; вынесена, чтобы её можно было подменить в тестах."""
     bad = config.LOGS_DIR / "ollama-last-bad-response.txt"
-    return lambda prompt: llm.ollama_json(prompt, model=config.OLLAMA_MODEL, url=config.OLLAMA_URL, bad_response_path=bad)
+    return lambda prompt: llm.ollama_json(prompt, model=config.llm_model(), url=config.OLLAMA_URL, bad_response_path=bad)
 
 
 def status(meeting_id: str) -> dict | None:

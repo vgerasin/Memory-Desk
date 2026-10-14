@@ -88,6 +88,10 @@ def ollama_json(
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 response_data = json.load(response)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise RuntimeError(f"Модель «{model}» не скачана: выполните `ollama pull {model}` или выберите другую в настройках.") from exc
+            raise RuntimeError(f"Ollama вернул ошибку {exc.code}. Проверьте модель «{model}» в настройках.") from exc
         except (urllib.error.URLError, OSError) as exc:
             raise RuntimeError("Ollama не отвечает. Запустите приложение Ollama или `ollama serve`.") from exc
         last_content = response_data.get("message", {}).get("content", "")
@@ -102,3 +106,39 @@ def ollama_json(
         except OSError:
             pass
     raise RuntimeError("Модель вернула неразборчивый ответ (Ollama вернул некорректный JSON).")
+
+
+def list_models(url: str, timeout: float = 2.0) -> list[dict] | None:
+    """Модели, скачанные в Ollama: [{name, size, params, quant}]. None — Ollama не отвечает."""
+    try:
+        with urllib.request.urlopen(f"{url}/api/tags", timeout=timeout) as response:
+            tags = json.load(response)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    out = []
+    for item in tags.get("models", []) if isinstance(tags, dict) else []:
+        name = str(item.get("name") or item.get("model") or "")
+        if not name:
+            continue
+        details = item.get("details") if isinstance(item.get("details"), dict) else {}
+        out.append({"name": name, "size": int(item.get("size") or 0), "params": str(details.get("parameter_size") or ""),
+                    "quant": str(details.get("quantization_level") or "")})
+    return sorted(out, key=lambda m: m["name"])
+
+
+def has_model(installed: list[dict], name: str) -> bool:
+    """Скачана ли модель: имя без тега означает `:latest`."""
+    names = {m["name"] for m in installed}
+    return name in names or (":" not in name.rsplit("/", 1)[-1] and f"{name}:latest" in names)
+
+
+def check_model(model: str, url: str, timeout: int = 120) -> dict:
+    """Короткий пробный запрос: отвечает ли модель и как быстро. Возвращает {ok, seconds, message}."""
+    import time
+    started = time.time()
+    try:
+        data = ollama_json('Верни только JSON: {"ok": true}', model=model, url=url, num_ctx=512, num_predict=40,
+                           attempts=1, timeout=timeout)
+    except RuntimeError as exc:
+        return {"ok": False, "seconds": round(time.time() - started, 1), "message": str(exc)}
+    return {"ok": True, "seconds": round(time.time() - started, 1), "message": "Модель отвечает" if data else "Модель отвечает"}

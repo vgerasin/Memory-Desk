@@ -32,6 +32,7 @@ def _worker():
     except ImportError:
         sys.path.insert(0, str(config.PROJECT_ROOT))
         import meetings_process
+    meetings_process.OLLAMA_MODEL = config.llm_model()      # модель, выбранная в настройках, действует и при пересборке
     return meetings_process
 
 
