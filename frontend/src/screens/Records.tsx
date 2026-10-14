@@ -12,7 +12,6 @@ import { BulkBar, MoreButton, PAGE, useBulk } from '../components/Bulk'
 import { DecisionRow, TaskRow } from '../components/Items'
 import { RecordMenus } from '../components/RecordMenus'
 import { RebuildPanel } from '../components/RebuildPanel'
-import { ViewsPanel } from '../components/ViewsPanel'
 import { IntakePanel } from '../components/Intake'
 import { AttachmentsPanel } from '../components/AttachmentsPanel'
 import { BookmarksPanel, colorHex, useBookmarkActions } from '../components/Bookmarks'
@@ -24,7 +23,7 @@ import { DocMenu } from '../components/DocMenu'
 import { SuggestionsPanel } from '../components/Suggestions'
 import { tr } from '../i18n'
 
-type View = 'overview' | 'transcript' | 'actions' | 'questions' | 'views' | 'files'
+type View = 'overview' | 'transcript' | 'actions' | 'questions' | 'files'
 const FILTER_KEYS = ['project', 'person', 'type', 'status', 'period'] as const
 
 function RecordRow({ r, selected, href, picking, checked, onCheck }: {
@@ -109,7 +108,6 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   const tabs = [
     { key: 'overview' as View, label: tr('Обзор') }, { key: 'transcript' as View, label: tr('Стенограмма') },
     { key: 'actions' as View, label: tr('Решения и задачи'), count: nAct }, { key: 'questions' as View, label: tr('Вопросы и риски'), count: nQ },
-    { key: 'views' as View, label: tr('Взгляды'), count: m.views?.length || undefined },
     { key: 'files' as View, label: tr('Вложения'), count: m.attachments?.length || undefined },
   ]
 
@@ -310,7 +308,6 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
           </div>
         </div>
       )}
-      {view === 'views' && <ViewsPanel meeting={m} onJump={jump} />}
       {view === 'files' && <AttachmentsPanel meeting={m} />}
       {eventDraft && <EventDialog draft={eventDraft} onClose={() => setEventDraft(null)} />}
     </article>
@@ -373,7 +370,7 @@ export function Records() {
   const bulk = useBulk()
   const routeId = route.segments[1] ?? null
   const selectedId = routeId ?? items[0]?.id ?? null
-  const view = (['overview', 'transcript', 'actions', 'questions', 'views', 'files'].includes(params.get('view') ?? '') ? params.get('view') : (params.get('t') ? 'transcript' : 'overview')) as View
+  const view = (['overview', 'transcript', 'actions', 'questions', 'files'].includes(params.get('view') ?? '') ? params.get('view') : (params.get('t') ? 'transcript' : 'overview')) as View
   const t = params.get('t') != null && params.get('t') !== '' ? Number(params.get('t')) : null
 
   const filterQuery = (patch: Record<string, string>) => buildQuery({ ...filters, q, ...patch })

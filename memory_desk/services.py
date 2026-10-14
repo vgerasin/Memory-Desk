@@ -9,7 +9,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import attachments, bookmarks, config, daily, dictionary, digest, followups, integrations, jobs, knowledge, materials, ocr, speakers as speakers_mod, storage, templates, views, voice
+from . import attachments, bookmarks, config, daily, dictionary, digest, followups, integrations, jobs, knowledge, materials, ocr, speakers as speakers_mod, storage, templates, voice
 from .core import Core
 
 PALETTE = ["#5E5CE6", "#FF9F0A", "#30B0C7", "#34C759", "#FF375F", "#AF52DE", "#64D2FF", "#A2845E", "#FF6482", "#BF5AF2"]
@@ -162,7 +162,7 @@ def extra_sections(m: knowledge.Meeting) -> list[dict]:
     """Свои разделы шаблона (всё, что кабинет не читает как стандартное), с пунктами и таймкодами."""
     result = []
     for title, body in knowledge.note_sections(m).items():
-        if title.casefold() in _KNOWN_SECTIONS or title.startswith(views.PREFIX):
+        if title.casefold() in _KNOWN_SECTIONS:
             continue
         items = [{"text": f["text"], "t": f["evidence_time"], "tSec": clock_seconds(f["evidence_time"])}
                  for f in (storage.parse_fact(line) for line in storage.bullet_lines(body)) if f["text"]]
@@ -214,7 +214,7 @@ def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
         "risks": facts("Риски"), "questions": facts("Открытые вопросы"), "nextSteps": facts("Следующие шаги"),
         "template": {"id": template.id if m.template else "", "name": template.name if m.template else "",
                      "suggestedId": templates.suggest(m.record_type).id},
-        "extraSections": extra_sections(m), "views": views.list_views(m), "bookmarks": bookmark_dtos(m, transcript),
+        "extraSections": extra_sections(m), "bookmarks": bookmark_dtos(m, transcript),
         "attachments": attachments.list_for(m),
         "transcript": transcript, "speakers": speaker_list, "diarization": speakers_mod.status(m.id),
         "obsidianUrl": knowledge.obsidian_url(m.path), "notePath": knowledge.note_relative_path(m.path),

@@ -39,6 +39,15 @@ def backup_dir() -> Path:
     return config.DATA_DIR / "note-backups"
 
 
+_LEGACY_VIEW = re.compile(r"(?ms)^##[ \t]+Взгляд: .*?(?=^##[ \t]+|\Z)")
+
+
+def legacy_view_sections(content: str) -> str:
+    """Разделы `## Взгляд: …`, добавленные в версиях до 3.2: «Взгляды» объединены с шаблонами, но уже написанные разделы
+    остаются в заметке и переживают пересборку."""
+    return "\n".join(m.group(0).rstrip() + "\n" for m in _LEGACY_VIEW.finditer(content))
+
+
 def _merged(table: str, meeting_id: str, facts: list[dict]) -> tuple[list[dict], list[dict], int]:
     """(строки заметки, новые черновики для базы, число сохранённых подтверждённых записей)."""
     plain = knowledge._plain
@@ -135,10 +144,10 @@ def build_text(meeting: knowledge.Meeting, template: templates.Template, data: d
         sections = _replace_section(sections + "\n", knowledge.DECISION_SECTION, "\n".join(
             knowledge.render_item_line("decisions", i) for i in decision_lines) or "Не выявлено.")
     signature = f"\n_{used.signature}_\n" if used.signature else ""
-    from . import attachments, bookmarks, views
-    kept_marks = bookmarks.section_text(body)   # закладки, вложения и «Взгляды» не зависят от шаблона и переживают пересборку
+    from . import attachments, bookmarks
+    kept_marks = bookmarks.section_text(body)   # закладки, вложения и прежние «Взгляды» не зависят от шаблона и переживают пересборку
     kept_files = attachments.section_text(body)
-    kept_views = views.sections_text(body)
+    kept_views = legacy_view_sections(body)
     views_block = "".join(f"{part.strip()}\n\n" for part in (kept_marks, kept_files, kept_views) if part.strip())
     new_body = f"{preamble}\n{sections.strip()}\n\n{views_block}{transcript_block}{signature}"
     # поле template в метаданных

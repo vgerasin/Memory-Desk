@@ -769,37 +769,11 @@ ul { padding: 0; list-style: none; }
 .proto-progress .track > i { border-radius: 4px; transition: width .5s ease-out; }
 .proto-sub { font-size: 12px; color: var(--text2); }
 
-/* взгляды на запись */
-.views { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
-.views-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
-.views .hint { font-size: 12px; color: var(--text2); line-height: 1.45; max-width: 560px; }
-.views .hint.bad { color: var(--danger); }
-.view-add { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--fill); }
-.view-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-.view-preset { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px; border-radius: 10px; background: var(--surface); }
-.view-preset:hover { box-shadow: 0 0 0 1.5px var(--accent) inset; }
-.view-preset b { font-size: 14px; }
-.view-preset span { font-size: 12px; color: var(--text2); line-height: 1.4; }
-.view-custom { display: flex; flex-direction: column; gap: 8px; }
-.view-custom input, .view-custom textarea { border-radius: 10px; background: var(--surface); padding: 9px 12px; font-size: 14px; border: 1px solid var(--sep); }
-.view-custom textarea { min-height: 64px; resize: vertical; }
-.view-custom .row { display: flex; gap: 8px; }
-.view-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-.view-tab { padding: 6px 12px; border-radius: 999px; background: var(--fill); font-size: 13px; font-weight: 500; }
-.view-tab.on { background: var(--accent); color: #fff; }
-.view-body { display: flex; flex-direction: column; gap: 2px; }
-.view-source { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text2); padding-bottom: 8px; }
-.view-source span + span::before { content: '·'; margin-right: 10px; }
-.view-source .view-edited { color: var(--danger); }
-.view-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-
 /* «Сохранить ответ в Obsidian» под ответом чата */
 .save-answer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 .save-answer .saved-mark { font-size: 12px; font-weight: 600; color: var(--text2); }
 .save-answer .link-btn { font-size: 12px; text-decoration: none; }
 .save-answer .save-error { font-size: 12px; color: var(--danger); }
-.view-preset.have { background: var(--fill2, var(--surface)); opacity: .85; }
-.view-preset.have b::after { content: ' · уже есть'; font-weight: 500; color: var(--text2); }
 
 /* подсказки «что спросить дальше» */
 .followups { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 10px; }

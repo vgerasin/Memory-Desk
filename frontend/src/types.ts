@@ -43,7 +43,7 @@ export interface MeetingDetail extends MeetingItem {
   speakers: SpeakerInfo[]; diarization: DiarizationStatus | null
   obsidianUrl: string | null; notePath: string; hasAudio: boolean; audioUrl: string | null
   template?: { id: string; name: string; suggestedId: string }; extraSections?: { title: string; items: Fact[] }[]
-  views?: ViewDto[]; bookmarks?: BookmarkDto[]; attachments?: AttachmentDto[]
+  bookmarks?: BookmarkDto[]; attachments?: AttachmentDto[]
 }
 
 export interface MeetingsResponse { items: MeetingItem[]; total: number; counts: { total: number; needsReview: number; noProject: number } }
@@ -242,10 +242,6 @@ export interface RebuildState {
 
 export type BookmarkColor = 'yellow' | 'red' | 'green' | 'blue' | 'purple'
 export interface BookmarkDto { sec: number; t: string; text: string; color: BookmarkColor; context: string }
-export interface ViewDto {
-  id: string; title: string; kind: 'preset' | 'custom'; instruction: string; date: string; model: string
-  items: Fact[]; edited: boolean
-}
 export interface ViewPreset { id: string; title: string; instruction: string; limit: number }
 export interface ViewPresets { presets: ViewPreset[]; max: number }
 export interface ViewJob {
