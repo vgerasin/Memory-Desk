@@ -404,3 +404,43 @@ def test_api_models_choice(client, keep_config):
     assert client.post("/api/setup/models", json={"llm_model": "плохо имя!", "asr_model": "turbo"}).status_code == 400
     assert client.post("/api/setup/models", json={"llm_model": "", "asr_model": "turbo"}).status_code == 200
     assert keep_config.cfg["llm_model"] == ""
+
+
+# --------------------------------------------------------------------------- выбор папки
+
+def test_pick_folder_runs_macos_dialog_and_handles_cancel(monkeypatch, tmp_path):
+    import subprocess
+    calls = []
+
+    def fake(cmd, **kw):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=str(tmp_path / "Записи") + "/\n", stderr="")
+    monkeypatch.setattr(setup.sys, "platform", "darwin")
+    monkeypatch.setattr(setup, "which", lambda name: "/usr/bin/osascript")
+    monkeypatch.setattr(setup.subprocess, "run", fake)
+    assert setup.pick_folder("recordings", str(tmp_path / "нет" / "ещё")) == str(tmp_path / "Записи")
+    assert calls[0][0] == "osascript" and calls[0][-1] == str(tmp_path)  # стартует с ближайшей существующей папки
+    monkeypatch.setattr(setup.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, stdout="", stderr="execution error: User canceled. (-128)"))
+    assert setup.pick_folder("vault") == ""
+    monkeypatch.setattr(setup.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom"))
+    with pytest.raises(RuntimeError):
+        setup.pick_folder("vault")
+    with pytest.raises(ValueError):
+        setup.pick_folder("system")
+
+
+def test_pick_folder_unavailable_off_macos(monkeypatch):
+    monkeypatch.setattr(setup.sys, "platform", "linux")
+    assert setup.can_pick() is False
+    with pytest.raises(RuntimeError):
+        setup.pick_folder("recordings")
+
+
+def test_api_pick_folder(client, monkeypatch):
+    monkeypatch.setattr(setup, "pick_folder", lambda kind, start="": f"/tmp/{kind}")
+    assert client.post("/api/setup/pick-folder", json={"kind": "vault"}).json() == {"path": "/tmp/vault"}
+    monkeypatch.undo()
+    # без macOS окна нет: понятная ошибка, а неизвестный вид папки отвергается
+    monkeypatch.setattr(setup.sys, "platform", "linux")
+    assert client.post("/api/setup/pick-folder", json={"kind": "vault"}).status_code == 409
+    assert client.post("/api/setup/pick-folder", json={"kind": "system"}).status_code == 400

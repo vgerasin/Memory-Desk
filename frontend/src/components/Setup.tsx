@@ -9,7 +9,7 @@ interface Component {
 }
 interface Job { id: string; title: string; state: 'running' | 'done' | 'error' | 'cancelled'; message: string; percent: number | null; done: number; total: number; seconds: number; log: string[] }
 interface SetupInfo {
-  components: Component[]; folders: { recordingsDir: string; obsidianDir: string; recordingsOk: boolean; obsidianOk: boolean }
+  components: Component[]; folders: { recordingsDir: string; obsidianDir: string; recordingsOk: boolean; obsidianOk: boolean; canPick: boolean }
   disk: { freeGb: number; needGb: number }; ready: boolean; done: boolean; fresh: boolean; brew: boolean; needsWizard: boolean; job: Job | null
 }
 
@@ -99,6 +99,11 @@ export function SetupWizard() {
     void act(() => api.post('/api/setup/models', { llm_model: llm === 'qwen3:4b' ? '' : llm, asr_model: asr }))
   }
   const saveFolders = () => act(async () => { const next = await api.post<SetupInfo>('/api/setup/folders', { recordings_dir: rec, obsidian_dir: vault }); showToast(tr('Папки сохранены')); invalidate(); return next })
+  const pick = (kind: 'recordings' | 'vault') => act(async () => {
+    const res = await api.post<{ path: string }>('/api/setup/pick-folder', { kind, start: kind === 'recordings' ? rec : vault })
+    if (res.path) { if (kind === 'recordings') setRec(res.path); else setVault(res.path) }
+    return null
+  })
   const access = () => act(async () => { await api.post('/api/integrations/apple/access'); showToast(tr('Запрос доступа отправлен: подтвердите его в окне macOS')) })
   const finish = async () => { await act(() => api.post('/api/setup/finish')); invalidate(); close() }
 
@@ -153,19 +158,23 @@ export function SetupWizard() {
 
         {step === 2 && (
           <div className="setup-pane">
-            <div className="field">
-              <label htmlFor="setup-rec">{tr('Папка с записями')}</label>
-              <input id="setup-rec" type="text" value={rec} spellCheck={false} onChange={e => setRec(e.target.value)} />
-              <span className="hint">{tr('Сюда кладите аудиофайлы (например, из PLAUD). Обработанные автоматически уходят в архивную подпапку.')}</span>
-            </div>
-            <div className="field">
-              <label htmlFor="setup-vault">{tr('Папка заметок в Obsidian')}</label>
-              <input id="setup-vault" type="text" value={vault} spellCheck={false} onChange={e => setVault(e.target.value)} />
-              <span className="hint">{tr('Готовые заметки, протоколы и документы сохраняются сюда. Если папки нет, она будет создана.')}</span>
-            </div>
+            {([['recordings', 'setup-rec', tr('Папка с записями'), rec, setRec, info?.folders.recordingsDir, info?.folders.recordingsOk,
+               tr('Сюда кладите аудиофайлы (например, из PLAUD). Обработанные автоматически уходят в архивную подпапку.')],
+              ['vault', 'setup-vault', tr('Папка заметок в Obsidian'), vault, setVault, info?.folders.obsidianDir, info?.folders.obsidianOk,
+               tr('Готовые заметки, протоколы и документы сохраняются сюда.')]] as const).map(([kind, id, label, value, setValue, saved, exists, hint]) => (
+              <div className="field" key={id}>
+                <label htmlFor={id}>{label}</label>
+                <div className="setup-path">
+                  <input id={id} type="text" value={value} spellCheck={false} onChange={e => setValue(e.target.value)} />
+                  {info?.folders.canPick && <button className="btn s28" disabled={busy} onClick={() => void pick(kind)}>{tr('Выбрать…')}</button>}
+                </div>
+                <span className="hint">{hint}</span>
+                {saved !== undefined && value.trim() === saved && <span className={exists ? 'hint setup-state-ok' : 'hint'}>{exists ? tr('Папка есть') : tr('Папки пока нет: создам при сохранении')}</span>}
+              </div>
+            ))}
             <div className="backup-plan">
-              <button className="btn s28 accent" disabled={!rec.trim() || !vault.trim()} onClick={() => void saveFolders()}>{tr('Сохранить папки')}</button>
-              {info && <span className="hint">{info.folders.recordingsOk && info.folders.obsidianOk ? tr('Обе папки на месте') : tr('Папки ещё не созданы')}</span>}
+              <button className="btn s28 accent" disabled={!rec.trim() || !vault.trim()} onClick={() => void saveFolders()}>{tr('Создать папки и сохранить')}</button>
+              <span className="hint">{info?.folders.canPick ? tr('В окне «Выбрать…» есть кнопка «Новая папка».') : tr('Нужен полный путь, например ~/Documents/Записи.')}</span>
             </div>
             <div className="field">
               <label>{tr('Календарь и Напоминания')}</label>

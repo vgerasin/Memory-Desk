@@ -157,7 +157,7 @@ def check(cfg: dict) -> list[dict]:
 def folders(cfg: dict) -> dict:
     rec, vault = Path(str(cfg.get("recordings_dir", ""))).expanduser(), Path(str(cfg.get("obsidian_dir", ""))).expanduser()
     return {"recordingsDir": str(cfg.get("recordings_dir", "")), "obsidianDir": str(cfg.get("obsidian_dir", "")),
-            "recordingsOk": rec.is_dir(), "obsidianOk": vault.is_dir()}
+            "recordingsOk": rec.is_dir(), "obsidianOk": vault.is_dir(), "canPick": can_pick()}
 
 
 def status(cfg: dict, meetings: int = 0) -> dict:
@@ -172,6 +172,44 @@ def status(cfg: dict, meetings: int = 0) -> dict:
     return {"components": items, "folders": folders(cfg), "disk": {"freeGb": free, "needGb": round(need_mb / 1024 + (NEED_FREE_MARGIN_GB if need_mb else 0), 1)},
             "ready": required_ok, "done": bool(cfg.get("setup_done")), "fresh": meetings == 0, "brew": bool(which("brew")),
             "needsWizard": (not cfg.get("setup_done")) and (not required_ok or meetings == 0), "job": runner.view()}
+
+
+# --------------------------------------------------------------------------- выбор папки
+
+PICK_PROMPTS = {"recordings": "Папка с записями", "vault": "Папка заметок в Obsidian"}
+_PICK_SCRIPT = """on run argv
+  set promptText to item 1 of argv
+  set startPath to item 2 of argv
+  if startPath is "" then
+    return POSIX path of (choose folder with prompt promptText)
+  end if
+  return POSIX path of (choose folder with prompt promptText default location (POSIX file startPath))
+end run"""
+
+
+def can_pick() -> bool:
+    return sys.platform == "darwin" and which("osascript") is not None
+
+
+def pick_folder(kind: str, start: str = "") -> str:
+    """Системное окно выбора папки macOS (в нём есть кнопка «Новая папка»). Пустая строка — окно закрыли без выбора."""
+    if kind not in PICK_PROMPTS:
+        raise ValueError("Неизвестная папка")
+    if not can_pick():
+        raise RuntimeError("Окно выбора папки есть только в macOS: впишите путь вручную")
+    folder = Path(start).expanduser() if start.strip() else None
+    while folder is not None and not folder.is_dir() and folder != folder.parent:
+        folder = folder.parent
+    begin = str(folder) if folder is not None and folder.is_dir() else ""
+    try:
+        done = subprocess.run(["osascript", "-e", _PICK_SCRIPT, PICK_PROMPTS[kind], begin], capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        return ""
+    if done.returncode != 0:
+        if "-128" in done.stderr:  # «Отмена»
+            return ""
+        raise RuntimeError("Не удалось открыть окно выбора папки")
+    return done.stdout.strip().rstrip("/") or ""
 
 
 # --------------------------------------------------------------------------- загрузки

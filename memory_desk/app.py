@@ -379,6 +379,20 @@ def create_app() -> FastAPI:
             raise HTTPException(400, f"Не удалось создать или сохранить папки: {exc}") from exc
         return setup_wizard.status(core.cfg, len(core.meetings))
 
+    class SetupPick(BaseModel):
+        kind: str = Field(..., max_length=20)
+        start: str = Field("", max_length=1000)
+
+    @app.post("/api/setup/pick-folder")
+    def setup_pick_folder(body: SetupPick):
+        """Открывает на этом Mac системное окно выбора папки; возвращает путь или пустую строку, если окно закрыли."""
+        try:
+            return {"path": setup_wizard.pick_folder(body.kind, body.start)}
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     class SetupModels(BaseModel):
         llm_model: str = Field("", max_length=130)
         asr_model: str = Field("turbo", max_length=130)

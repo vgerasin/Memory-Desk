@@ -1098,3 +1098,7 @@ ul { padding: 0; list-style: none; }
 .modal.setup > * { flex-shrink: 0; }
 .setup-row { flex-shrink: 0; }
 .setup-detail { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.setup-path { display: flex; gap: 8px; align-items: center; }
+.setup-path input { flex: 1; min-width: 0; }
+.setup-path .btn { flex-shrink: 0; }
+.setup-state-ok { color: var(--ok, #2f9e44); }

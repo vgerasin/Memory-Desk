@@ -112,6 +112,7 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("POST", "/api/setup/run"): ("setup.run", "Мастер установки: загрузка или установка компонента", "system", ""),
     ("POST", "/api/setup/cancel"): ("setup.cancel", "Мастер установки: загрузка остановлена", "system", ""),
     ("POST", "/api/setup/folders"): ("setup.folders", "Мастер установки: папки записей и заметок", "system", ""),
+    ("POST", "/api/setup/pick-folder"): ("setup.pick", "Мастер установки: выбор папки в окне macOS", "system", ""),
     ("POST", "/api/setup/models"): ("setup.models", "Мастер установки: выбор моделей", "system", ""),
     ("POST", "/api/setup/finish"): ("setup.finish", "Мастер установки завершён", "system", ""),
     ("POST", "/api/ingest"): ("ingest.file", "Аудиофайл положен в очередь обработки", "system", ""),
