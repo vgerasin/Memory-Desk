@@ -13,6 +13,8 @@
 
 ## Как собрать
 
+Подробная пошаговая инструкция с типичными ошибками: [INSTRUCTION.md](INSTRUCTION.md). Коротко:
+
 ```
 cd macos
 zsh build_app.sh
