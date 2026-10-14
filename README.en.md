@@ -212,6 +212,10 @@ The detailed plan with acceptance criteria is in [docs/ROADMAP.md](docs/ROADMAP.
 - checking the installation wizard on a clean Mac: real model downloads and `brew install`;
 - the **macOS app** (window, menu-bar icon, Shortcuts): in [`macos/`](macos/README.md), it builds and opens on a Mac; the menu bar, Shortcuts and the installer window await a detailed check; signing, notarisation and auto-update are not done.
 
+## Contributing
+
+Bugs and ideas go to [issues](https://github.com/vgerasin/Memory-Desk/issues/new/choose); changes as a pull request, see [CONTRIBUTING.md](CONTRIBUTING.md) (in Russian). Report security problems privately: [SECURITY.md](SECURITY.md).
+
 ## License
 
 [MIT](LICENSE).

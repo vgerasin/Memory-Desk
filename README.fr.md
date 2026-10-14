@@ -212,6 +212,10 @@ Le plan détaillé avec critères d’acceptation est dans [docs/ROADMAP.md](doc
 - vérifier l’assistant d’installation sur un Mac vierge : vrais téléchargements de modèles et `brew install` ;
 - l’**application macOS** (fenêtre, icône dans la barre des menus, Raccourcis) : dans [`macos/`](macos/README.md), elle se compile et s’ouvre sur Mac ; la barre des menus, les Raccourcis et la fenêtre d’installation attendent une vérification détaillée ; signature, notarisation et mise à jour automatique ne sont pas faites.
 
+## Contribuer
+
+Erreurs et idées : [issues](https://github.com/vgerasin/Memory-Desk/issues/new/choose) ; modifications : pull request, voir [CONTRIBUTING.md](CONTRIBUTING.md) (en russe). Problèmes de sécurité : en privé, voir [SECURITY.md](SECURITY.md).
+
 ## Licence
 
 [MIT](LICENSE).

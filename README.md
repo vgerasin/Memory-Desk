@@ -232,6 +232,10 @@ install.command    установщик; start.command — запуск каби
 - проверка мастера установки на «чистом» Mac: настоящие загрузки моделей и `brew install`;
 - **приложение для macOS** (окно, значок в строке меню, быстрые команды): в [`macos/`](macos/README.md), собирается и открывается на Mac, строка меню, быстрые команды и окно установки ждут подробной проверки; подпись, нотаризация и автообновление не сделаны.
 
+## Участие
+
+Ошибки и идеи — в [issues](https://github.com/vgerasin/Memory-Desk/issues/new/choose), правки — pull request по [CONTRIBUTING.md](CONTRIBUTING.md). О проблемах безопасности пишите приватно: [SECURITY.md](SECURITY.md).
+
 ## Лицензия
 
 [MIT](LICENSE).
