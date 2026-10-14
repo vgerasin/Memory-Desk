@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 git fetch --tags -q
-for pair in "v2.2.0 f65bc61" "v2.3.0 1b91b1e" "v2.4.0 5bedf62" "v3.0.0 0731882" "v3.1.0 NEWHEAD"; do
+for pair in "v2.2.0 f65bc61" "v2.3.0 1b91b1e" "v2.4.0 5bedf62" "v3.0.0 0731882" "v3.1.0 1a9ffdf"; do
   tag=${pair%% *}; commit=${pair##* }
   if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "$tag уже есть"; else git tag -a "$tag" "$commit" -m "Memory Desk ${tag#v}"; fi
   git push -q origin "refs/tags/$tag"
