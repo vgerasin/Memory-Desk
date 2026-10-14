@@ -11,7 +11,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from . import config, dictionary, storage, templates
+from . import asr, config, dictionary, storage, templates
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".mp4"}
 # Аудио/видео-форматы, которые пайплайн не принимает: показываем их в очереди как ошибку с подсказкой.
@@ -430,6 +430,20 @@ def eligible_files(cfg: dict) -> tuple[list[Path], int]:
     return files, duplicates
 
 
+def asr_context(cfg: dict) -> dict:
+    """Имена людей и проектов для подсказки Whisper (из базы кабинета). Любая неудача — пустой контекст, запись обработается."""
+    try:
+        people = storage.rows(
+            "SELECT p.name AS name, COUNT(mp.meeting_id) AS meetings FROM people p "
+            "LEFT JOIN meeting_people mp ON mp.person_id=p.id GROUP BY p.id")
+        projects = storage.rows(
+            "SELECT p.title AS name, COUNT(m.id) AS meetings FROM projects p "
+            "LEFT JOIN meetings m ON m.project_id=p.id GROUP BY p.id")
+        return asr.context_names(str(cfg.get("my_name") or ""), [dict(r) for r in people], [dict(r) for r in projects])
+    except Exception:  # noqa: BLE001 — подсказка не должна мешать обработке
+        return {"people": [], "projects": []}
+
+
 def start(cfg: dict, files: list[Path] | None = None) -> dict:
     if is_running():
         return {"created": False, "count": 0, "duplicates": 0, "message": "Обработка уже идёт"}
@@ -455,7 +469,13 @@ def start(cfg: dict, files: list[Path] | None = None) -> dict:
         map_path = config.RUNTIME_DIR / "templates-map.json"
         map_path.write_text(json.dumps({p.name: template_for(p.name, cfg) for p in files}, ensure_ascii=False),
                             encoding="utf-8")
+        context_path = config.RUNTIME_DIR / "asr-context.json"
+        context_path.write_text(json.dumps(asr_context(cfg), ensure_ascii=False), encoding="utf-8")
         env = {**os.environ, "PLAUD_DIARIZE": "1" if cfg.get("diarize", True) else "0",
+               "PLAUD_WHISPER_MODEL": str(cfg.get("asr_model") or asr.DEFAULT_MODEL),
+               "PLAUD_ASR_HINT": "1" if cfg.get("asr_hint", True) else "0",
+               "PLAUD_ASR_PREP": str(cfg.get("asr_prep") or "off"),
+               "PLAUD_ASR_CONTEXT": str(context_path),
                "PLAUD_VOICE": "1" if cfg.get("voice_enabled") else "0",
                "PLAUD_DICTIONARY": str(dictionary.path()),
                "PLAUD_TEMPLATES_DIR": str(templates.user_dir()),

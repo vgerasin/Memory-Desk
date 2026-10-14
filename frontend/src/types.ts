@@ -23,7 +23,7 @@ export interface DecisionDto {
   meetingId: string; meetingTitle: string; meetingDate: string
 }
 export interface Fact { text: string; t: string; tSec: number | null }
-export interface Segment { i: number; t: string; sec: number; speaker: string; text: string; overlap?: boolean }
+export interface Segment { i: number; t: string; sec: number; speaker: string; text: string; overlap?: boolean; weak?: boolean }
 export interface SpeakerInfo {
   label: string; count: number; generic: boolean; personId: string | null
   /** есть голосовой отпечаток; matched — человек узнан по голосу автоматически */
@@ -105,6 +105,7 @@ export interface Settings {
   notify: boolean; morning_brief: boolean; morning_hour: number; backup_auto: boolean; backup_interval_hours: number; backup_keep: number
   backup_on_change: boolean; note_writeback: boolean; mirror_enabled: boolean
   default_template: string
+  asr_model?: string; asr_hint?: boolean; asr_prep?: 'off' | 'light' | 'strong'
   lock_timeout_min?: number
   suggestions_auto?: boolean
   dossier_model?: boolean

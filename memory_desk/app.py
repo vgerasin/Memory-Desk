@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, remote, series, services, speakers, storage, suggest, templates, views, voice, waveform
+from . import __version__, answers, apple, asr, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, remote, series, services, speakers, storage, suggest, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -583,6 +583,9 @@ def create_app() -> FastAPI:
         suggestions_auto: bool | None = None
         dossier_model: bool | None = None
         ui_lang: str | None = None
+        asr_model: str | None = None
+        asr_hint: bool | None = None
+        asr_prep: str | None = None
 
     @app.get("/api/settings")
     def get_settings():
@@ -614,6 +617,11 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "Такого языка интерфейса нет")
             if values.get("dossier_model") is None:
                 values["dossier_model"] = core.cfg.get("dossier_model", True)
+            for key, default in (("asr_model", "turbo"), ("asr_hint", True), ("asr_prep", "off")):
+                if values.get(key) is None:
+                    values[key] = core.cfg.get(key, default)
+            if values["asr_prep"] not in asr.PREP_MODES:
+                raise HTTPException(400, "Подготовка звука: выкл, лёгкая или сильная")
             saved = core.apply_settings(values)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -646,6 +654,28 @@ def create_app() -> FastAPI:
     @app.post("/api/dictionary/apply")
     def apply_dictionary():
         return services.apply_dictionary(core)
+
+    class SuggestionPair(BaseModel):
+        wrong: str
+        right: str
+
+    @app.get("/api/dictionary/suggestions")
+    def dictionary_suggestions():
+        return services.dictionary_suggestions(core)
+
+    @app.post("/api/dictionary/suggestions/accept")
+    def accept_dictionary_suggestion(body: SuggestionPair):
+        try:
+            text = dictionary.add_variant(dictionary.read_text(), body.right, body.wrong)
+            entries, warnings = dictionary.save_text(text)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {**dictionary_view(warnings), "message": f"Добавлено в словарь: {body.right}"}
+
+    @app.post("/api/dictionary/suggestions/dismiss")
+    def dismiss_dictionary_suggestion(body: SuggestionPair):
+        dictionary.dismiss(asr.pair_key(body.wrong, body.right))
+        return {"ok": True}
 
     # ------------------------------------------------------------------ шаблоны заметок
     def templates_view() -> dict:

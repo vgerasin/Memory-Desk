@@ -488,6 +488,19 @@ def meeting_transcript(meeting: Meeting) -> str:
     return legacy[1].strip() if len(legacy) == 2 else ""
 
 
+def transcript_weak(meeting: Meeting) -> set[int]:
+    """Секунды реплик, в которых распознавание сомневалось (строка `weak_spots` в заголовке файла стенограммы)."""
+    from . import asr
+    path = transcript_file(meeting)
+    if not path:
+        return set()
+    try:
+        meta, _ = parse_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return set()
+    return asr.parse_weak(meta.get("weak_spots"))
+
+
 def transcript_segments(meeting: Meeting) -> list[dict]:
     """Реплики стенограммы; `i` — порядковый номер строки с таймкодом (по нему правятся метки говорящих)."""
     body = meeting_transcript(meeting)

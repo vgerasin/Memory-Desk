@@ -5,6 +5,7 @@ import { fmtBytes } from '../format'
 import type { AppleStatus, BackupItem, Settings } from '../types'
 import { AppearanceSettings } from './AppearanceSettings'
 import { DictionarySettings } from './DictionarySettings'
+import { AsrSettings } from './AsrSettings'
 import { TemplateSettings } from './TemplateSettings'
 import { VoiceSettings } from './VoiceSettings'
 import { SecurityBlock } from './Security'
@@ -47,6 +48,7 @@ export function SettingsModal() {
         notify: form.notify, morning_brief: form.morning_brief, morning_hour: Number(form.morning_hour) || 0, backup_auto: form.backup_auto,
         backup_interval_hours: Number(form.backup_interval_hours) || 24, backup_keep: Number(form.backup_keep) || 7,
         backup_on_change: form.backup_on_change, note_writeback: form.note_writeback, mirror_enabled: form.mirror_enabled, suggestions_auto: form.suggestions_auto, dossier_model: form.dossier_model, ui_lang: form.ui_lang,
+        asr_model: form.asr_model, asr_hint: form.asr_hint, asr_prep: form.asr_prep,
       })
       showToast(tr('Настройки сохранены'))
       invalidate()
@@ -176,6 +178,8 @@ export function SettingsModal() {
               </div>
             )}
             <TemplateSettings value={form.default_template} onChange={id => set('default_template', id)} />
+            <AsrSettings model={form.asr_model ?? 'turbo'} hint={form.asr_hint ?? true} prep={form.asr_prep ?? 'off'}
+              onChange={(key, value) => set(key, value as never)} />
             <DictionarySettings />
             <div className="apple-box">
               <div className="field" style={{ gap: 2 }}>

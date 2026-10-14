@@ -197,6 +197,9 @@ def meeting_detail(core: Core, m: knowledge.Meeting) -> dict:
     overlaps = voice.meeting_overlaps(m.id)
     if overlaps:
         transcript = [{**seg, "overlap": True} if float(seg["sec"]) in overlaps else seg for seg in transcript]
+    weak = knowledge.transcript_weak(m)
+    if weak:
+        transcript = [{**seg, "weak": True} if int(seg["sec"]) in weak else seg for seg in transcript]
     known = {r["name"].casefold(): r["id"] for r in storage.rows("SELECT id,name FROM people")}
     prints = voice.meeting_voices(m.id)
     speaker_list = [{**sp, "personId": known.get(sp["label"].casefold()),
@@ -820,3 +823,57 @@ def apply_dictionary(core: Core) -> dict:
         core.reload(force=True)
     message = (f"Исправлено слов: {replaced} в {changed} записях" if changed else "Исправлять нечего: все слова уже написаны верно")
     return {"meetings": changed, "replacements": replaced, "message": message}
+
+
+# --------------------------------------------------------------------------- предложения в словарь из правок стенограммы
+
+_EDIT_CACHE: dict[str, tuple[tuple, list[tuple[str, str]]]] = {}
+
+
+def _original_transcript(meeting: knowledge.Meeting) -> Path | None:
+    """Текст стенограммы в том виде, как его выдал распознавание (рабочая папка задания). Нет папки — сравнивать не с чем."""
+    from . import asr
+    if not meeting.source_audio:
+        return None
+    original = jobs._paths()["work"] / asr.slug(Path(meeting.source_audio).stem) / "transcript.md"
+    return original if original.is_file() else None
+
+
+def meeting_edits(meeting: knowledge.Meeting) -> list[tuple[str, str]]:
+    """Что поправили руками в стенограмме записи: пары (было, стало)."""
+    from . import asr, diarize
+    original = _original_transcript(meeting)
+    current = knowledge.transcript_file(meeting)
+    if original is None or current is None:
+        return []
+    try:
+        stamp = (original.stat().st_mtime_ns, current.stat().st_mtime_ns)
+    except OSError:
+        return []
+    cached = _EDIT_CACHE.get(meeting.id)
+    if cached and cached[0] == stamp:
+        return cached[1]
+    before: dict[int, list[str]] = {}
+    for seg in diarize.parse(original.read_text(encoding="utf-8", errors="replace")):
+        before.setdefault(seg["sec"], []).append(seg["text"])
+    pairs: list[tuple[str, str]] = []
+    seen: dict[int, int] = {}
+    for seg in diarize.parse(knowledge.meeting_transcript(meeting)):
+        slot = seen.get(seg["sec"], 0)
+        seen[seg["sec"]] = slot + 1
+        texts = before.get(seg["sec"], [])
+        if slot < len(texts) and texts[slot] != seg["text"]:
+            pairs += asr.edits_between(texts[slot], seg["text"])
+    _EDIT_CACHE[meeting.id] = (stamp, pairs)
+    return pairs
+
+
+def dictionary_suggestions(core: Core) -> dict:
+    from . import asr
+    by_meeting = {m.id: meeting_edits(m) for m in list(core.meetings)}
+    titles = {m.id: m.title for m in core.meetings}
+    items = asr.suggest_from_edits({k: v for k, v in by_meeting.items() if v},
+                                   asr.known_pairs(dictionary.load()), dictionary.dismissed())
+    for item in items:
+        item["meetings"] = [titles[i] for i in item["meetings"] if i in titles][:3]
+    return {"items": items}

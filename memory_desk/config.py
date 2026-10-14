@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+from . import asr
+
 PROJECT_ROOT = Path(os.environ.get("MEMORY_DESK_ROOT") or Path(__file__).resolve().parents[1]).resolve()
 CONFIG_PATH = Path(
     os.environ.get("MEMORY_DESK_CONFIG") or Path.home() / "Library/Application Support/MemoryDesk/config.json"
@@ -63,6 +65,9 @@ def defaults() -> dict:
         "suggestions_auto": True,
         "dossier_model": True,
         "ui_lang": "ru",
+        "asr_model": "turbo",
+        "asr_hint": True,
+        "asr_prep": "off",
     }
 
 
@@ -104,6 +109,12 @@ def save_config(values: dict) -> dict:
     normalized["dossier_model"] = bool(normalized["dossier_model"])
     if normalized.get("ui_lang") not in UI_LANGS:
         normalized["ui_lang"] = "ru"
+    normalized["asr_model"] = str(normalized.get("asr_model") or "turbo").strip()
+    if not asr.valid_model(normalized["asr_model"]):
+        raise ValueError("Модель распознавания: turbo, large-v3, medium или полное имя вида автор/модель")
+    normalized["asr_hint"] = bool(normalized["asr_hint"])
+    if normalized.get("asr_prep") not in asr.PREP_MODES:
+        normalized["asr_prep"] = "off"
     try:
         normalized["morning_hour"] = min(23, max(0, int(normalized["morning_hour"])))
     except (TypeError, ValueError):

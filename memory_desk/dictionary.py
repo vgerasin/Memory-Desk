@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -190,3 +191,47 @@ def apply_transcript(body: str, entries: list[Entry]) -> tuple[str, int]:
         total += count
         out.append(f"[{stamp}] {prefix}{fixed}")
     return "\n".join(out), total
+
+
+# --------------------------------------------------------------------------- предложения из правок
+
+def dismissed_path() -> Path:
+    return path().with_name("dictionary-dismissed.json")
+
+
+def dismissed() -> set[str]:
+    try:
+        raw = json.loads(dismissed_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return {str(x) for x in raw} if isinstance(raw, list) else set()
+
+
+def dismiss(key: str) -> None:
+    items = sorted(dismissed() | {key})[-2000:]
+    target = dismissed_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(target.name + ".tmp")
+    temp.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    temp.replace(target)
+
+
+def add_variant(text: str, term: str, variant: str) -> str:
+    """Добавляет в текст словаря «term = variant»: к существующей строке слова или отдельной строкой. Комментарии не трогает."""
+    term, variant = " ".join(term.split()), " ".join(variant.split())
+    if not term:
+        raise ValueError("Нет самого слова")
+    lines = text.splitlines()
+    for number, raw in enumerate(lines):
+        head, sep, rest = raw.partition("=")
+        if raw.strip().startswith("#") or head.strip().casefold() != term.casefold():
+            continue
+        if not variant or variant.casefold() == term.casefold():
+            return text
+        have = [v.casefold() for v in _SPLIT.split(rest.strip()) if v.strip()] if sep else []
+        if variant.casefold() in have:
+            return text
+        lines[number] = f"{head.strip()} = {rest.strip()}, {variant}" if sep and rest.strip() else f"{head.strip()} = {variant}"
+        return "\n".join(lines)
+    new = term if not variant or variant.casefold() == term.casefold() else f"{term} = {variant}"
+    return "\n".join([*lines, new]) if text.strip() else new

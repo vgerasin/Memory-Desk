@@ -64,6 +64,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   const [picker, setPicker] = useState<PickerTarget | null>(null)
   const [eventDraft, setEventDraft] = useState<EventDraft | null>(null)
   const [focusMark, setFocusMark] = useState<number | null>(null)
+  const [onlyWeak, setOnlyWeak] = useState(false)
   const marks = useBookmarkActions(id)
 
   useEffect(() => { setCurrentRecord(id); return () => setCurrentRecord(null) }, [id, setCurrentRecord])
@@ -88,6 +89,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   if (error && !ready) return <article className="card detail"><div className="muted-text">{error}</div></article>
   if (!m || m.id !== id) return <article className="card detail"><div className="muted-text">{tr('Загрузка…')}</div></article>
 
+  const weakCount = m.transcript.filter(l => l.weak).length
   const seek = (sec: number | null, play = true) => { if (sec != null) player.current?.seek(sec, play) }
   const setView = (v: View) => {
     const q = new URLSearchParams(window.location.search)
@@ -224,9 +226,18 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
           {m.transcript.length > 0 && (
             <SpeakerPanel meeting={m} onPick={(el, label) => setPicker(openPicker(el, label, null, 'all'))} />
           )}
+          {weakCount > 0 && (
+            <div className="weak-bar">
+              <span className="hint">{plural(weakCount, 'реплика, в которой распознавание сомневалось', 'реплики, в которых распознавание сомневалось', 'реплик, в которых распознавание сомневалось')}</span>
+              <button className={'btn s28' + (onlyWeak ? ' accent' : '')} aria-pressed={onlyWeak} onClick={() => setOnlyWeak(v => !v)}>
+                {onlyWeak ? tr('Показать весь текст') : tr('Только сомнительные места')}
+              </button>
+            </div>
+          )}
           <div className="transcript">
             {m.transcript.length === 0 && <div className="muted-text">{tr('Стенограмма отсутствует')}</div>}
             {m.transcript.map((l, i) => {
+              if (onlyWeak && !l.weak && i !== activeIndex) return null
               const turnStart = !!l.speaker && l.speaker !== m.transcript[i - 1]?.speaker
               const hasSpeakers = m.speakers.length > 0
               return (
@@ -240,6 +251,7 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
                         onClick={e => { e.stopPropagation(); setPicker(openPicker(e.currentTarget, l.speaker, l.i, 'all')) }}>{l.speaker}</button>
                     )}
                     <span className="tx">{l.text}</span>
+                    {l.weak && <span className="overlap weak" title={tr('Распознавание сомневалось в этом месте: послушайте и поправьте текст')}>{tr('проверьте на слух')}</span>}
                     {l.overlap && <span className="overlap" title={tr('Похоже, здесь говорят двое сразу. Метка говорящего оставлена прежней, проверьте на слух')}>{tr('наложение голосов?')}</span>}
                   </span>
                   <button className="bm-line-add" title={tr('Поставить закладку здесь')} aria-label={tr('Закладка на {0}', [tc(l.sec)])}

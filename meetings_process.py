@@ -20,27 +20,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from memory_desk import dictionary, templates  # noqa: E402
+from memory_desk import asr, dictionary, templates  # noqa: E402
 from memory_desk.whisper_filter import clean_result  # noqa: E402
 from memory_desk.diarize import detect_speakers, parse as parse_transcript, relabel  # noqa: E402
 from memory_desk.llm import ollama_json  # noqa: E402
 
 DEFAULT_VAULT = Path.home() / "Documents/Obsidian Vault/Встречи"
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
-WHISPER_MODEL = "mlx-community/whisper-large-v3-turbo"
+WHISPER_MODEL = asr.resolve_model(os.environ.get("PLAUD_WHISPER_MODEL", asr.DEFAULT_MODEL))
 OLLAMA_MODEL = "qwen3:4b"
 OLLAMA_URL = os.environ.get("PLAUD_OLLAMA_URL", "http://127.0.0.1:11435")
 ANALYSIS_VERSION = 4
 PROCESSING_LOG = ROOT / "logs" / "processing.jsonl"
 
 
-def slug(value: str, limit: int = 80) -> str:
-    """Имя файла из заголовка: без запрещённых символов и переносов, не длиннее limit знаков
-    (у файловой системы предел 255 байт на имя, а кириллица занимает по 2 байта)."""
-    cleaned = re.sub(r"[\\/:*?\"<>|\x00-\x1f]", "-", " ".join(str(value).split())).strip(" .-")
-    if len(cleaned) > limit:
-        cleaned = cleaned[:limit].rsplit(" ", 1)[0].strip(" .-,;") if " " in cleaned[:limit] else cleaned[:limit]
-    return cleaned or "Запись PLAUD"
+slug = asr.slug  # одна реализация на пайплайн и сервер: по ней сервер находит рабочую папку задания
 
 
 def run(command: list[str]) -> str:
@@ -114,19 +108,29 @@ def recorded_datetime(source: Path) -> datetime:
     return datetime.fromtimestamp(source.stat().st_mtime)
 
 
-def normalize_audio(source: Path, target: Path) -> None:
+def normalize_audio(source: Path, target: Path, prep: str = "off") -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    run([
-        "ffmpeg", "-y", "-i", str(source), "-ac", "1", "-ar", "16000",
-        "-c:a", "pcm_s16le", str(target),
-    ])
+    chain = asr.audio_filter(prep)
+    command = ["ffmpeg", "-y", "-i", str(source), "-vn"]
+    if chain:
+        command += ["-af", chain]
+    run([*command, "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)])
+
+
+def asr_prompt(terms: list) -> str:
+    """Подсказка Whisper: слова словаря, затем имена людей и названия проектов (если это не отключено в настройках)."""
+    words = [entry.term for entry in terms]
+    if os.environ.get("PLAUD_ASR_HINT", "1") == "0":
+        return dictionary.hint(terms)
+    context = asr.read_context(asr.context_path_from_env())
+    return asr.build_prompt(words, context["people"], context["projects"])
 
 
 def transcribe(audio: Path, terms: list | None = None) -> dict:
     import mlx_whisper
 
     extra = {}
-    prompt = dictionary.hint(terms or [])
+    prompt = asr_prompt(terms or [])
     if prompt:
         extra["initial_prompt"] = prompt  # Whisper учитывает подсказку в начале записи; остальное исправит замена по словарю
     return mlx_whisper.transcribe(
@@ -455,7 +459,16 @@ def gantt(data: dict) -> str:
     return "\n".join(lines)
 
 
-def render_transcript(source: Path, recorded: datetime, duration: float, title: str, meeting_name: str, transcript: str) -> str:
+def weak_from_job(transcript_json: Path) -> list[int]:
+    try:
+        return [int(x) for x in json.loads(transcript_json.read_text(encoding="utf-8")).get("weak_spots", [])]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def render_transcript(source: Path, recorded: datetime, duration: float, title: str, meeting_name: str, transcript: str,
+                      weak: list[int] | None = None) -> str:
+    weak_line = f'weak_spots: "{asr.format_weak(weak)}"\n' if weak else ""
     return f"""---
 date: {recorded:%Y-%m-%d}
 recorded_at: {recorded:%Y-%m-%dT%H:%M:%S}
@@ -465,7 +478,7 @@ source: PLAUD
 audio_file: "{source.name}"
 duration: "{format_time(duration)}"
 meeting_note: "{meeting_name}"
----
+{weak_line}---
 
 # Стенограмма: {title}
 
@@ -679,7 +692,8 @@ def process_file(source: Path, vault: Path, archive_dir: Path | None, force_rean
 
     if not transcript_json.exists():
         log_event("progress", source, "Подготавливаю звук для распознавания", stage="preparing_audio", percent=6)
-        normalize_audio(source, normalized)
+        prep = os.environ.get("PLAUD_ASR_PREP", "off")
+        normalize_audio(source, normalized, prep if prep in asr.PREP_MODES else "off")
         log_event("progress", source, "Расшифровываю запись локально", stage="transcribing", percent=10)
         terms = dictionary.load()
         result = transcribe(normalized, terms)
@@ -690,6 +704,10 @@ def process_file(source: Path, vault: Path, archive_dir: Path | None, force_rean
         if dropped:
             log_event("progress", source, f"Убрано выдуманных или повторяющихся реплик: {len(dropped)}", stage="transcribing", percent=40)
             result["dropped_segments"] = dropped
+        result["weak_spots"] = asr.weak_spots(result)
+        if result["weak_spots"]:
+            log_event("progress", source, f"Реплик, в которых модель сомневалась: {len(result['weak_spots'])}",
+                      stage="transcribing", percent=42)
         transcript_json.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         text = transcript_markdown(result)
         if len(text) < 20:
@@ -743,7 +761,8 @@ def process_file(source: Path, vault: Path, archive_dir: Path | None, force_rean
     transcript_name = f"{note_path.stem} — стенограмма.md"
     transcript_path = transcript_folder / transcript_name
     transcript_note = render_transcript(
-        source, recorded, duration, slug(str(data.get("title") or source.stem)), note_path.name, transcript
+        source, recorded, duration, slug(str(data.get("title") or source.stem)), note_path.name, transcript,
+        weak=weak_from_job(transcript_json),
     )
     transcript_path.write_text(transcript_note, encoding="utf-8")
     used = templates.get(data.get("_template") or templates.DEFAULT_ID)

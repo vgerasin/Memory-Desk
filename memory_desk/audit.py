@@ -47,6 +47,8 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("PUT", "/api/settings"): ("settings.update", "Изменение настроек", "system", ""),
     ("PUT", "/api/dictionary"): ("dictionary.update", "Изменение словаря терминов", "system", ""),
     ("POST", "/api/dictionary/apply"): ("dictionary.apply", "Применение словаря к готовым записям", "system", ""),
+    ("POST", "/api/dictionary/suggestions/accept"): ("dictionary.accept", "Слово из правок добавлено в словарь", "system", ""),
+    ("POST", "/api/dictionary/suggestions/dismiss"): ("dictionary.dismiss", "Предложение для словаря отклонено", "system", ""),
     ("PUT", "/api/templates/{template_id}"): ("template.save", "Сохранение шаблона заметки", "template", "template_id"),
     ("DELETE", "/api/templates/{template_id}"): ("template.delete", "Удаление шаблона заметки", "template", "template_id"),
     ("POST", "/api/jobs/template"): ("job.template", "Выбор шаблона для файла", "system", ""),
