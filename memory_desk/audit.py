@@ -68,6 +68,7 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("POST", "/api/meetings/{meeting_id}/erase"): ("record.erase", "Запись стёрта целиком", "meeting", "meeting_id"),
     ("POST", "/api/materials/save"): ("document.save", "Документ сохранён в Obsidian", "system", ""),
     ("POST", "/api/meetings/{meeting_id}/calendar"): ("record.calendar", "Связь записи с событием календаря", "meeting", "meeting_id"),
+    ("PATCH", "/api/meetings/{meeting_id}/transcript/{index}"): ("record.transcript_edit", "Правка стенограммы", "meeting", "meeting_id"),
     ("PUT", "/api/meetings/{meeting_id}/speakers"): ("record.speakers", "Имена говорящих", "meeting", "meeting_id"),
     ("POST", "/api/meetings/{meeting_id}/diarize"): ("record.diarize", "Разметка говорящих", "meeting", "meeting_id"),
     ("POST", "/api/projects"): ("project.create", "Новый проект", "project", ""),

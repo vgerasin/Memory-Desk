@@ -805,7 +805,14 @@ ul { padding: 0; list-style: none; }
 .line .bm-line-add { position: absolute; top: 8px; right: 10px; opacity: 0; width: 22px; height: 22px; border-radius: 6px; color: var(--text2); font-size: 14px; }
 .line:hover .bm-line-add, .line:focus-within .bm-line-add { opacity: 1; }
 .line .bm-line-add:hover { background: var(--fill2); color: var(--accent); }
-.line .who-edit { right: 40px; }
+.line .line-edit { position: absolute; top: 8px; right: 40px; opacity: 0; width: 22px; height: 22px; border-radius: 6px; color: var(--text2); display: inline-flex; align-items: center; justify-content: center; }
+.line:hover .line-edit, .line:focus-within .line-edit { opacity: 1; }
+.line .line-edit:hover { background: var(--fill2); color: var(--accent); }
+.line .who-edit { right: 70px; }
+.line-editor { display: flex; flex-direction: column; gap: 8px; cursor: default; }
+.line-editor textarea { width: 100%; resize: none; font: inherit; font-size: 16px; line-height: 1.6; padding: 8px 10px; border-radius: 10px; border: none; background: var(--fill); color: var(--text); box-shadow: 0 0 0 1.5px var(--accent) inset; overflow: hidden; }
+.line-editor-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.line-editor-actions .hint { font-size: 12px; color: var(--text2); }
 
 /* «Скачать» с выбором формата */
 .export-menu { position: relative; display: inline-block; }

@@ -18,6 +18,7 @@ import { BookmarksPanel, colorHex, useBookmarkActions } from '../components/Book
 import { CalendarSuggest } from '../components/CalendarSuggest'
 import { EventDialog, type EventDraft } from '../components/EventDialog'
 import { Player, type PlayerHandle } from '../components/Player'
+import { LineEdit } from '../components/LineEdit'
 import { SpeakerPanel, SpeakerPicker, openPicker, speakerColor, type PickerTarget } from '../components/Speakers'
 import { DocMenu } from '../components/DocMenu'
 import { SuggestionsPanel } from '../components/Suggestions'
@@ -64,10 +65,11 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
   const [eventDraft, setEventDraft] = useState<EventDraft | null>(null)
   const [focusMark, setFocusMark] = useState<number | null>(null)
   const [onlyWeak, setOnlyWeak] = useState(false)
+  const [editLine, setEditLine] = useState<number | null>(null)
   const marks = useBookmarkActions(id)
 
   useEffect(() => { setCurrentRecord(id); return () => setCurrentRecord(null) }, [id, setCurrentRecord])
-  useEffect(() => { setEditing(false); setPicker(null); setFocusMark(null) }, [id])
+  useEffect(() => { setEditing(false); setPicker(null); setFocusMark(null); setEditLine(null) }, [id])
   // клавиша B ставит закладку на текущем месте записи (не во время набора текста)
   const posRef = useRef(0)
   posRef.current = pos
@@ -248,10 +250,16 @@ function Detail({ id, view, t }: { id: string; view: View; t: number | null }) {
                       <button className="who" style={{ color: speakerColor(l.speaker, m) }} title={tr('Назначить человека')}
                         onClick={e => { e.stopPropagation(); setPicker(openPicker(e.currentTarget, l.speaker, l.i, 'all')) }}>{l.speaker}</button>
                     )}
-                    <span className="tx">{l.text}</span>
+                    {editLine === l.i
+                      ? <LineEdit meetingId={id} line={l} onClose={() => setEditLine(null)} />
+                      : <span className="tx">{l.text}</span>}
                     {l.weak && <span className="overlap weak" title={tr('Распознавание сомневалось в этом месте: послушайте и поправьте текст')}>{tr('проверьте на слух')}</span>}
                     {l.overlap && <span className="overlap" title={tr('Похоже, здесь говорят двое сразу. Метка говорящего оставлена прежней, проверьте на слух')}>{tr('наложение голосов?')}</span>}
                   </span>
+                  {editLine !== l.i && (
+                    <button className="line-edit" title={tr('Исправить текст реплики')} aria-label={tr('Исправить реплику на {0}', [tc(l.sec)])}
+                      onClick={e => { e.stopPropagation(); setEditLine(l.i) }}><IconEdit size={13} /></button>
+                  )}
                   <button className="bm-line-add" title={tr('Поставить закладку здесь')} aria-label={tr('Закладка на {0}', [tc(l.sec)])}
                     onClick={e => { e.stopPropagation(); void marks.add(l.sec).then(sec => { if (sec != null) setFocusMark(sec) }) }}>＋</button>
                   {!turnStart && (hasSpeakers || l.speaker) && (

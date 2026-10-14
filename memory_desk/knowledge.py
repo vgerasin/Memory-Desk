@@ -549,6 +549,84 @@ def change_speakers(meeting: Meeting, rename: dict[str, str], segments: dict[int
     return rewrite_speakers(meeting, build)
 
 
+MAX_LINE_CHARS = 4000
+
+
+class TranscriptEditError(ValueError):
+    """Реплику не удалось поправить; текст понятен пользователю. `status` — код ответа API."""
+
+    def __init__(self, message: str, status: int = 400):
+        super().__init__(message)
+        self.status = status
+
+
+def _squash(text: str) -> str:
+    return " ".join(str(text).split())
+
+
+def _drop_weak(head: str, sec: int) -> str:
+    """Убирает секунду из строки `weak_spots` заголовка файла стенограммы: исправленное место больше не «сомнительное»."""
+    from . import asr
+    match = re.search(r'(?m)^weak_spots:.*\n?', head)
+    if not match:
+        return head
+    left = sorted(asr.parse_weak(match.group(0)) - {sec})
+    line = f'weak_spots: "{asr.format_weak(left)}"\n' if left else ""
+    return head[:match.start()] + line + head[match.end():]
+
+
+def edit_segment(meeting: Meeting, index: int, text: str, was: str | None = None) -> dict:
+    """Заменяет текст одной реплики (по порядковому номеру строки с таймкодом). Таймкод и метка говорящего не меняются.
+    `was` — текст, который пользователь видел при правке: если файл успели изменить (например, в Obsidian), правка не применяется.
+    Возвращает {i, sec, old, text, changed}; при правке (и при подтверждении «верно») реплика перестаёт быть «сомнительной»."""
+    new = _squash(text)
+    if not new:
+        raise TranscriptEditError("Реплика не может быть пустой")
+    if len(new) > MAX_LINE_CHARS:
+        raise TranscriptEditError(f"Реплика длиннее {MAX_LINE_CHARS} знаков: разбейте её на несколько")
+    try:
+        path, heading = _transcript_target(meeting)
+        full = path.read_text(encoding="utf-8")
+    except (ValueError, OSError) as exc:
+        raise TranscriptEditError("Стенограмма не найдена", 404) from exc
+    head, sep, body = full.partition(heading)
+    if not sep:
+        raise TranscriptEditError("Стенограмма не найдена", 404)
+    out: list[str] = []
+    count = -1
+    found: dict | None = None
+    skipping = False
+    for raw in body.split("\n"):
+        match = diarize.TS_LINE.match(raw.strip())
+        if match:
+            count += 1
+            skipping = False
+            if count == index:
+                stamp, rest = match.groups()
+                marked = diarize.SPEAKER.match(rest)
+                label, old = (marked.group(1).strip(), marked.group(2)) if marked else ("", rest)
+                found = {"i": index, "sec": diarize.to_seconds(stamp), "old": _squash(old)}
+                out.append(f"[{stamp}] **{label}:** {new}" if label else f"[{stamp}] {new}")
+                skipping = True
+                continue
+        elif skipping and raw.strip():
+            found["old"] = _squash(found["old"] + " " + raw)     # строки-продолжения входили в эту реплику
+            continue
+        out.append(raw)
+    if found is None:
+        raise TranscriptEditError("Такой реплики в стенограмме нет", 404)
+    if was is not None and _squash(was) != found["old"]:
+        raise TranscriptEditError("Стенограмма изменилась после того, как вы её открыли: обновите страницу и повторите правку", 409)
+    found.update(text=new, changed=new != found["old"])
+    head = _drop_weak(head, int(found["sec"])) if path != meeting.path else head
+    result = head + sep + "\n".join(out)
+    if result != full:
+        temp = path.with_name(path.name + ".tmp")
+        temp.write_text(result, encoding="utf-8")
+        temp.replace(path)
+    return found
+
+
 @lru_cache(maxsize=256)
 def _cached_text(path: str, mtime_ns: int) -> str:
     return Path(path).read_text(encoding="utf-8", errors="replace")

@@ -1087,6 +1087,29 @@ def create_app() -> FastAPI:
         core.reload(force=True)
         return services.meeting_detail(core, get_meeting(meeting_id))
 
+    class LineBody(BaseModel):
+        text: str = Field(..., max_length=knowledge.MAX_LINE_CHARS * 2)
+        was: str | None = Field(None, max_length=knowledge.MAX_LINE_CHARS * 2)
+
+    @app.patch("/api/meetings/{meeting_id}/transcript/{index}")
+    def edit_transcript_line(meeting_id: str, index: int, body: LineBody, request: Request):
+        """Правка текста одной реплики прямо в кабинете. Таймкод и говорящий остаются, звук и файл записи не затрагиваются."""
+        m = get_meeting(meeting_id)
+        if index < 0:
+            raise HTTPException(404, "Такой реплики в стенограмме нет")
+        state = speakers.status(meeting_id)
+        if state and state["state"] == "running":
+            raise HTTPException(409, "Определение говорящих ещё идёт")
+        try:
+            done = knowledge.edit_segment(m, index, body.text, body.was)
+        except knowledge.TranscriptEditError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить стенограмму: {exc}") from exc
+        core.reload(force=True)
+        audit.detail(request, f"реплика {index + 1}" + ("" if done["changed"] else ", текст подтверждён без изменений"))
+        return done
+
     @app.post("/api/meetings/{meeting_id}/diarize")
     def diarize_meeting(meeting_id: str, mode: str = Query("text", pattern="^(text|voice)$")):
         m = get_meeting(meeting_id)
