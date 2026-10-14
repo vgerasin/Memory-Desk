@@ -1068,3 +1068,7 @@ ul { padding: 0; list-style: none; }
   .set-error { margin: 0 18px 8px; }
   .set-foot { padding: 12px 18px 16px; }
 }
+.access .token-row { padding: 8px 0; border-bottom: 1px solid var(--line, rgba(128,128,128,.14)); }
+.access .backup-plan input[type='text'] { height: 32px; padding: 0 10px; border-radius: 10px; border: none; background: var(--fill); font-size: 13px; outline: none; min-width: 200px; flex: 1; color: var(--text); }
+.access .token-made { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: var(--fill); }
+.access .token-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; white-space: pre-wrap; margin: 0; user-select: all; }

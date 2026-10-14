@@ -107,6 +107,9 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("PUT", "/api/lock/timeout"): ("lock.timeout_set", "Изменено время блокировки", "system", ""),
     ("POST", "/api/lock/unlock"): ("lock.unlock", "Вход по PIN", "system", ""),
     ("POST", "/api/lock/lock"): ("lock.lock", "Блокировка", "system", ""),
+    ("POST", "/api/access"): ("access.create", "Выпущен токен доступа для командной строки или MCP", "system", ""),
+    ("DELETE", "/api/access/{token_id}"): ("access.revoke", "Токен доступа отозван", "system", ""),
+    ("POST", "/api/ingest"): ("ingest.file", "Аудиофайл положен в очередь обработки", "system", ""),
 }
 
 # Запросы, которые данные не меняют: строят текст, ответ или файл для скачивания.
@@ -246,6 +249,7 @@ def labels() -> dict[str, str]:
     result = {code: label for code, label, _t, _p in ACTIONS.values()}
     result.update({"record.processed": "Запись обработана", "backup.auto": "Автоматическая копия базы",
                    "lock.blocked": "Запрос отклонён: приложение заблокировано",
+                   "access.read": "Чтение по токену доступа", "access.denied": "Токен доступа отклонён",
                    "suggestion.scan": "Поиск договорённостей в записи", "lock.timeout": "Блокировка по бездействию", "lock.reset": "PIN сброшен с компьютера",
                    "dossier.refresh": "Досье пересчитано"})
     return result

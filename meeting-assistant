@@ -15,7 +15,7 @@ export TRANSFORMERS_OFFLINE=1
 mkdir -p "$SCRIPT_DIR/logs" "$SCRIPT_DIR/runtime"
 
 # Новый интерфейс на FastAPI: докачиваем недостающие пакеты один раз (нужен интернет).
-if ! "$PY" -c "import fastapi, uvicorn, icalendar, recurring_ical_events, pptx, docx, reportlab, PIL" >/dev/null 2>&1; then
+if ! "$PY" -c "import fastapi, uvicorn, icalendar, recurring_ical_events, docx, reportlab, PIL" >/dev/null 2>&1; then
   echo "Memory Desk: устанавливаю недостающие компоненты…"
   if ! "$PY" -m pip --version >/dev/null 2>&1; then
     "$PY" -m ensurepip --upgrade || true

@@ -22,6 +22,7 @@ I bought a PLAUD recorder — a great device, but I wanted to build my own: **lo
 - **One desk instead of a pile of notes.** A person page and a project page gather commitments, decisions, questions and dynamics; people cards can be created by hand (they live in Obsidian). A morning brief (“what’s on today, what’s overdue, what was promised to you”), a registry of tasks and decisions with drafts waiting for confirmation, stuck tasks, series of recurring meetings, and a warning when a new decision contradicts an older one.
 - **Attachments.** Photos of a whiteboard, slide or sheet and text files can be attached to a recording; text in photos is recognised on your computer (macOS Vision), editable, and searchable by search and chat.
 - **Control and privacy.** An activity log (what changed and when, without the content of recordings, with an integrity check), “erase a recording completely” with a list and confirmation, a PIN lock with a data-free screen. The PIN does not encrypt files — that is what FileVault is for.
+- **Command line and MCP.** `./memory-desk ask | search | list --since 7d | ingest | status` and an MCP server for Claude Desktop: search with sources, records, tasks, dossiers. Access only through a token from Settings (read-only by default, writing is switched on separately); every call shows in the log.
 - **Suggestions after a meeting.** Agreements found in the recording (“let’s talk on Thursday”, “send the minutes”, “remind me by Friday”) appear as cards; a Calendar event, a Reminder or an email draft is created only when you press the button.
 - **Interface languages.** Russian, English, French, German, Spanish (machine-drafted translations, review needed). Notes and transcripts stay in Russian.
 - **Recognition quality.** Choice of Whisper model, a hint made of the dictionary, people and project names, audio preparation; doubtful spots in the transcript are marked “check by ear”; words you corrected are offered for the dictionary; `scripts/asr_benchmark.py` measures what works best on your own recordings.
@@ -188,7 +189,7 @@ install.command    installer; start.command — start the desk
 
 ## What has been verified
 
-- **Automatically** (`pytest`, 475 tests): API and protection, filters and search, the record card, publishing, tasks and decisions, analytics, chat summaries, minutes and map, memo, brief and email with timecode checks, project digest, decision tree, calendar integration, morning brief, stuck tasks and series, note templates and their rollback, bookmarks, question hints, export (PDF, DOCX, HTML, Markdown, PNG), resilience of notes to “hostile” edits, stubbed EventKit and voice encoder, installer scenarios on stubs, the activity log, PIN lock, live dossiers, interface languages.
+- **Automatically** (`pytest`, 477 tests): API and protection, filters and search, the record card, publishing, tasks and decisions, analytics, chat summaries, minutes and map, memo, brief and email with timecode checks, project digest, decision tree, calendar integration, morning brief, stuck tasks and series, note templates and their rollback, bookmarks, question hints, export (PDF, DOCX, HTML, Markdown, PNG), resilience of notes to “hostile” edits, stubbed EventKit and voice encoder, installer scenarios on stubs, the activity log, PIN lock, live dossiers, interface languages.
 - **In a browser** (Chromium, fictional data): all screens in light and dark themes, a stress set of ~55 recordings with no JavaScript errors and no 500 responses; PDF, DOCX and map images inspected by eye (DOCX opened in LibreOffice); the phone page in a 390×844 window.
 
 **Not verified on real hardware** (the development environment has no Apple Silicon): MLX Whisper transcription and Ollama analysis through the new interface, the quality of `qwen3:4b` answers and summaries, loading the real embedding model, reading Calendar and Reminders through EventKit, the ECAPA voice model and similarity threshold, the Whisper filter on real music and noise, opening DOCX in Word and Pages, installation on a clean Mac, the macOS app shell (never built), the quality of the translations. Run the first launch on one short file.
@@ -199,7 +200,7 @@ The full list of limitations is in [docs/STATUS.md](docs/STATUS.md) (Russian).
 
 The detailed plan with acceptance criteria is in [docs/ROADMAP.md](docs/ROADMAP.md) (Russian). Nearest:
 
-- a local MCP server and command line;
+- a first-run and installation wizard (model choice and download, dependency checks);
 - the **macOS app** (window, menu-bar icon, Shortcuts): a draft is in [`macos/`](macos/README.md); it has not been built and awaits a check on a Mac; signing, notarisation and auto-update are not done.
 
 ## License

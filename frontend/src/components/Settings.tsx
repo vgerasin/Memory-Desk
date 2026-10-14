@@ -9,6 +9,7 @@ import { AsrSettings } from './AsrSettings'
 import { LlmSettings } from './LlmSettings'
 import { TemplateSettings } from './TemplateSettings'
 import { VoiceSettings } from './VoiceSettings'
+import { AccessBlock } from './Access'
 import { SecurityBlock } from './Security'
 import { currentLang, LANGS, localeTag, setLang, tr } from '../i18n'
 import type { Lang } from '../i18n'
@@ -367,8 +368,9 @@ export function SettingsModal() {
             )}
             {tab === 'security' && (
               <div className="set-pane-in">
-                <div className="set-lead">{tr('PIN-блокировка и журнал действий')}</div>
+                <div className="set-lead">{tr('PIN-блокировка, журнал действий и доступ для программ')}</div>
                 <SecurityBlock />
+                <AccessBlock />
               </div>
             )}
             </div>

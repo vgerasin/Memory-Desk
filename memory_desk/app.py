@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, asr, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, voice, waveform
+from . import __version__, access, answers, apple, asr, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -194,10 +194,27 @@ def create_app() -> FastAPI:
     async def guard(request: Request, call_next):
         if os.environ.get("MEMORY_DESK_ALLOW_ANY_HOST") != "1" and request.headers.get("host", "") not in allowed_hosts:
             return JSONResponse({"detail": "Недопустимый адрес"}, status_code=403)
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and request.headers.get(HEADER) != "1":
-            return JSONResponse({"detail": "Запрос отклонён"}, status_code=403)
         path = request.url.path
-        if path.startswith("/api") and path not in LOCK_EXEMPT and app.state.lock.enabled:
+        by_token = False
+        auth = request.headers.get("authorization", "")
+        if auth and path.startswith("/api") and request.method != "OPTIONS":
+            # клиент с токеном (командная строка, MCP): свой короткий список маршрутов, ни PIN, ни заголовок кабинета не нужны
+            row = access.verify(access.bearer(auth))
+            if row is None:
+                audit.record("cabinet", "access.denied", target="system", result="denied", detail=f"неверный токен; {request.method} {path}")
+                return JSONResponse({"detail": "Токен доступа не подошёл"}, status_code=401, headers={"Cache-Control": "no-store"})
+            allowed, needs_write = access.route_rule(request.method, path)
+            if not allowed or (needs_write and not row.get("write")):
+                audit.record(row["kind"], "access.denied", target="system", result="denied",
+                             detail=f"токен «{row['name']}»; {request.method} {path}")
+                reason = "Этот токен только для чтения" if allowed else "Токену этот маршрут недоступен"
+                return JSONResponse({"detail": reason}, status_code=403, headers={"Cache-Control": "no-store"})
+            request.state.actor, request.state.token_name = row["kind"], row["name"]
+            access.touch(row["id"])
+            by_token = True
+        elif request.method not in {"GET", "HEAD", "OPTIONS"} and request.headers.get(HEADER) != "1":
+            return JSONResponse({"detail": "Запрос отклонён"}, status_code=403)
+        if not by_token and path.startswith("/api") and path not in LOCK_EXEMPT and app.state.lock.enabled:
             token = request.cookies.get(lock.COOKIE)
             acting = request.method not in {"GET", "HEAD", "OPTIONS"}
             if not (app.state.lock.touch(token) if acting else app.state.lock.valid(token)):
@@ -207,9 +224,26 @@ def create_app() -> FastAPI:
                                     headers={"Cache-Control": "no-store"})
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api") else response.headers.get("Cache-Control", "no-cache")
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and request.url.path.startswith("/api"):
-            log_action(request, response.status_code)
+        if request.url.path.startswith("/api"):
+            if by_token:
+                log_token_call(request, response.status_code)
+            elif request.method not in {"GET", "HEAD", "OPTIONS"}:
+                log_action(request, response.status_code)
         return response
+
+    def log_token_call(request: Request, status: int) -> None:
+        """Чтение по токену тоже оставляет след: кто (клиент), что открыл (маршрут без строки запроса) и чем кончилось."""
+        route = request.scope.get("route")
+        key = (request.method, getattr(route, "path", ""))
+        quiet = {"/api/health", "/api/access/me"}
+        if key[1] in quiet:
+            return
+        if request.method == "GET" or key in audit.READ_ONLY:
+            who = getattr(request.state, "actor", "cli")
+            audit.record(who, "access.read", target="system", result=audit.result_of(status),
+                         detail=f"токен «{request.state.token_name}»; {request.method} {key[1] or request.url.path}")
+        else:
+            log_action(request, status)
 
     def log_action(request: Request, status: int) -> None:
         """Строка журнала на каждый запрос, который меняет данные; тело запроса в журнал не попадает."""
@@ -228,8 +262,10 @@ def create_app() -> FastAPI:
             code, kind, ident = "other." + request.method.lower(), "", ""
         extra = [f"{k}={v}" for k, v in params.items() if k != id_param and len(str(v)) < 60]
         note = getattr(request.state, "audit_detail", "")
+        if getattr(request.state, "token_name", ""):
+            note = "; ".join(part for part in [f"токен «{request.state.token_name}»", note] if part)
         text = "; ".join(part for part in [note] + extra + ([] if spec else [request.url.path]) if part)
-        audit.record("cabinet", code, target=kind, target_id=ident, result=audit.result_of(status), detail=text)
+        audit.record(getattr(request.state, "actor", "cabinet"), code, target=kind, target_id=ident, result=audit.result_of(status), detail=text)
 
     # ------------------------------------------------------------------ служебное
     @app.get("/api/health")
@@ -295,6 +331,85 @@ def create_app() -> FastAPI:
         response = JSONResponse({**app.state.lock.status(None), "message": "PIN снят"})
         response.delete_cookie(lock.COOKIE, path="/")
         return response
+
+    # ------------------------------------------------------------------ токены доступа (командная строка, MCP)
+    class AccessBody(BaseModel):
+        name: str = Field("", max_length=80)
+        kind: str = "cli"
+        write: bool = False
+
+    @app.get("/api/access")
+    def access_list():
+        return {"items": access.listing(), "kinds": access.KINDS, "limit": access.MAX_TOKENS,
+                "launcher": str(config.PROJECT_ROOT / "memory-desk"), "url": f"http://127.0.0.1:{config.PORT}"}
+
+    @app.get("/api/access/me")
+    def access_me(request: Request):
+        name = getattr(request.state, "token_name", "")
+        if not name:
+            raise HTTPException(404, "Запрос пришёл не по токену")
+        row = access.verify(access.bearer(request.headers.get("authorization", ""))) or {}
+        return {"name": name, "kind": row.get("kind", ""), "write": bool(row.get("write")), "version": __version__}
+
+    @app.post("/api/access")
+    def access_create(body: AccessBody, request: Request):
+        try:
+            row, token = access.create(body.name, body.kind, body.write)
+        except access.AccessError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        audit.detail(request, f"«{row['name']}», {row['kindLabel']}, {'чтение и запись' if row['write'] else 'только чтение'}")
+        return {**row, "token": token}      # единственный раз, когда токен виден целиком
+
+    @app.delete("/api/access/{token_id}")
+    def access_revoke(token_id: str):
+        if not access.revoke(token_id):
+            raise HTTPException(404, "Токен не найден")
+        return {"revoked": True}
+
+    @app.post("/api/ingest")
+    async def ingest(request: Request, name: str = Query("", max_length=300), process: bool = False):
+        """Аудиофайл приходит телом запроса как есть и ложится в папку записей; `process=true` сразу запускает обработку."""
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > jobs.MAX_INGEST_BYTES:
+            raise HTTPException(413, "Файл больше 4 ГБ")
+        try:
+            target = jobs.ingest_target(core.cfg["recordings_dir"], name)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        part = target.with_name(target.name + ".part")
+        size = 0
+        try:
+            with part.open("wb") as handle:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > jobs.MAX_INGEST_BYTES:
+                        raise HTTPException(413, "Файл больше 4 ГБ")
+                    handle.write(chunk)
+            if size == 0:
+                raise HTTPException(400, "Файл пустой")
+            part.replace(target)
+        except OSError as exc:
+            raise HTTPException(500, f"Не удалось сохранить файл: {exc}") from exc
+        finally:
+            part.unlink(missing_ok=True)
+        result: dict = {"file": target.name, "bytes": size, "queued": True}
+        if process:
+            result["scan"] = await asyncio.to_thread(jobs.start, core.cfg)
+            watcher.tick()
+        audit.detail(request, f"{target.name}, {max(1, size // 1024)} КБ")
+        return result
+
+    @app.get("/api/search")
+    def search(q: str = Query("", max_length=500), limit: int = Query(8, ge=1, le=20), project: str = Query("", max_length=80),
+               person: str = Query("", max_length=80)):
+        """Поиск фрагментов по записям без языковой модели: текст, запись, время."""
+        if not core.index.ready:
+            raise HTTPException(503, "Поисковый индекс ещё готовится — это занимает до минуты после запуска.")
+        scope = {"kind": "project", "id": project} if project else {"kind": "person", "id": person} if person else {"kind": "all"}
+        try:
+            return services.search_passages(core, q, scope, limit)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     class TimeoutBody(BaseModel):
         minutes: int

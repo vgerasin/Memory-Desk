@@ -1,0 +1,7 @@
+#!/bin/sh
+# Командная строка Memory Desk: ./memory-desk ask "что решили по хранилищу?"
+# Нужны только Python 3.9+ и токен доступа (Настройки → Безопасность → Доступ для программ → memory-desk login).
+DIR="$(cd "$(dirname "$0")" && pwd -P)"
+PY="$DIR/.venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || echo /usr/bin/python3)"
+PYTHONPATH="$DIR${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m memory_desk.cli "$@"

@@ -702,6 +702,31 @@ def _excerpt(source: dict) -> str:
     return text[:220].rsplit(" ", 1)[0] + "…" if len(text) > 220 else text
 
 
+def search_passages(core: Core, query: str, scope: dict | None = None, limit: int = 8) -> dict:
+    """Поиск по записям без языковой модели: фрагменты с источниками (запись, время, раздел)."""
+    query = " ".join((query or "").split())
+    if not query:
+        raise ValueError("Запрос не может быть пустым")
+    limit = max(1, min(int(limit), 20))
+    allowed = scope_paths(core, scope or {"kind": "all"})
+    path_to_id = {str(m.path): m.id for m in core.meetings}
+    found = core.index.search(query, paths=allowed, limit=limit * 2)
+    items, seen = [], set()
+    for hit in found:
+        key = (str(hit["path"]), hit.get("timestamp"), hit.get("section"))
+        if key in seen:
+            continue
+        seen.add(key)
+        text = re.sub(r"\s+", " ", hit.get("text", "")).strip()
+        items.append({"meetingId": path_to_id.get(str(hit["path"]), ""), "title": hit.get("title", ""), "date": hit.get("date", ""),
+                      "time": hit.get("time", ""), "section": hit.get("section", ""), "t": hit.get("timestamp", ""),
+                      "tSec": clock_seconds(hit.get("timestamp", "")), "text": text[:700],
+                      "score": round(float(hit.get("rank_score", hit.get("score", 0.0))), 3)})
+        if len(items) >= limit:
+            break
+    return {"query": query, "items": items, "total": len(items)}
+
+
 def chat(core: Core, question: str, scope: dict, previous: list[str], asked: list[str] | None = None) -> dict:
     question = question.strip()
     if not question:

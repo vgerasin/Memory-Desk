@@ -130,6 +130,27 @@ def discover(recordings_dir: str) -> list[Path]:
     )
 
 
+MAX_INGEST_BYTES = 4 * 1024 ** 3
+
+
+def ingest_target(recordings_dir: str, name: str) -> Path:
+    """Куда положить принятый по API файл: только имя без пути, только аудио, существующий файл не затирается."""
+    base = re.sub(r"[\x00-\x1f]", "", Path((name or "").replace("\\", "/")).name).strip()
+    if not base or base.startswith("."):
+        raise ValueError("Нужно имя файла")
+    ext = Path(base).suffix
+    if ext.casefold() not in AUDIO_EXTENSIONS:
+        raise ValueError("Принимаются только аудиофайлы: " + ", ".join(sorted(AUDIO_EXTENSIONS)))
+    folder = Path(recordings_dir).expanduser()
+    folder.mkdir(parents=True, exist_ok=True)
+    stem = base[: -len(ext)]
+    target, number = folder / base, 2
+    while target.exists() or (folder / (target.name + ".part")).exists():
+        target = folder / f"{stem} ({number}){ext}"
+        number += 1
+    return target
+
+
 def unsupported(recordings_dir: str) -> list[Path]:
     folder = Path(recordings_dir).expanduser()
     if not folder.exists():
