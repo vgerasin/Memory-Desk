@@ -199,9 +199,9 @@ install.command    installer; start.command — start the desk
 ## What has been verified
 
 - **Automatically** (`pytest`, 518 tests): API and protection, filters and search, the record card, publishing, tasks and decisions, analytics, chat summaries, minutes and map, memo, brief and email with timecode checks, project digest, decision tree, calendar integration, morning brief, stuck tasks and series, note templates and their rollback, bookmarks, question hints, export (PDF, DOCX, HTML, Markdown, PNG), resilience of notes to “hostile” edits, stubbed EventKit and voice encoder, installer scenarios on stubs, the activity log, PIN lock, live dossiers, interface languages.
-- **In a browser** (Chromium, fictional data): all screens in light and dark themes, a stress set of ~55 recordings with no JavaScript errors and no 500 responses; PDF, DOCX and map images inspected by eye (DOCX opened in LibreOffice); the phone page in a 390×844 window.
+- **In a browser** (Chromium, fictional data): all screens in light and dark themes, a stress set of ~55 recordings with no JavaScript errors and no 500 responses; PDF, DOCX and map images inspected by eye (DOCX opened in LibreOffice).
 
-**Not verified on real hardware** (the development environment has no Apple Silicon): MLX Whisper transcription and Ollama analysis through the new interface, the quality of `qwen3:4b` answers and summaries, loading the real embedding model, reading Calendar and Reminders through EventKit, the ECAPA voice model and similarity threshold, the Whisper filter on real music and noise, opening DOCX in Word and Pages, installation on a clean Mac, the macOS app shell (never built), the quality of the translations. Run the first launch on one short file.
+**Not verified on real hardware** (the development environment has no Apple Silicon): MLX Whisper transcription and Ollama analysis through the new interface, the quality of `qwen3:4b` answers and summaries, loading the real embedding model, reading Calendar and Reminders through EventKit, the ECAPA voice model and similarity threshold, the Whisper filter on real music and noise, opening DOCX in Word and Pages, installation on a clean Mac with real model downloads, the macOS app’s menu bar, Shortcuts and installer window (the app builds and opens, but has not been checked in detail), the quality of the translations. Run the first launch on one short file.
 
 The full list of limitations is in [docs/STATUS.md](docs/STATUS.md) (Russian).
 
@@ -209,8 +209,8 @@ The full list of limitations is in [docs/STATUS.md](docs/STATUS.md) (Russian).
 
 The detailed plan with acceptance criteria is in [docs/ROADMAP.md](docs/ROADMAP.md) (Russian). Nearest:
 
-- a first-run and installation wizard (model choice and download, dependency checks);
-- the **macOS app** (window, menu-bar icon, Shortcuts): a draft is in [`macos/`](macos/README.md); it has not been built and awaits a check on a Mac; signing, notarisation and auto-update are not done.
+- checking the installation wizard on a clean Mac: real model downloads and `brew install`;
+- the **macOS app** (window, menu-bar icon, Shortcuts): in [`macos/`](macos/README.md), it builds and opens on a Mac; the menu bar, Shortcuts and the installer window await a detailed check; signing, notarisation and auto-update are not done.
 
 ## License
 

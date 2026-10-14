@@ -1,5 +1,5 @@
 // swift-tools-version:5.9
-// ЧЕРНОВИК: написан без Swift и Xcode, на Mac не собирался. Что проверить — в README.md рядом.
+// ЧЕРНОВИК: написан без Swift и Xcode; на Mac собирается и открывается, подробная проверка не пройдена. Что проверить — в README.md рядом.
 import PackageDescription
 
 let package = Package(

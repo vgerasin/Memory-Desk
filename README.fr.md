@@ -199,9 +199,9 @@ install.command    installateur ; start.command — lancement du bureau
 ## Ce qui a été vérifié
 
 - **Automatiquement** (`pytest`, 518 tests) : API et protection, filtres et recherche, fiche d’enregistrement, publication, tâches et décisions, analytique, synthèses du chat, compte rendu et carte, note de service, brief et courriel avec contrôle des horodatages, synthèse par projet, arbre des décisions, intégration du calendrier, point du matin, tâches bloquées et séries, modèles de notes et leur retour arrière, signets, suggestions de questions, export (PDF, DOCX, HTML, Markdown, PNG), robustesse des notes face aux modifications « hostiles », EventKit et encodeur vocal simulés, scénarios de l’installateur sur simulations, journal d’activité, verrouillage par PIN, dossiers vivants, langues de l’interface.
-- **Dans un navigateur** (Chromium, données fictives) : tous les écrans en thème clair et sombre, un jeu de charge d’environ 55 enregistrements sans erreur JavaScript ni réponse 500 ; PDF, DOCX et images de carte examinés à l’œil (DOCX ouvert dans LibreOffice) ; la page du téléphone dans une fenêtre de 390×844.
+- **Dans un navigateur** (Chromium, données fictives) : tous les écrans en thème clair et sombre, un jeu de charge d’environ 55 enregistrements sans erreur JavaScript ni réponse 500 ; PDF, DOCX et images de carte examinés à l’œil (DOCX ouvert dans LibreOffice).
 
-**Non vérifié sur du vrai matériel** (l’environnement de développement n’a pas d’Apple Silicon) : transcription MLX Whisper et analyse Ollama via la nouvelle interface, qualité des réponses et synthèses de `qwen3:4b`, chargement du vrai modèle d’embeddings, lecture du Calendrier et des Rappels via EventKit, modèle vocal ECAPA et seuil de similarité, filtre Whisper sur de la vraie musique et du vrai bruit, ouverture des DOCX dans Word et Pages, installation sur un Mac vierge, coque de l’application macOS (jamais compilée), qualité des traductions. Faites le premier lancement sur un seul fichier court.
+**Non vérifié sur du vrai matériel** (l’environnement de développement n’a pas d’Apple Silicon) : transcription MLX Whisper et analyse Ollama via la nouvelle interface, qualité des réponses et synthèses de `qwen3:4b`, chargement du vrai modèle d’embeddings, lecture du Calendrier et des Rappels via EventKit, modèle vocal ECAPA et seuil de similarité, filtre Whisper sur de la vraie musique et du vrai bruit, ouverture des DOCX dans Word et Pages, installation sur un Mac vierge avec de vrais téléchargements de modèles, barre des menus, Raccourcis et fenêtre d’installation de l’application macOS (elle se compile et s’ouvre, mais n’a pas été vérifiée en détail), qualité des traductions. Faites le premier lancement sur un seul fichier court.
 
 La liste complète des limites est dans [docs/STATUS.md](docs/STATUS.md) (en russe).
 
@@ -209,8 +209,8 @@ La liste complète des limites est dans [docs/STATUS.md](docs/STATUS.md) (en rus
 
 Le plan détaillé avec critères d’acceptation est dans [docs/ROADMAP.md](docs/ROADMAP.md) (en russe). Prochainement :
 
-- un assistant de premier lancement et d’installation (choix et téléchargement des modèles, vérification des dépendances) ;
-- l’**application macOS** (fenêtre, icône dans la barre des menus, Raccourcis) : une ébauche est dans [`macos/`](macos/README.md) ; elle n’a pas été compilée et attend une vérification sur Mac ; signature, notarisation et mise à jour automatique ne sont pas faites.
+- vérifier l’assistant d’installation sur un Mac vierge : vrais téléchargements de modèles et `brew install` ;
+- l’**application macOS** (fenêtre, icône dans la barre des menus, Raccourcis) : dans [`macos/`](macos/README.md), elle se compile et s’ouvre sur Mac ; la barre des menus, les Raccourcis et la fenêtre d’installation attendent une vérification détaillée ; signature, notarisation et mise à jour automatique ne sont pas faites.
 
 ## Licence
 

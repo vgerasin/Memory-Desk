@@ -26,7 +26,7 @@ def test_macos_draft_is_consistent():
     assert 'name: "MemoryDesk"' in package and "ЧЕРНОВИК" in package
     script = (base / "build_app.sh").read_text(encoding="utf-8")
     assert script.startswith("#!/bin/zsh") and "codesign" in script and "set -euo pipefail" in script
-    assert "не собиралось" in (base / "README.md").read_text(encoding="utf-8")
+    assert "подробно не проверено" in (base / "README.md").read_text(encoding="utf-8")
     # сервер приложения запускает тот же скрипт, что и start.command, и порт по умолчанию совпадает
     server = (base / "Sources/MemoryDesk/Server.swift").read_text(encoding="utf-8")
     assert "meeting-assistant" in server and "8502" in server
