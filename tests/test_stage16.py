@@ -554,3 +554,12 @@ def test_app_shell_is_wired_between_swift_and_frontend():
     app = (root / "frontend/src/App.tsx").read_text("utf-8")
     assert 'applicationNameForUserAgent = "MemoryDeskApp"' in swift and "MemoryDeskApp" in main
     assert "data-shell='app'" in css and 'id="md-scroll"' in app
+
+
+def test_app_icon_is_bundled():
+    root = Path(__file__).resolve().parents[1] / "macos"
+    import plistlib
+    info = plistlib.loads((root / "Resources/Info.plist").read_bytes())
+    icon = root / "Resources" / (info["CFBundleIconFile"] + ".icns")
+    assert icon.read_bytes()[:4] == b"icns" and icon.stat().st_size > 10_000
+    assert "AppIcon.icns" in (root / "build_app.sh").read_text("utf-8")

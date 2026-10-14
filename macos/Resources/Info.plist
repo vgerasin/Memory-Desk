@@ -6,6 +6,7 @@
   <key>CFBundleDisplayName</key><string>Memory Desk</string>
   <key>CFBundleIdentifier</key><string>local.memorydesk.app</string>
   <key>CFBundleExecutable</key><string>MemoryDesk</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>__VERSION__</string>
   <key>CFBundleVersion</key><string>__VERSION__</string>

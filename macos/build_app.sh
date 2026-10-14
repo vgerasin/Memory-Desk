@@ -10,7 +10,9 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$(swift build -c release --show-bin-path)/MemoryDesk" "$APP/Contents/MacOS/MemoryDesk"
 cp ../scripts/bootstrap.sh "$APP/Contents/Resources/bootstrap.sh"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"    # значок; перерисовать: python3 ../scripts/make_icon.py
 sed "s/__VERSION__/${VERSION:-0}/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 codesign --force --deep --sign - "$APP"
+touch "$APP"     # Finder обновит значок
 echo "Готово: $PWD/$APP"
 echo "Перетащите в «Программы». Первый запуск: правый клик → «Открыть» (приложение не нотаризовано)."
