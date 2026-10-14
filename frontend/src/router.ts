@@ -21,7 +21,7 @@ export function navigate(to: string, replace = false) {
   if (to === snapshot()) return
   window.history[replace ? 'replaceState' : 'pushState']({}, '', to)
   window.dispatchEvent(new Event(EVENT))
-  if (!replace) window.scrollTo({ top: 0 })
+  if (!replace) { window.scrollTo({ top: 0 }); document.getElementById('md-scroll')?.scrollTo({ top: 0 }) }   // в окне приложения прокручивается область под шапкой
 }
 
 export function useNavigate() {

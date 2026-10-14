@@ -60,7 +60,7 @@ export default function App() {
     <div className="app">
       <Header />
       {!live && <div className="offline">{tr('Нет связи с Memory Desk — данные могут быть устаревшими. Переподключаюсь…')}</div>}
-      <main className="main"><Boundary><Screen /></Boundary></main>
+      <div className="scroll" id="md-scroll"><main className="main"><Boundary><Screen /></Boundary></main></div>
       <Chat />
       <SettingsModal />
       <StorageModal />

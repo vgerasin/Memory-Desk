@@ -1125,3 +1125,19 @@ ul { padding: 0; list-style: none; }
 .modal.setup > .setup-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
 .modal.setup > .error-box { flex-shrink: 0; }
 .setup-pane > * { flex-shrink: 0; }
+
+/* ---------- режим приложения (окно для Mac; в браузере: любой адрес с ?app=1) ----------
+   Шапка закреплена, страница не прокручивается целиком и не «резинится»: прокручивается только область под шапкой.
+   Надписи интерфейса не выделяются, как в обычных программах; текст записей, заметок и поля ввода выделяются. */
+.scroll { display: contents; }
+:root[data-shell='app'], :root[data-shell='app'] body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+:root[data-shell='app'] body { background-attachment: scroll; cursor: default; }
+:root[data-shell='app'] .app { height: 100vh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+:root[data-shell='app'] .header { position: relative; flex: none; }
+:root[data-shell='app'] .offline { flex: none; }
+:root[data-shell='app'] .scroll { display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: none; }
+:root[data-shell='app'] .detail { top: 24px; }
+:root[data-shell='app'] :is(.header, .seg, .hbtn, .badge, .tbtn, .btn, button, label, .modal-foot, .setup-steps, .set-nav, .sys, .page-head .titles) { -webkit-user-select: none; user-select: none; }
+:root[data-shell='app'] :is(input, textarea, [contenteditable='true']) { -webkit-user-select: text; user-select: text; }
+:root[data-shell='app'] :is(a, button, select, label, summary) { cursor: default; }
+:root[data-shell='app'] a:hover { text-decoration: none; }

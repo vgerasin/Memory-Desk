@@ -3,7 +3,15 @@ import { createRoot } from 'react-dom/client'
 import { initLang } from './i18n'
 import './styles.css'
 
+/** Окно приложения для Mac (в его User-Agent есть MemoryDeskApp) или адрес с ?app=1: шапка на месте, прокручивается только содержимое. */
+function detectShell() {
+  try {
+    if (/MemoryDeskApp/.test(navigator.userAgent) || new URLSearchParams(location.search).has('app')) document.documentElement.dataset.shell = 'app'
+  } catch { /* остаётся обычная страница */ }
+}
+
 async function boot() {
+  detectShell()
   // Язык выбирается до загрузки остального кода: надписи, собранные при загрузке модулей, уже на нужном языке.
   await initLang()
   const [{ default: App }, { LockGate }, { AppProvider }, { applyPalette, findPalette }] = await Promise.all([

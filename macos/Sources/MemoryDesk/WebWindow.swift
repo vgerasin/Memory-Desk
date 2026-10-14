@@ -8,6 +8,7 @@ final class WebWindowController: NSWindowController, WKNavigationDelegate, WKUID
     init() {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()      // язык и тема запоминаются между запусками
+        configuration.applicationNameForUserAgent = "MemoryDeskApp"    // по нему интерфейс включает режим окна приложения
         webView = WKWebView(frame: .zero, configuration: configuration)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 900),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],

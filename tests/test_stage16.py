@@ -542,3 +542,15 @@ def test_api_status_has_places_and_reveal_is_guarded(client, monkeypatch):
 def test_system_rows_offer_a_fix_for_missing_engines(client):
     rows = {r["key"]: r for r in client.get("/api/system").json()["rows"]}
     assert rows["ocr"].get("fix") == 1 and rows["whisper"].get("fix") == 1
+
+
+# --------------------------------------------------------------------------- режим приложения
+
+def test_app_shell_is_wired_between_swift_and_frontend():
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/Sources/MemoryDesk/WebWindow.swift").read_text("utf-8")
+    main = (root / "frontend/src/main.tsx").read_text("utf-8")
+    css = (root / "frontend/src/styles.css").read_text("utf-8")
+    app = (root / "frontend/src/App.tsx").read_text("utf-8")
+    assert 'applicationNameForUserAgent = "MemoryDeskApp"' in swift and "MemoryDeskApp" in main
+    assert "data-shell='app'" in css and 'id="md-scroll"' in app
