@@ -12,7 +12,6 @@ import { navigate, useRoute } from './router'
 import { useApp } from './store'
 import { Analytics } from './screens/Analytics'
 import { Archive } from './screens/Archive'
-import { Calendar } from './screens/Calendar'
 import { People } from './screens/People'
 import { Person } from './screens/Person'
 import { Project } from './screens/Project'
@@ -36,7 +35,6 @@ function Screen() {
     case 'projects': return segments[1] ? <Project /> : <Projects />
     case 'people': return segments[1] ? <Person /> : <People />
     case 'tasks': return <Tasks />
-    case 'calendar': return <Calendar />
     case 'analytics': return <Analytics />
     default: return <Today />
   }

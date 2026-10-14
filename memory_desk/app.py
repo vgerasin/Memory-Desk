@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, answers, apple, asr, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, remote, series, services, speakers, storage, suggest, templates, views, voice, waveform
+from . import __version__, answers, apple, asr, artifacts, attachments, audit, bookmarks, erase, mirror, projectdigest, dossier, live, export, config, conflicts, daily, dictionary, housekeeping, integrations, jobs, knowledge, llm, lock, mapexport, materials, ocr, people as people_cards, rebuild, series, services, speakers, storage, suggest, templates, views, voice, waveform
 from .core import Core, get_core
 
 AUDIO_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
@@ -167,8 +167,6 @@ def create_app() -> FastAPI:
     async def lifespan(_app: FastAPI):
         await asyncio.to_thread(core.boot)
         await asyncio.to_thread(watcher.tick)
-        if app.state.remote.enabled:
-            await asyncio.to_thread(app.state.remote.start)
 
         async def loop():
             while True:
@@ -182,14 +180,12 @@ def create_app() -> FastAPI:
             yield
         finally:
             task.cancel()
-            await asyncio.to_thread(app.state.remote.stop)
             core.shutdown()
 
     app = FastAPI(title="Memory Desk", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.core = core
     app.state.watcher = watcher
     app.state.lock = lock.Lock(core)
-    app.state.remote = remote.Remote(core)
 
     # --- безопасность: приложение слушает только 127.0.0.1, но браузер любого сайта может обратиться к нему.
     allowed_hosts = {f"127.0.0.1:{config.PORT}", f"localhost:{config.PORT}", "127.0.0.1", "localhost"}
@@ -284,7 +280,6 @@ def create_app() -> FastAPI:
             where = app.state.lock.set_pin(body.pin, body.current)
         except lock.LockError as exc:
             return lock_fail(exc)
-        app.state.remote.forget_pin()         # устройства телефона, вошедшие по прежнему PIN, перестают подходить
         audit.detail(request, "хранится в Связке ключей" if where == "keychain" else "хранится в файле lock.json")
         token = app.state.lock.open_session()      # тот, кто задал PIN, остаётся внутри
         payload = app.state.lock.status(token)
@@ -297,8 +292,6 @@ def create_app() -> FastAPI:
             app.state.lock.remove_pin(body.current or body.pin)
         except lock.LockError as exc:
             return lock_fail(exc)
-        app.state.remote.forget_pin()
-        app.state.remote.configure(enabled=False)       # без PIN доступ с телефона невозможен и сам не включится позже
         response = JSONResponse({**app.state.lock.status(None), "message": "PIN снят"})
         response.delete_cookie(lock.COOKIE, path="/")
         return response
@@ -313,41 +306,6 @@ def create_app() -> FastAPI:
         core.cfg = config.save_config({**core.cfg, "lock_timeout_min": body.minutes})
         audit.detail(request, f"{body.minutes} мин")
         return app.state.lock.status(request.cookies.get(lock.COOKIE))
-
-    # ------------------------------------------------------------------ доступ с телефона (управление — только из кабинета)
-    class RemoteBody(BaseModel):
-        enabled: bool | None = None
-        days: int | None = None
-        transcript: bool | None = None
-        hosts: list[str] | None = None
-        port: int | None = None
-        pin: str = ""
-
-    @app.get("/api/remote")
-    def remote_status():
-        return app.state.remote.status()
-
-    @app.put("/api/remote")
-    def remote_configure(body: RemoteBody, request: Request):
-        try:
-            changed = app.state.remote.configure(enabled=body.enabled, days=body.days, transcript=body.transcript,
-                                                 hosts=body.hosts, port=body.port, pin=body.pin)
-        except remote.RemoteError as exc:
-            headers = {"Retry-After": str(exc.retry)} if exc.retry else {}
-            return JSONResponse({"detail": str(exc), "retryAfter": exc.retry}, status_code=exc.status, headers=headers)
-        audit.detail(request, "изменены: " + ", ".join(changed) if changed else "без изменений")
-        return {**app.state.remote.status(), "message": "Сохранено"}
-
-    @app.delete("/api/remote/devices/{device_id}")
-    def remote_revoke(device_id: str):
-        if not app.state.remote.revoke(device_id):
-            raise HTTPException(404, "Такого устройства нет")
-        return app.state.remote.status()
-
-    @app.post("/api/remote/revoke-all")
-    def remote_revoke_all(request: Request):
-        audit.detail(request, f"устройств: {app.state.remote.revoke_all()}")
-        return app.state.remote.status()
 
     @app.get("/api/state")
     def state():
@@ -1022,8 +980,6 @@ def create_app() -> FastAPI:
             raise HTTPException(404, str(exc.args[0])) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        except ImportError as exc:
-            raise HTTPException(500, "Не установлен модуль python-pptx: запустите install.command или start.command") from exc
         except OSError as exc:
             raise HTTPException(500, f"Не удалось сохранить файл: {exc}") from exc
 
@@ -1107,43 +1063,6 @@ def create_app() -> FastAPI:
                 result["obsidianUrl"] = knowledge.obsidian_url(path)
             return result
         return material_errors(run)
-
-    @app.post("/api/materials/digest/deck")
-    def material_digest_deck(body: DigestBody):
-        return material_errors(lambda: projectdigest.build_deck(core, body.period, services.meeting_date, project_id=body.projectId))
-
-    @app.post("/api/materials/deck")
-    def material_deck(body: MaterialScope):
-        result = material_errors(lambda: materials.build_deck(core, body.model_dump(), services.meeting_date))
-        return result
-
-    @app.get("/api/materials/decks")
-    def material_decks():
-        return {"items": [{**d, "url": materials.deck_url(d["name"])} for d in materials.list_decks()]}
-
-    @app.get("/api/materials/deck/{name}")
-    def material_deck_file(name: str):
-        try:
-            path = materials.deck_path(name)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        except FileNotFoundError as exc:
-            raise HTTPException(404, "Презентация не найдена") from exc
-        return FileResponse(path, filename=path.name,
-                            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-
-    @app.get("/api/calendar")
-    def calendar_range(start: str = Query("", alias="from", max_length=10), to: str = Query("", max_length=10)):
-        today = date.today()
-        try:
-            first = date.fromisoformat(start) if start else today - timedelta(days=today.weekday())
-            last = date.fromisoformat(to) if to else first + timedelta(days=6)
-        except ValueError:
-            raise HTTPException(400, "Даты должны быть в формате ГГГГ-ММ-ДД") from None
-        try:
-            return integrations.calendar_range(core, first, last)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
 
     class CalendarAction(BaseModel):
         action: str
@@ -1892,7 +1811,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/export/map")
     def export_map(body: MapExportBody):
-        """Карта из окна материалов в PNG (от 2000 px), SVG или OPML."""
+        """Карта из окна материалов в PNG (от 2000 px)."""
         return file_response(lambda: mapexport.export(body.format, body.title, body.tree, body.name))
 
     class ChatExportBody(ChatSaveBody):

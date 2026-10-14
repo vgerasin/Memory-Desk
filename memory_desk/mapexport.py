@@ -1,32 +1,24 @@
-"""Выгрузка карты в PNG, SVG и OPML (этап 4.2).
+"""Выгрузка карты в PNG (этап 4.2; SVG и OPML убраны в этапе 14: PNG хватает, остальное было лишним).
 
 Карта приходит деревом `{"text", "children"}`. Раскладка считается один раз (дерево слева направо,
-родитель по центру своих детей), а SVG и PNG рисуются по одним и тем же координатам:
-SVG собственным генератором, PNG через Pillow со шрифтом DejaVu из `memory_desk/fonts`.
-Браузер, Mermaid и системные библиотеки не нужны. OPML — прямая выгрузка дерева для XMind,
-MindNode и OmniOutliner.
+родитель по центру своих детей), PNG рисуется через Pillow со шрифтом DejaVu из `memory_desk/fonts`.
+Браузер, Mermaid и системные библиотеки не нужны.
 """
 from __future__ import annotations
 
 import io
 import math
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import datetime
-from email.utils import format_datetime
-from xml.sax.saxutils import escape
 
 from PIL import Image, ImageDraw, ImageFont
 
 from .export import FONT_DIR, ExportError, content_disposition, safe_filename
 
-__all__ = ["FORMATS", "export", "content_disposition", "layout", "parse_tree", "render_svg", "render_png", "render_opml"]
+__all__ = ["FORMATS", "export", "content_disposition", "layout", "parse_tree", "render_png"]
 
 FORMATS = {
     "png": ("image/png", "PNG"),
-    "svg": ("image/svg+xml; charset=utf-8", "SVG"),
-    "opml": ("text/x-opml; charset=utf-8", "OPML"),
 }
 
 MAX_NODES = 600
@@ -262,42 +254,6 @@ def _baseline(box: Box, i: int) -> float:
     return box.y + PAD_Y + box.line_h * i + box.line_h / 2 + box.size * 0.35
 
 
-# --------------------------------------------------------------------------- SVG
-
-def render_svg(tree: dict) -> bytes:
-    lay = layout(tree)
-    out = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{lay.width}" height="{lay.height}" '
-        f'viewBox="0 0 {lay.width} {lay.height}" role="img" aria-label="{escape(lay.root.text, {chr(34): "&quot;"})}" '
-        f'font-family="{FONT_FAMILY}">',
-        f"<title>{escape(lay.root.text)}</title>",
-        f'<rect width="100%" height="100%" fill="{SURFACE}"/>',
-        '<g fill="none" stroke-linecap="round">',
-    ]
-
-    def edges(b: Box) -> None:
-        for c in b.children:
-            x1, y1, cx1, cy1, cx2, cy2, x2, y2 = _edge(b, c)
-            width = 3 if b.depth == 0 else 2
-            out.append(f'<path d="M{x1:.1f},{y1:.1f} C{cx1:.1f},{cy1:.1f} {cx2:.1f},{cy2:.1f} {x2:.1f},{y2:.1f}" '
-                       f'stroke="{_colors(c)[3]}" stroke-width="{width}"/>')
-            edges(c)
-
-    edges(lay.root)
-    out.append("</g>")
-    for b in lay.boxes:
-        fill, ink, stroke, _ = _colors(b)
-        out.append(f'<rect x="{b.x:.1f}" y="{b.y:.1f}" width="{b.w}" height="{b.h}" rx="{_radius(b)}" '
-                   f'fill="{fill}" stroke="{stroke}" stroke-width="1.5"/>')
-        weight = ' font-weight="700"' if b.bold else ""
-        for i, line in enumerate(b.lines):
-            out.append(f'<text x="{b.x + PAD_X:.1f}" y="{_baseline(b, i):.1f}" font-size="{b.size}"{weight} '
-                       f'fill="{ink}">{escape(line)}</text>')
-    out.append("</svg>")
-    return "\n".join(out).encode("utf-8")
-
-
 # --------------------------------------------------------------------------- PNG
 
 def _bezier(p: tuple[float, ...], steps: int = 40) -> list[tuple[float, float]]:
@@ -347,42 +303,13 @@ def render_png(tree: dict) -> bytes:
     return buf.getvalue()
 
 
-# --------------------------------------------------------------------------- OPML
-
-def render_opml(tree: dict, when: datetime | None = None) -> bytes:
-    """OPML 2.0: корень карты становится заголовком и верхним узлом, дальше вложенные outline."""
-    when = when or datetime.now().astimezone()
-    if when.tzinfo is None:
-        when = when.astimezone()
-    root = ET.Element("opml", version="2.0")
-    head = ET.SubElement(root, "head")
-    ET.SubElement(head, "title").text = tree["text"]
-    ET.SubElement(head, "dateCreated").text = format_datetime(when)
-    body = ET.SubElement(root, "body")
-
-    def add(parent: ET.Element, node: dict) -> None:
-        element = ET.SubElement(parent, "outline", text=node["text"])
-        for child in node["children"]:
-            add(element, child)
-
-    add(body, tree)
-    ET.indent(root, space="  ")
-    return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="utf-8") + b"\n"
-
-
 # --------------------------------------------------------------------------- вход
 
-def export(fmt: str, title: str, tree: object, name: str | None = None, when: datetime | None = None) -> tuple[bytes, str, str]:
+def export(fmt: str, title: str, tree: object, name: str | None = None) -> tuple[bytes, str, str]:
     """Возвращает (содержимое, имя файла, тип)."""
     if fmt not in FORMATS:
-        raise ExportError("Неизвестный формат карты: нужен png, svg или opml")
+        raise ExportError("Карта выгружается только в PNG")
     clean = parse_tree(tree)
     title = " ".join((title or "").split()) or clean["text"]
-    stem = safe_filename(re.sub(r"\.(png|svg|opml)$", "", name or f"Карта — {title}", flags=re.I))
-    if fmt == "png":
-        data = render_png(clean)
-    elif fmt == "svg":
-        data = render_svg(clean)
-    else:
-        data = render_opml(clean, when)
-    return data, f"{stem}.{fmt}", FORMATS[fmt][0]
+    stem = safe_filename(re.sub(r"\.png$", "", name or f"Карта — {title}", flags=re.I))
+    return render_png(clean), f"{stem}.png", FORMATS[fmt][0]

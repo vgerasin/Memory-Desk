@@ -69,7 +69,6 @@ export function Projects() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn accent s34" onClick={() => navigate('/projects/' + encodeURIComponent(p.id))}>{tr('Досье')}</button>
                 <button className="btn s34" onClick={() => navigate('/records?project=' + encodeURIComponent(p.title))}>{tr('Записи')}</button>
-                <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', projectId: p.id, title: p.title })}>{tr('Презентация')}</button>
                 <button className="btn s34" onClick={() => setMaterial({ kind: 'map', projectId: p.id, title: p.title })}>{tr('Карта')}</button>
                 <button className="btn s34" onClick={() => setPrep({ projectId: p.id, title: p.title })}>{tr('Подготовка к встрече')}</button>
               </div>

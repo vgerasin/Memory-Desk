@@ -99,7 +99,6 @@ export function Today() {
           <div className="eyebrow">{longDate()}</div>
           <h1 className="h1">{tr('Сегодня')}</h1>
         </div>
-        <button className="btn s34" onClick={() => navigate('/calendar')}>{tr('Календарь')}</button>
       </div>
 
       {run && (

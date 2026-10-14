@@ -121,7 +121,6 @@ export function People() {
                 <button className="btn accent s32" onClick={() => navigate('/people/' + encodeURIComponent(p.id))}>{tr('Досье')}</button>
                 <button className="btn s32" style={{ color: 'var(--accent)' }}
                   onClick={() => chat.openChat({ kind: 'person', id: p.id, label: tr('Человек: ') + first }, tr('Какие задачи и обещания у {0}?', [p.name]))}>{tr('Что обещал(а)?')}</button>
-                <button className="btn s32" onClick={() => setMaterial({ kind: 'deck', personId: p.id, title: p.name })}>{tr('Презентация')}</button>
                 <button className="btn s32" onClick={() => setMaterial({ kind: 'map', personId: p.id, title: p.name })}>{tr('Карта')}</button>
               </div>
             </div>

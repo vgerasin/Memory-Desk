@@ -85,10 +85,7 @@ export function Chat() {
               <div className={'bot-text' + (m.pending ? ' pending' : '') + (m.error ? ' error' : '') + (m.digest || m.material ? ' rich' : '')}>
                 {m.digest || m.material ? <RichText text={m.text} /> : m.text}
               </div>
-              {m.material && m.material.kind === 'deck' && m.material.result.url && (
-                <a className="btn accent s34 chat-file" href={m.material.result.url} download>{tr('Скачать презентацию (.pptx)')}</a>
-              )}
-              {m.material && m.material.kind !== 'deck' && (
+              {m.material && (
                 <button className="btn s34 chat-file" onClick={() => setMaterial({ kind: m.material!.kind, title: m.material!.result.title, result: m.material!.result })}>{tr('Открыть окно: править, скачать, в Obsidian')}</button>
               )}
               {!m.pending && !m.error && !m.material && (m.sources?.length ?? 0) > 0 && (

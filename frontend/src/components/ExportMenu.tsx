@@ -10,12 +10,6 @@ export const DOC_FORMATS = [
   { id: 'md', label: 'Markdown (.md)', hint: tr('как в Obsidian') },
 ]
 
-export const MAP_FORMATS = [
-  { id: 'png', label: 'PNG', hint: tr('картинка от 2000 px') },
-  { id: 'svg', label: 'SVG', hint: tr('масштабируется без потерь') },
-  { id: 'opml', label: 'OPML', hint: tr('для XMind, MindNode, OmniOutliner') },
-]
-
 /** «Скачать» с выбором формата: сервер собирает PDF, DOCX, HTML или Markdown из текста документа. */
 export function ExportMenu({ endpoint, body, label = tr('Скачать'), className = 'btn s34', up = false, formats = DOC_FORMATS }: {
   formats?: { id: string; label: string; hint: string }[]; endpoint: string; body: () => Record<string, unknown>; label?: string; className?: string; up?: boolean

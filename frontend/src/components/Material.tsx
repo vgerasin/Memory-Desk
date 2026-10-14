@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, errorText } from '../api'
+import { api, downloadFile, errorText } from '../api'
 import { useApp } from '../store'
 import { plural } from '../format'
 import { navigate, recordLink } from '../router'
 import type { ArtifactKind, MapNode, MaterialKind, MaterialResult, MaterialTarget } from '../types'
 import { IconOut, Segmented } from './ui'
-import { ExportMenu, MAP_FORMATS } from './ExportMenu'
+import { ExportMenu } from './ExportMenu'
 import { tr } from '../i18n'
 
 const TITLES: Record<MaterialKind, string> = {
-  protocol: tr('Протокол встречи'), map: tr('Карта'), deck: tr('Презентация'),
+  protocol: tr('Протокол встречи'), map: tr('Карта'),
   memo: tr('Служебная записка'), brief: tr('Бриф'), followup: tr('Письмо участникам (черновик)'), digest: tr('Дайджест по проектам'),
 }
 const DIGEST_PERIODS = [{ key: 'this_week', label: tr('Эта неделя') }, { key: 'last_week', label: tr('Прошлая неделя') }, { key: 'this_month', label: tr('Этот месяц') }, { key: 'last_month', label: tr('Прошлый месяц') }]
@@ -58,16 +58,14 @@ function endpoint(target: MaterialTarget, days: string, addressee: string): { pa
   if (target.kind === 'digest') return { path: '/api/materials/digest', body: { period: days, projectId: target.projectId } }
   if (isArtifact(target.kind)) return { path: '/api/materials/artifact', body: { ...scope, kind: target.kind, addressee } }
   if (target.kind === 'protocol') return { path: `/api/meetings/${encodeURIComponent(target.meetingId ?? '')}/protocol` }
-  return { path: target.kind === 'map' ? '/api/materials/mindmap' : '/api/materials/deck', body: scope }
+  return { path: '/api/materials/mindmap', body: scope }
 }
 
-/** Окно «Материалы»: протокол записи, карта и презентация. Текст можно поправить, скопировать, скачать или сохранить в Obsidian. */
+/** Окно «Материалы»: протокол записи, карта и документы. Текст можно поправить, скопировать, скачать или сохранить в Obsidian. */
 export function MaterialModal() {
   const { material, setMaterial, showToast } = useApp()
   const [days, setDays] = useState('30')
   const [addressee, setAddressee] = useState('')
-  const [deck, setDeck] = useState<{ url: string; slides: number } | null>(null)
-  const [deckBusy, setDeckBusy] = useState(false)
   const [result, setResult] = useState<MaterialResult | null>(null)
   const [text, setText] = useState('')
   const [error, setError] = useState('')
@@ -83,7 +81,7 @@ export function MaterialModal() {
 
   const generate = useCallback(async (target: MaterialTarget, period: string, to = '') => {
     const mine = ++seq.current
-    setBusy(true); setError(''); setResult(null); setSaved(null); setProgress(null); setDeck(null)
+    setBusy(true); setError(''); setResult(null); setSaved(null); setProgress(null)
     try {
       if (target.kind === 'protocol' && target.meetingId) {
         // Протокол составляется в фоне: показываем этап и процент, пока модель пишет текст
@@ -115,7 +113,7 @@ export function MaterialModal() {
   // Протокол и материалы по одной записи строятся сразу; для проекта и человека сначала выбирают период.
   useEffect(() => {
     seq.current++
-    setResult(null); setError(''); setSaved(null); setBusy(false); setProgress(null); setDeck(null)
+    setResult(null); setError(''); setSaved(null); setBusy(false); setProgress(null)
     if (material?.kind === 'digest') setDays(d => (DIGEST_PERIODS.some(p => p.key === d) ? d : 'this_week'))
     else setDays(d => (/^\d+$/.test(d) ? d : '30'))
     if (material?.result) { applyResult(material.result); return }
@@ -140,12 +138,9 @@ export function MaterialModal() {
     try { await navigator.clipboard.writeText(kind === 'map' && result?.mermaid ? result.mermaid : text); showToast(kind === 'map' ? tr('Код карты скопирован') : tr('Текст скопирован')) }
     catch { showToast(tr('Не удалось скопировать — выделите текст вручную')) }
   }
-  const makeDeck = async () => {
-    setDeckBusy(true)
-    try {
-      const out = await api.post<{ url: string; slides: number }>('/api/materials/digest/deck', { period: days, projectId: material.projectId })
-      setDeck(out)
-    } catch (e) { showToast(errorText(e)) } finally { setDeckBusy(false) }
+  const downloadMap = async () => {
+    try { showToast(tr('Файл сохранён: ') + await downloadFile('/api/export/map', { title: result?.title, tree: result?.tree, format: 'png' })) }
+    catch (e) { showToast(errorText(e)) }
   }
   const save = async () => {
     try {
@@ -175,7 +170,7 @@ export function MaterialModal() {
                 placeholder={tr('Кому: должность, ФИО')} aria-label={tr('Адресат записки')} />
             )}
             <button className="btn accent s34" disabled={busy} onClick={() => void generate(material, days, addressee)}>
-              {busy ? tr('Собираю…') : result ? (kind === 'memo' && !needsPeriod ? tr('Подставить адресата') : tr('Собрать заново')) : kind === 'deck' ? tr('Создать презентацию') : artifact ? tr('Составить') : tr('Построить карту')}
+              {busy ? tr('Собираю…') : result ? (kind === 'memo' && !needsPeriod ? tr('Подставить адресата') : tr('Собрать заново')) : artifact ? tr('Составить') : tr('Построить карту')}
             </button>
           </div>
         )}
@@ -232,23 +227,8 @@ export function MaterialModal() {
         {result && kind === 'map' && result.tree && (
           <>
             <ul className="map-tree"><Tree node={result.tree} /></ul>
-            <div className="muted-text" style={{ fontSize: 13 }}>{tr('В Obsidian карта сохраняется как схема Mermaid. «Скачать карту» даёт PNG и SVG для презентаций и OPML для XMind, MindNode и OmniOutliner.')}</div>
+            <div className="muted-text" style={{ fontSize: 13 }}>{tr('В Obsidian карта сохраняется как схема Mermaid. «Скачать карту» даёт PNG.')}</div>
           </>
-        )}
-        {result && kind === 'deck' && result.url && (
-          <div className="material-deck">
-            <div>
-              <b>{plural(result.slides ?? 0, 'слайд', 'слайда', 'слайдов')}</b>
-              <span className="muted-text"> · {result.mode === 'model' ? tr('слайд «Главное» написала локальная модель') : tr('слайд «Главное» собран из цифр и свежих резюме без модели')}</span>
-            </div>
-            <a className="btn accent s36" href={result.url} download style={{ textDecoration: 'none' }}>{tr('Скачать .pptx')}</a>
-            <div className="muted-text" style={{ fontSize: 13 }}>{tr('Файл открывается в Keynote, PowerPoint и Google Slides. Копия лежит в папке «presentations» кабинета.')}</div>
-          </div>
-        )}
-        {deck && (
-          <div className="material-saved">{tr('Презентация готова: ')}{' '}{plural(deck.slides, 'слайд', 'слайда', 'слайдов')}.
-            <a href={deck.url} download style={{ marginLeft: 8 }}>{tr('Скачать .pptx')}</a>
-          </div>
         )}
         {saved && (
           <div className="material-saved">{tr('Сохранено: ')}{' '}<code>{saved.path}</code>
@@ -257,16 +237,13 @@ export function MaterialModal() {
         )}
 
         <div className="modal-foot">
-          {result && kind !== 'deck' && (
+          {result && (
             <>
               <button className="btn s34" onClick={() => void copy()}>{kind === 'map' ? tr('Копировать код') : tr('Копировать')}</button>
               {kind === 'map' && result.tree
-                ? <ExportMenu endpoint="/api/export/map" formats={MAP_FORMATS} label={tr('Скачать карту')} up body={() => ({ title: result.title, tree: result.tree })} />
+                ? <button className="btn s34" onClick={() => void downloadMap()}>{tr('Скачать карту (PNG)')}</button>
                 : <ExportMenu endpoint="/api/export" up body={() => ({ title: result.title, markdown: text, name: fileName.replace(/\.md$/i, '') })} />}
               <button className="btn s34" onClick={() => void save()}>{tr('В Obsidian')}</button>
-              {kind === 'digest' && (
-                <button className="btn s34" disabled={deckBusy} onClick={() => void makeDeck()}>{deckBusy ? tr('Собираю…') : tr('Презентация')}</button>
-              )}
             </>
           )}
           <button className="btn accent s34" onClick={() => setMaterial(null)}>{tr('Закрыть')}</button>

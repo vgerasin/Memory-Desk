@@ -51,7 +51,6 @@ export function Project() {
         </div>
         <div className="dos-head-actions">
           <button className="btn s34" onClick={() => navigate('/records?project=' + encodeURIComponent(p.title))}>{tr('Записи')}</button>
-          <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', projectId: p.id, title: p.title })}>{tr('Презентация')}</button>
           <button className="btn s34" onClick={() => setMaterial({ kind: 'map', projectId: p.id, title: p.title })}>{tr('Карта')}</button>
           <DocMenu scope={{ projectId: p.id, title: p.title }} />
           <button className="btn s34" onClick={() => setMaterial({ kind: 'digest', projectId: p.id, title: p.title })}>{tr('Дайджест')}</button>

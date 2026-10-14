@@ -156,7 +156,7 @@ export interface StorageUsage {
 export interface PrepTarget { projectId?: string; meetingId?: string; title?: string }
 
 export type ArtifactKind = 'memo' | 'brief' | 'followup'
-export type MaterialKind = 'protocol' | 'map' | 'deck' | 'digest' | ArtifactKind
+export type MaterialKind = 'protocol' | 'map' | 'digest' | ArtifactKind
 /** Материал по запросу: протокол записи, карта или презентация по записи, проекту или человеку */
 export interface MaterialTarget { kind: MaterialKind; meetingId?: string; projectId?: string; personId?: string; title: string; result?: MaterialResult }
 export interface MapNode { text: string; children: MapNode[] }
@@ -164,7 +164,7 @@ export interface MaterialResult {
   title: string; mode?: 'model' | 'structured'; savedAs?: string; obsidianUrl?: string
   markdown?: string; fileName?: string
   tree?: MapNode; mermaid?: string
-  name?: string; url?: string; slides?: number; records?: number
+  records?: number
   /** служебная записка, бриф, письмо: записи-источники, число пунктов и не вошедшие (без места в записи) */
   refs?: { id: string; title: string; label: string }[]; count?: number; located?: number
   skipped?: { kind: string; text: string; meetingId: string; meetingTitle: string; reason: string }[]
@@ -205,15 +205,6 @@ export interface DecisionNode {
 export interface DecisionGroup { id: string; title: string; color: string; total: number; active: number; replaced: number; current: DecisionNode[] }
 export interface DecisionTreeData { today: string; days: number; projects: DecisionGroup[] }
 
-export interface CalendarEvent {
-  id: string; title: string; start: string; end: string; allDay: boolean; calendar: string; location: string; people: string[]
-  records: { id: string; title: string; linked: boolean }[]
-}
-export interface CalendarDay { date: string; events: CalendarEvent[]; records: { id: string; title: string; time: string }[] }
-export interface CalendarRange {
-  from: string; to: string; source: 'apple' | 'ics' | 'none'; error: string; configured: boolean
-  days: CalendarDay[]; totals: { events: number; withRecord: number; recordsWithoutEvent: number }
-}
 
 export interface MorningTask { id: string; text: string; owner: string; due: string | null; dueText: string; meetingId: string; meetingTitle: string; tSec: number | null; ageDays: number }
 export interface MorningMeeting {

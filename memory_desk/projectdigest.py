@@ -1,4 +1,4 @@
-"""Дайджест по проектам за неделю или месяц: документ с таймкодами и презентация.
+"""Дайджест по проектам за неделю или месяц: документ с таймкодами.
 
 Берутся записи периода (по всем проектам или по одному). По каждому проекту: решения, новые задачи, закрытое за период,
 то, что требует внимания (просроченное, в том числе из прежних записей), риски и открытые вопросы. Все пункты берутся из
@@ -232,34 +232,3 @@ def build(core, key: str, date_of: Callable, today: date | None = None, project_
         "count": sum(len(g.decisions) + len(g.new_tasks) + len(g.attention) + len(g.closed) + len(g.risks) + len(g.questions) for g in d.groups),
         "skipped": list(d.skipped),
     }
-
-
-def build_deck(core, key: str, date_of: Callable, today: date | None = None, project_id: str | None = None) -> dict:
-    d = collect(core, key, date_of, today, project_id)
-    lead, mode = _lead(d)
-    t = d.totals()
-    deck = materials.Slides(d.today)
-    deck.cover(f"Дайджест: {d.label}", d.scope[:1].upper() + d.scope[1:], digest._plural(t["records"], "запись", "записи", "записей") + f", {digest._plural(len(d.groups), 'проект', 'проекта', 'проектов')}")
-    numbers = [] if mode == "structured" else [f"Решений: {t['decisions']}, новых задач: {t['newTasks']}, закрыто: {t['closed']}, просрочено: {t['overdue']}"]
-    deck.bullets("Главное", [lead] + numbers, 7,
-                 f"{digest.short(d.since.isoformat())} – {digest.short(d.until.isoformat())}")
-    if len(d.groups) > 1:
-        rows = []
-        for g in d.groups[:MAX_PROJECTS * 2]:
-            c = g.counts()
-            rows.append((materials._clip(g.title, 40), str(c["records"]), str(c["decisions"]), str(c["newTasks"]), str(c["closed"]), str(c["overdue"])))
-        deck.table("Проекты", ("Проект", "Записей", "Решений", "Новых задач", "Закрыто", "Просрочено"), rows, (4.4, 1.4, 1.5, 1.8, 1.4, 1.4))
-    for g in d.groups[:MAX_PROJECTS]:
-        c = g.counts()
-        items = ([f"Решение: {i.text}" for i in g.decisions[:3]] + [f"Внимание: {i.text}" + (f" — {i.owner}" if i.owner else "") for i in g.attention[:3]]
-                 + [f"Новая задача: {i.text}" + (f" — {i.owner}" if i.owner else "") for i in g.new_tasks[:2]]
-                 + [f"Закрыто: {i.text}" for i in g.closed[:2]] + [f"Вопрос: {i.text}" for i in g.questions[:2]])
-        deck.bullets(g.title, items or ["За период нет решений и задач."], 7,
-                     f"Записей: {c['records']} · решений: {c['decisions']} · новых задач: {c['newTasks']} · закрыто: {c['closed']} · просрочено: {c['overdue']}")
-    overdue = [(materials._clip(i.text, 70), i.owner or "не указан", digest.short(i.due) if i.due else "—", g.title[:28]) for g in d.groups for i in g.attention]
-    if overdue:
-        deck.table("Требует внимания", ("Задача", "Ответственный", "Срок", "Проект"), overdue, (5.4, 2.4, 1.6, 2.5))
-    name = materials.safe_name(f"Дайджест — {d.title} — {d.today.isoformat()}", 90) + ".pptx"
-    slides = deck.save(materials._presentations_dir() / name)
-    return {"name": name, "title": f"Дайджест: {d.title}", "period": d.label, "slides": slides, "records": len(d.meetings), "mode": mode,
-            "url": materials.deck_url(name)}

@@ -21,7 +21,7 @@ from pathlib import Path
 
 from . import config
 
-ACTORS = {"cabinet": "Кабинет", "system": "Система", "cli": "Командная строка", "mcp": "MCP", "phone": "Телефон"}
+ACTORS = {"cabinet": "Кабинет", "system": "Система", "cli": "Командная строка", "mcp": "MCP"}
 RESULTS = {"ok": "выполнено", "error": "ошибка", "denied": "отказано"}
 GENESIS = "0" * 32
 _lock = threading.Lock()
@@ -109,16 +109,13 @@ ACTIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("PUT", "/api/lock/timeout"): ("lock.timeout_set", "Изменено время блокировки", "system", ""),
     ("POST", "/api/lock/unlock"): ("lock.unlock", "Вход по PIN", "system", ""),
     ("POST", "/api/lock/lock"): ("lock.lock", "Блокировка", "system", ""),
-    ("PUT", "/api/remote"): ("remote.settings", "Доступ с телефона: настройки", "system", ""),
-    ("DELETE", "/api/remote/devices/{device_id}"): ("remote.revoke", "Устройство отключено от доступа с телефона", "device", "device_id"),
-    ("POST", "/api/remote/revoke-all"): ("remote.revoke_all", "Все устройства отключены", "system", ""),
 }
 
 # Запросы, которые данные не меняют: строят текст, ответ или файл для скачивания.
 READ_ONLY: set[tuple[str, str]] = {
     ("POST", "/api/meetings/{meeting_id}/protocol"), ("POST", "/api/meetings/{meeting_id}/protocol/start"),
     ("POST", "/api/materials/mindmap"), ("POST", "/api/materials/artifact"), ("POST", "/api/materials/digest"),
-    ("POST", "/api/materials/digest/deck"), ("POST", "/api/materials/deck"), ("POST", "/api/decisions/conflicts/check"),
+    ("POST", "/api/decisions/conflicts/check"),
     ("POST", "/api/templates/draft"), ("POST", "/api/chat"), ("POST", "/api/chat/export"),
     ("POST", "/api/export"), ("POST", "/api/export/map"), ("POST", "/api/lock/ping"),
     ("POST", "/api/meetings/{meeting_id}/suggestions/scan"),   # запись в журнал делает сам поиск (suggestion.scan)
@@ -252,10 +249,7 @@ def labels() -> dict[str, str]:
     result.update({"record.processed": "Запись обработана", "backup.auto": "Автоматическая копия базы",
                    "lock.blocked": "Запрос отклонён: приложение заблокировано",
                    "suggestion.scan": "Поиск договорённостей в записи", "lock.timeout": "Блокировка по бездействию", "lock.reset": "PIN сброшен с компьютера",
-                   "dossier.refresh": "Досье пересчитано",
-                   "remote.login": "Вход с телефона", "remote.login_failed": "Неверный PIN при входе с телефона",
-                   "remote.logout": "Выход с телефона", "remote.view": "Запись открыта с телефона",
-                   "remote.blocked": "Запрос к шлюзу телефона отклонён", "remote.lockout": "Доступ с телефона выключен из-за неверных PIN"})
+                   "dossier.refresh": "Досье пересчитано"})
     return result
 
 

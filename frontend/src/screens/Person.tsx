@@ -71,7 +71,6 @@ export function Person() {
           <button className="btn s34" onClick={() => setEditing(v => !v)}>{editing ? tr('Закрыть') : tr('Изменить')}</button>
           <button className="btn s34" style={{ color: 'var(--accent)' }}
             onClick={() => chat.openChat({ kind: 'person', id: p.id, label: tr('Человек: ') + first }, tr('Какие задачи и обещания у {0}?', [p.name]))}>{tr('Что обещал(а)?')}</button>
-          <button className="btn s34" onClick={() => setMaterial({ kind: 'deck', personId: p.id, title: p.name })}>{tr('Презентация')}</button>
           <button className="btn s34" onClick={() => setMaterial({ kind: 'map', personId: p.id, title: p.name })}>{tr('Карта')}</button>
           <DocMenu scope={{ personId: p.id, title: p.name }} />
         </div>

@@ -9,7 +9,6 @@ import { AsrSettings } from './AsrSettings'
 import { TemplateSettings } from './TemplateSettings'
 import { VoiceSettings } from './VoiceSettings'
 import { SecurityBlock } from './Security'
-import { RemoteBlock } from './Remote'
 import { currentLang, LANGS, localeTag, setLang, tr } from '../i18n'
 import type { Lang } from '../i18n'
 
@@ -366,9 +365,8 @@ export function SettingsModal() {
             )}
             {tab === 'security' && (
               <div className="set-pane-in">
-                <div className="set-lead">{tr('PIN-блокировка, журнал действий и доступ с телефона')}</div>
+                <div className="set-lead">{tr('PIN-блокировка и журнал действий')}</div>
                 <SecurityBlock />
-                <RemoteBlock />
               </div>
             )}
             </div>

@@ -270,4 +270,4 @@ def test_request_kind_patterns():
     assert k("подготовь follow-up письмо") == "followup"
     assert k("составь итоговое письмо участникам") == "followup"
     assert k("напиши письмо заказчику") is None
-    assert k("составь протокол") == "protocol" and k("сделай презентацию") == "deck"
+    assert k("составь протокол") == "protocol" and k("сделай презентацию") is None

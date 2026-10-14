@@ -232,21 +232,6 @@ def test_save_and_export(client):
     assert client.post("/api/materials/save", json={"kind": "digest", "name": "Мой дайджест", "content": "# x\n"}).status_code == 200
 
 
-def test_deck(client):
-    from pptx import Presentation
-    key, out = busy_period(client)
-    r = client.post("/api/materials/digest/deck", json={"period": key})
-    assert r.status_code == 200, r.text
-    info = r.json()
-    assert info["slides"] >= 3 and info["url"].endswith(".pptx")
-    prs = Presentation(BytesIO(client.get(info["url"]).content))
-    texts = " ".join(sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
-    assert "Дайджест" in texts and out["period"]["label"] in texts
-    for p in out["projects"]:
-        assert p["title"] in texts or p["title"][:28] in texts
-    assert client.post("/api/materials/digest/deck", json={"period": "year"}).status_code == 400
-
-
 def test_chat_digest(client):
     ask = lambda q: client.post("/api/chat", json={"question": q, "scope": {"kind": "all"}}).json()
     reply = None
@@ -255,12 +240,6 @@ def test_chat_digest(client):
         if "material" in reply:
             break
     assert reply and reply["material"]["kind"] == "digest" and reply["material"]["result"]["markdown"].startswith("# Дайджест")
-    deck = None
-    for phrase in ("подготовь презентацию-дайджест за этот месяц", "подготовь презентацию-дайджест за прошлый месяц", "подготовь презентацию-дайджест за эту неделю", "подготовь презентацию-дайджест за прошлую неделю"):
-        deck = ask(phrase)
-        if "material" in deck:
-            break
-    assert deck["material"]["kind"] == "deck" and deck["material"]["result"]["url"].endswith(".pptx")
     # просьба без глагола — обычный вопрос
     assert "material" not in ask("какой дайджест мне нужен?")
 
@@ -268,4 +247,4 @@ def test_chat_digest(client):
 def test_request_kind_digest():
     k = materials.request_kind
     assert k("подготовь недельный дайджест") == "digest" and k("сделай дайджест в виде презентации") == "digest"
-    assert k("сделай презентацию") == "deck" and k("составь протокол") == "protocol"
+    assert k("сделай презентацию") is None and k("составь протокол") == "protocol"
