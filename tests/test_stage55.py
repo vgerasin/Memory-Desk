@@ -152,6 +152,13 @@ def test_mirror_replaced_decision_is_struck_out(client):
 
 def test_watcher_writes_mirror_when_data_changes(client, monkeypatch):
     core = client.app.state.core
+    # фоновая переиндексация от прежних тестов сама поднимает data_version — дождёмся её и запретим новые запуски
+    monkeypatch.setattr(core, "schedule_reindex", lambda: None)
+    for _ in range(80):
+        if not core._reindex_event.is_set():
+            break
+        time.sleep(0.05)
+    time.sleep(1.3)
     watcher = app_module.Watcher(core)
     watcher.mirror_if_changed()
     path = mirror.folder() / "Решения.md"

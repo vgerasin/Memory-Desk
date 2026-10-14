@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
       - run: |
-          for f in install.command start.command meeting-assistant meetings-process ./*.command; do
+          for f in install.command start.command meeting-assistant meetings-process macos/build_app.sh scripts/bootstrap.sh ./*.command; do
             echo "zsh -n $f"
             zsh -n "$f"
           done
@@ -61,3 +61,7 @@ jobs:
         run: |
           npm ci || npm install
           npm run build
+      - name: Собранный интерфейс в репозитории совпадает с исходниками
+        run: |
+          changes=$(git status --porcelain -- memory_desk/web)
+          if [ -n "$changes" ]; then echo "memory_desk/web отличается от сборки из исходников (пересоберите: cd frontend && npm run build):"; echo "$changes"; exit 1; fi
